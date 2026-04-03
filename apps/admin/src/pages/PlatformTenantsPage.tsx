@@ -12,7 +12,7 @@ import {
 import { Modal } from '../shared/components/modal/Modal';
 import { Button } from '../shared/components/ui/Button';
 import { Card } from '../shared/components/ui/Card';
-import { DataTable, DataTableShell } from '../shared/components/ui/DataTable';
+import { DataTable, DataTablePagination, DataTableShell, DataTableToolbar } from '../shared/components/ui/DataTable';
 import { FormField } from '../shared/components/forms/FormField';
 import { Input } from '../shared/components/ui/Input';
 import { Select } from '../shared/components/ui/Select';
@@ -43,6 +43,20 @@ export function PlatformTenantsPage() {
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<PlatformTenantRecord | null>(null);
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+
+  const pageSize = 8;
+  const filteredTenants = tenants.filter((tenant) => {
+    const query = search.trim().toLowerCase();
+    if (!query) return true;
+    return [tenant.name, tenant.slug, tenant.plan, tenant.status].some((value) =>
+      String(value).toLowerCase().includes(query),
+    );
+  });
+  const pageCount = Math.max(1, Math.ceil(filteredTenants.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const visibleTenants = filteredTenants.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   async function loadData() {
     if (!token) return;
@@ -60,6 +74,10 @@ export function PlatformTenantsPage() {
       .catch((err: Error) => notify(err.message, 'error'))
       .finally(() => setLoading(false));
   }, [token]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -115,6 +133,12 @@ export function PlatformTenantsPage() {
         </div>
 
         <DataTableShell>
+          <DataTableToolbar
+            summary={`${filteredTenants.length} empresa${filteredTenants.length === 1 ? '' : 's'}`}
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Buscar por nombre, slug o plan..."
+          />
           <DataTable>
             <thead className="bg-slate-50 text-slate-500">
               <tr>
@@ -127,10 +151,10 @@ export function PlatformTenantsPage() {
             <tbody>
               {loading ? (
                 <tr><td className="px-4 py-4 text-slate-500" colSpan={4}>Cargando empresas...</td></tr>
-              ) : tenants.length === 0 ? (
+              ) : filteredTenants.length === 0 ? (
                 <tr><td className="px-4 py-4 text-slate-500" colSpan={4}>No hay empresas creadas.</td></tr>
               ) : (
-                tenants.map((tenant) => (
+                visibleTenants.map((tenant) => (
                   <tr key={tenant.id} className="border-t border-slate-200">
                     <td className="px-4 py-3">
                       <p className="font-medium text-slate-900">{tenant.name}</p>
@@ -169,6 +193,13 @@ export function PlatformTenantsPage() {
               )}
             </tbody>
           </DataTable>
+          <DataTablePagination
+            page={currentPage}
+            pageCount={pageCount}
+            pageSize={pageSize}
+            totalItems={filteredTenants.length}
+            onPageChange={setPage}
+          />
         </DataTableShell>
       </Card>
 

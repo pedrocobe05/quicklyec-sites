@@ -10,7 +10,7 @@ import {
 import { Modal } from '../shared/components/modal/Modal';
 import { Button } from '../shared/components/ui/Button';
 import { Card } from '../shared/components/ui/Card';
-import { DataTable, DataTableShell } from '../shared/components/ui/DataTable';
+import { DataTable, DataTablePagination, DataTableShell, DataTableToolbar } from '../shared/components/ui/DataTable';
 import { FormField } from '../shared/components/forms/FormField';
 import { Input } from '../shared/components/ui/Input';
 import { Select } from '../shared/components/ui/Select';
@@ -41,6 +41,20 @@ export function PlatformUsersPage() {
   const [roles, setRoles] = useState<PlatformRoleRecord[]>([]);
   const [editing, setEditing] = useState<PlatformUserRecord | null>(null);
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+
+  const pageSize = 8;
+  const filteredUsers = users.filter((platformUser) => {
+    const query = search.trim().toLowerCase();
+    if (!query) return true;
+    return [platformUser.fullName, platformUser.email, platformUser.platformRole].some((value) =>
+      String(value).toLowerCase().includes(query),
+    );
+  });
+  const pageCount = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const visibleUsers = filteredUsers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   async function loadData() {
     if (!token) return;
@@ -58,6 +72,10 @@ export function PlatformUsersPage() {
       .catch((err: Error) => notify(err.message, 'error'))
       .finally(() => setLoading(false));
   }, [token]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -117,6 +135,12 @@ export function PlatformUsersPage() {
         </div>
 
         <DataTableShell>
+          <DataTableToolbar
+            summary={`${filteredUsers.length} usuario${filteredUsers.length === 1 ? '' : 's'}`}
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Buscar por nombre, correo o rol..."
+          />
           <DataTable>
             <thead className="bg-slate-50 text-slate-500">
               <tr>
@@ -131,12 +155,12 @@ export function PlatformUsersPage() {
                 <tr>
                   <td className="px-4 py-4 text-slate-500" colSpan={4}>Cargando usuarios...</td>
                 </tr>
-              ) : users.length === 0 ? (
+              ) : filteredUsers.length === 0 ? (
                 <tr>
                   <td className="px-4 py-4 text-slate-500" colSpan={4}>No hay usuarios de plataforma.</td>
                 </tr>
               ) : (
-                users.map((platformUser) => (
+                visibleUsers.map((platformUser) => (
                   <tr key={platformUser.id} className="border-t border-slate-200">
                     <td className="px-4 py-3">
                       <p className="font-medium text-slate-900">{platformUser.fullName}</p>
@@ -172,6 +196,13 @@ export function PlatformUsersPage() {
               )}
             </tbody>
           </DataTable>
+          <DataTablePagination
+            page={currentPage}
+            pageCount={pageCount}
+            pageSize={pageSize}
+            totalItems={filteredUsers.length}
+            onPageChange={setPage}
+          />
         </DataTableShell>
       </Card>
 

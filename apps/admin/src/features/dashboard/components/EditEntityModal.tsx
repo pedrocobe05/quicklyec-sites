@@ -37,6 +37,29 @@ type AppointmentRecord = {
 type CustomerRecord = { id: string; fullName: string; email: string; phone: string; identification?: string | null; notes?: string | null };
 type SectionAssetRecord = { name: string; url: string; alt?: string | null; label?: string | null; kind?: 'image' };
 
+function normalizeAssetAlias(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function ensureUniqueAssetAlias(assets: SectionAssetRecord[], value: string, currentIndex: number) {
+  const baseAlias = normalizeAssetAlias(value) || `asset-${currentIndex + 1}`;
+  let candidate = baseAlias;
+  let suffix = 2;
+
+  while (assets.some((asset, index) => index !== currentIndex && asset.name === candidate)) {
+    candidate = `${baseAlias}-${suffix}`;
+    suffix += 1;
+  }
+
+  return candidate;
+}
+
 export type EditModalState =
   | { type: 'tenant-plan'; item: PlatformTenantRecord }
   | { type: 'membership'; item: TenantMembershipRecord }
@@ -366,16 +389,9 @@ export function EditEntityModal({
                         className="min-h-32 font-mono text-xs"
                       />
                     </FormField>
-                    <FormField label="Assets de la sección">
-                      <input
-                        type="hidden"
-                        name="assetsJson"
-                        value={JSON.stringify(sectionAssets)}
-                        readOnly
-                      />
-                    </FormField>
+                    <input type="hidden" name="assetsJson" value={JSON.stringify(sectionAssets)} readOnly />
                     <Alert variant="info">
-                      Usa placeholders dentro del HTML como <span className="font-mono">{'{{asset:nombre-del-archivo}}'}</span>. Cada asset debe tener al menos <span className="font-mono">name</span> y <span className="font-mono">url</span>.
+                      Usa placeholders dentro del HTML como <span className="font-mono">{'{{asset:hero-main}}'}</span>. Los aliases se normalizan automáticamente para evitar errores.
                     </Alert>
                     {sectionAssets.length > 0 ? (
                       <div className="grid gap-3">
@@ -397,6 +413,15 @@ export function EditEntityModal({
                                       setSectionAssets((current) =>
                                         current.map((item, itemIndex) =>
                                           itemIndex === index ? { ...item, name: event.target.value } : item,
+                                        ),
+                                      )
+                                    }
+                                    onBlur={() =>
+                                      setSectionAssets((current) =>
+                                        current.map((item, itemIndex) =>
+                                          itemIndex === index
+                                            ? { ...item, name: ensureUniqueAssetAlias(current, item.name, itemIndex) }
+                                            : item,
                                         ),
                                       )
                                     }
@@ -427,6 +452,29 @@ export function EditEntityModal({
                                   }
                                 />
                               </FormField>
+                              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Placeholder</p>
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                  <code className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-800">
+                                    {`{{asset:${normalizeAssetAlias(asset.name) || `asset-${index + 1}`}}}`}
+                                  </code>
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    className="h-8 px-3 text-xs"
+                                    onClick={async () => {
+                                      const placeholder = `{{asset:${normalizeAssetAlias(asset.name) || `asset-${index + 1}`}}}`;
+                                      try {
+                                        await navigator.clipboard.writeText(placeholder);
+                                      } catch {
+                                        // Ignore clipboard errors in unsupported environments.
+                                      }
+                                    }}
+                                  >
+                                    Copiar
+                                  </Button>
+                                </div>
+                              </div>
                               <div className="flex flex-wrap gap-2">
                                 <Button
                                   type="button"
@@ -475,7 +523,7 @@ export function EditEntityModal({
                       </div>
                     ) : (
                       <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-4 text-sm text-slate-500">
-                        Esta sección aún no tiene assets visuales.
+                        Esta sección aún no tiene assets visuales. Súbelos desde el listado de secciones y luego usa aquí sus placeholders.
                       </div>
                     )}
                   </>

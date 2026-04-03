@@ -9,7 +9,7 @@ import {
 import { Modal } from '../shared/components/modal/Modal';
 import { Button } from '../shared/components/ui/Button';
 import { Card } from '../shared/components/ui/Card';
-import { DataTable, DataTableShell } from '../shared/components/ui/DataTable';
+import { DataTable, DataTablePagination, DataTableShell, DataTableToolbar } from '../shared/components/ui/DataTable';
 import { FormField } from '../shared/components/forms/FormField';
 import { Input } from '../shared/components/ui/Input';
 import { Textarea } from '../shared/components/ui/Textarea';
@@ -34,6 +34,20 @@ export function PlatformRolesPage() {
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<PlatformRoleRecord | null>(null);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+
+  const pageSize = 8;
+  const filteredRoles = roles.filter((role) => {
+    const query = search.trim().toLowerCase();
+    if (!query) return true;
+    return [role.name, role.code, role.description ?? ''].some((value) =>
+      String(value).toLowerCase().includes(query),
+    );
+  });
+  const pageCount = Math.max(1, Math.ceil(filteredRoles.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const visibleRoles = filteredRoles.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   async function loadData() {
     if (!token) return;
@@ -47,6 +61,10 @@ export function PlatformRolesPage() {
       .catch((err: Error) => notify(err.message, 'error'))
       .finally(() => setLoading(false));
   }, [token]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -96,6 +114,12 @@ export function PlatformRolesPage() {
         </div>
 
         <DataTableShell>
+          <DataTableToolbar
+            summary={`${filteredRoles.length} rol${filteredRoles.length === 1 ? '' : 'es'}`}
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Buscar por nombre, código o descripción..."
+          />
           <DataTable>
             <thead className="bg-slate-50 text-slate-500">
               <tr>
@@ -109,10 +133,10 @@ export function PlatformRolesPage() {
             <tbody>
               {loading ? (
                 <tr><td className="px-4 py-4 text-slate-500" colSpan={5}>Cargando roles...</td></tr>
-              ) : roles.length === 0 ? (
+              ) : filteredRoles.length === 0 ? (
                 <tr><td className="px-4 py-4 text-slate-500" colSpan={5}>No hay roles configurados.</td></tr>
               ) : (
-                roles.map((role) => (
+                visibleRoles.map((role) => (
                   <tr key={role.id} className="border-t border-slate-200">
                     <td className="px-4 py-3">
                       <p className="font-medium text-slate-900">{role.name}</p>
@@ -149,6 +173,13 @@ export function PlatformRolesPage() {
               )}
             </tbody>
           </DataTable>
+          <DataTablePagination
+            page={currentPage}
+            pageCount={pageCount}
+            pageSize={pageSize}
+            totalItems={filteredRoles.length}
+            onPageChange={setPage}
+          />
         </DataTableShell>
       </Card>
 
