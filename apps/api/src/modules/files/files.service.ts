@@ -8,7 +8,8 @@ import { Repository } from 'typeorm';
 import { FileObjectEntity, TenantEntity } from 'src/common/entities';
 import { CreatePresignedUploadDto } from './dto/create-presigned-upload.dto';
 
-type S3Config = {
+type StorageConfig = {
+  provider: string;
   region: string;
   bucket: string;
   accessKeyId: string;
@@ -16,6 +17,7 @@ type S3Config = {
   endpoint?: string;
   publicBaseUrl?: string;
   presignTtlSeconds: number;
+  forcePathStyle?: boolean;
 };
 
 const RESOURCE_FOLDER_MAP = {
@@ -42,8 +44,8 @@ export class FilesService {
       throw new NotFoundException('Tenant no encontrado para cargar archivos');
     }
 
-    const s3 = this.getS3Client();
-    const config = this.getS3Config();
+    const s3 = this.getStorageClient();
+    const config = this.getStorageConfig();
     const sanitizedFilename = this.sanitizeFilename(input.filename);
     const folder = RESOURCE_FOLDER_MAP[input.resourceType] ?? 'site';
     const storageKey = `tenants/${tenantId}/${folder}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}-${sanitizedFilename}`;
@@ -54,7 +56,7 @@ export class FilesService {
       filename: sanitizedFilename,
       contentType: input.contentType,
       sizeBytes: input.sizeBytes ?? 0,
-      provider: 's3',
+      provider: config.provider,
       visibility: input.visibility ?? 'private',
       metadata: {
         resourceType: input.resourceType,
@@ -100,10 +102,14 @@ export class FilesService {
   }
 
   async buildSignedAccessUrl(file: FileObjectEntity) {
-    const config = this.getS3Config();
+    const config = this.getStorageConfig();
+
+    if (file.visibility === 'public' && config.publicBaseUrl) {
+      return this.buildPublicAccessUrl(config.publicBaseUrl, file.storageKey);
+    }
 
     return getSignedUrl(
-      this.getS3Client(),
+      this.getStorageClient(),
       new GetObjectCommand({
         Bucket: config.bucket,
         Key: file.storageKey,
@@ -161,12 +167,12 @@ export class FilesService {
     return value;
   }
 
-  private getS3Client() {
-    const config = this.getS3Config();
+  private getStorageClient() {
+    const config = this.getStorageConfig();
     return new S3Client({
       region: config.region,
       endpoint: config.endpoint || undefined,
-      forcePathStyle: Boolean(config.endpoint),
+      forcePathStyle: Boolean(config.forcePathStyle),
       requestChecksumCalculation: 'WHEN_REQUIRED',
       credentials:
         config.accessKeyId && config.secretAccessKey
@@ -178,12 +184,22 @@ export class FilesService {
     });
   }
 
-  private getS3Config(): S3Config {
-    const config = this.configService.get<S3Config>('app.s3');
-    if (!config?.bucket || !config.region) {
-      throw new BadRequestException('La configuración S3 no está completa en el backend');
+  private getStorageConfig(): StorageConfig {
+    const config = this.configService.get<StorageConfig>('app.storage');
+    if (!config?.bucket || !config.region || !config.endpoint) {
+      throw new BadRequestException('La configuración de almacenamiento no está completa en el backend');
     }
     return config;
+  }
+
+  private buildPublicAccessUrl(baseUrl: string, storageKey: string) {
+    const normalizedBase = baseUrl.replace(/\/+$/, '');
+    const encodedKey = storageKey
+      .split('/')
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
+
+    return `${normalizedBase}/${encodedKey}`;
   }
 
   private sanitizeFilename(filename: string) {

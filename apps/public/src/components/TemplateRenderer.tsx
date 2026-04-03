@@ -24,7 +24,16 @@ function resolveCustomHtml(section: SiteSection) {
   }
 
   return html.replace(/{{\s*asset:([a-zA-Z0-9._-]+)\s*}}/g, (_match, assetName: string) => {
-    const asset = assets.find((item) => item.name === assetName);
+    const exactFileAsset = assets.find((item) => item.name === assetName && String(item.url ?? '').startsWith('file:'));
+    const exactAsset = assets.find((item) => item.name === assetName);
+    const aliasFamilyFileAsset = [...assets]
+      .reverse()
+      .find((item) => item.name.startsWith(`${assetName}-`) && String(item.url ?? '').startsWith('file:'));
+    const aliasFamilyAsset = [...assets]
+      .reverse()
+      .find((item) => item.name.startsWith(`${assetName}-`));
+
+    const asset = exactFileAsset ?? exactAsset ?? aliasFamilyFileAsset ?? aliasFamilyAsset;
     return asset?.url ?? '';
   });
 }

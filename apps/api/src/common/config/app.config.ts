@@ -19,13 +19,18 @@ export const appConfig = registerAs('app', () => ({
     fromEmail: process.env.SMTP_FROM_EMAIL ?? '',
     fromName: process.env.SMTP_FROM_NAME ?? 'Quickly Sites',
   },
-  s3: {
-    region: process.env.S3_REGION ?? '',
-    bucket: process.env.S3_BUCKET ?? '',
-    accessKeyId: process.env.S3_ACCESS_KEY_ID ?? '',
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? '',
-    endpoint: process.env.S3_ENDPOINT ?? '',
-    publicBaseUrl: process.env.S3_PUBLIC_BASE_URL ?? '',
-    presignTtlSeconds: Number(process.env.S3_PRESIGN_TTL_SECONDS ?? 900),
+  storage: {
+    provider: process.env.STORAGE_PROVIDER ?? 'r2',
+    region: process.env.R2_REGION ?? process.env.S3_REGION ?? 'auto',
+    bucket: process.env.R2_BUCKET ?? process.env.S3_BUCKET ?? '',
+    accessKeyId: process.env.R2_ACCESS_KEY_ID ?? process.env.S3_ACCESS_KEY_ID ?? '',
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? process.env.S3_SECRET_ACCESS_KEY ?? '',
+    endpoint: process.env.R2_ENDPOINT ??
+      (process.env.R2_ACCOUNT_ID
+        ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`
+        : process.env.S3_ENDPOINT ?? ''),
+    publicBaseUrl: process.env.R2_PUBLIC_BASE_URL ?? process.env.S3_PUBLIC_BASE_URL ?? '',
+    presignTtlSeconds: Number(process.env.R2_PRESIGN_TTL_SECONDS ?? process.env.S3_PRESIGN_TTL_SECONDS ?? 900),
+    forcePathStyle: String(process.env.R2_FORCE_PATH_STYLE ?? 'false') === 'true',
   },
 }));

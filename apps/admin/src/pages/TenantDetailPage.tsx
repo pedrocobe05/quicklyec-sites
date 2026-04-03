@@ -951,16 +951,22 @@ export function TenantDetailPage() {
       for (const file of Array.from(files)) {
         const uploaded = await uploadTenantFile(token, tenantId, file, 'site', 'public');
         const baseName = normalizeAssetName(file.name.replace(/\.[^.]+$/, '')) || `asset-${nextAssets.length + 1}`;
-        let candidateName = baseName;
-        let suffix = 2;
+        const existingIndex = nextAssets.findIndex((asset) => asset.name === baseName);
 
-        while (nextAssets.some((asset) => asset.name === candidateName)) {
-          candidateName = `${baseName}-${suffix}`;
-          suffix += 1;
+        if (existingIndex >= 0) {
+          nextAssets[existingIndex] = {
+            ...nextAssets[existingIndex],
+            name: baseName,
+            url: uploaded.reference,
+            alt: file.name.replace(/\.[^.]+$/, ''),
+            label: file.name.replace(/\.[^.]+$/, ''),
+            kind: 'image',
+          };
+          continue;
         }
 
         nextAssets.push({
-          name: candidateName,
+          name: baseName,
           url: uploaded.reference,
           alt: file.name.replace(/\.[^.]+$/, ''),
           label: file.name.replace(/\.[^.]+$/, ''),

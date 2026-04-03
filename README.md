@@ -18,6 +18,7 @@ El proyecto está organizado como monorepo e incluye:
 - Reservas online (servicios, disponibilidad, creación de citas)
 - Autenticación y panel de administración para gestión de servicios, staff, reservas y branding
 - SEO multi-tenant básico
+- almacenamiento de assets por tenant con entrega pública optimizada
 
 ## Instalación y ejecución
 
@@ -53,3 +54,11 @@ El proyecto está organizado como monorepo e incluye:
 --
 Para más detalles sobre la arquitectura o contribuciones, revisa la documentación interna o contacta al equipo de desarrollo.
 npm run typeorm -w @quickly-sites/api -- migration:run
+
+## Almacenamiento de assets
+
+El proyecto está preparado para usar Cloudflare R2 como almacenamiento principal de branding, imágenes del sitio y assets por tenant.
+
+Referencia de configuración:
+
+- [CLOUDFLARE_R2_SETUP.md](/Users/andrescobena/Documents/Proyectos/quickly-sites/CLOUDFLARE_R2_SETUP.md)
