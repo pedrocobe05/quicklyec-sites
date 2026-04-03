@@ -1,112 +1,64 @@
 # Quickly Sites
 
-Monorepo inicial para `Quickly Sites`, un SaaS multi-tenant separado del ERP Quickly, orientado a sitios públicos con reservas online.
+Quickly Sites es una plataforma SaaS multi-tenant para la creación de sitios públicos con reservas online, orientada a negocios que requieren gestión de servicios, staff y citas.
 
-## Apps
+## Estructura del Monorepo
 
-- `apps/api`: backend NestJS + TypeORM + PostgreSQL
-- `apps/admin`: panel admin React + Vite + Tailwind
-- `apps/public`: sitio público React + Vite + Tailwind
-- `packages/shared`: contratos y tipos compartidos
+El proyecto está organizado como monorepo e incluye:
 
-## Base de datos
+- **apps/api**: Backend (NestJS, TypeORM, PostgreSQL)
+- **apps/admin**: Panel de administración (React, Vite, Tailwind)
+- **apps/public**: Sitio público (React, Vite, Tailwind)
+- **packages/shared**: Tipos y contratos compartidos
 
-Configuración usada:
+## ¿Qué ofrece?
 
-- host: `localhost`
-- port: `4533`
-- database: `quicklysites`
-- user: `postgres`
-- password: `2412`
+- Resolución multi-tenant por dominio
+- Motor de landing page por secciones
+- Reservas online (servicios, disponibilidad, creación de citas)
+- Autenticación y panel de administración para gestión de servicios, staff, reservas y branding
+- SEO multi-tenant básico
+- almacenamiento de assets por tenant con entrega pública optimizada
 
-## Qué quedó implementado
+## Instalación y ejecución
 
-- resolución multi-tenant por host/domain
-- SEO multi-tenant base:
-  - metadatos por tenant y página
-  - `robots.txt` por host
-  - `sitemap.xml` por host
-- motor inicial de landing por secciones
-- booking público base:
-  - servicios
-  - disponibilidad
-  - creación de reserva
-- auth admin con JWT + refresh
-- guards admin por tenant membership
-- panel admin base con login, dashboard y gestión inicial de:
-  - servicios
-  - staff
-  - reservas
-  - branding
-  - SEO general
-  - páginas y secciones
-  - agenda
-- migración inicial y seed demo
+1. Instala las dependencias:
+   ```bash
+   npm install
+   ```
+2. Ejecuta las migraciones y el seed (opcional, según tu entorno):
+   ```bash
+   npm run typeorm -w @quickly-sites/api -- migration:run
+   npm run seed -w @quickly-sites/api
+   ```
+3. Inicia los servicios de desarrollo:
+   - Backend:
+     ```bash
+     npm run dev:api
+     ```
+   - Admin:
+     ```bash
+     npm run dev:admin
+     ```
+   - Sitio público:
+     ```bash
+     npm run dev:public
+     ```
 
-## Tenant demo
+## URLs por defecto
 
-- host demo: `paolamendozanails.quicklysites.local`
-- usuario admin: `admin@quicklysites.local`
-- password admin: `Admin123*`
-
-## Instalación
-
-```bash
-npm install
-```
-
-## Migraciones
-
-```bash
+- API: http://localhost:4000/api
+- Swagger: http://localhost:4000/api/docs
+- Admin: http://localhost:5173
+- Público: http://localhost:5174
+--
+Para más detalles sobre la arquitectura o contribuciones, revisa la documentación interna o contacta al equipo de desarrollo.
 npm run typeorm -w @quickly-sites/api -- migration:run
-```
 
-## Seed
+## Almacenamiento de assets
 
-```bash
-npm run seed -w @quickly-sites/api
-```
+El proyecto está preparado para usar Cloudflare R2 como almacenamiento principal de branding, imágenes del sitio y assets por tenant.
 
-## Desarrollo
+Referencia de configuración:
 
-Backend:
-
-```bash
-npm run dev:api
-```
-
-Admin:
-
-```bash
-npm run dev:admin
-```
-
-Public site:
-
-```bash
-npm run dev:public
-```
-
-## URLs esperadas
-
-- API: `http://localhost:4000/api`
-- Swagger: `http://localhost:4000/api/docs`
-- Admin: `http://localhost:5173`
-- Public: `http://localhost:5174`
-
-## Endpoints públicos base
-
-- `GET /api/public/site?host=paolamendozanails.quicklysites.local`
-- `GET /api/public/services?host=paolamendozanails.quicklysites.local`
-- `GET /api/public/availability?host=paolamendozanails.quicklysites.local&serviceId=...&date=2026-04-10`
-- `POST /api/public/appointments?host=paolamendozanails.quicklysites.local`
-- `GET /api/public/robots.txt?host=paolamendozanails.quicklysites.local`
-- `GET /api/public/sitemap.xml?host=paolamendozanails.quicklysites.local`
-
-## Próximos pasos recomendados
-
-- completar CRUDs admin restantes
-- agregar guards de membresía por tenant
-- endurecer validaciones y paginación
-- mejorar renderer de bloques y variantes
-- agregar notificaciones y dominios custom con flujo más completo
+- [CLOUDFLARE_R2_SETUP.md](/Users/andrescobena/Documents/Proyectos/quickly-sites/CLOUDFLARE_R2_SETUP.md)

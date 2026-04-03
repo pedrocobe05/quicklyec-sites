@@ -54,7 +54,7 @@ import { Modal } from '../shared/components/modal/Modal';
 import { Button } from '../shared/components/ui/Button';
 import { Card } from '../shared/components/ui/Card';
 import { Checkbox } from '../shared/components/ui/Checkbox';
-import { DataTable, DataTableShell } from '../shared/components/ui/DataTable';
+import { DataTable, DataTablePagination, DataTableShell, DataTableToolbar } from '../shared/components/ui/DataTable';
 import { FormField } from '../shared/components/forms/FormField';
 import { Input } from '../shared/components/ui/Input';
 import { Select } from '../shared/components/ui/Select';
@@ -394,6 +394,18 @@ export function TenantDetailPage() {
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const [createRoleOpen, setCreateRoleOpen] = useState(false);
   const [customerView, setCustomerView] = useState<CustomerRecord | null>(null);
+  const [rolesSearch, setRolesSearch] = useState('');
+  const [rolesPage, setRolesPage] = useState(1);
+  const [membershipsSearch, setMembershipsSearch] = useState('');
+  const [membershipsPage, setMembershipsPage] = useState(1);
+  const [rulesSearch, setRulesSearch] = useState('');
+  const [rulesPage, setRulesPage] = useState(1);
+  const [blocksSearch, setBlocksSearch] = useState('');
+  const [blocksPage, setBlocksPage] = useState(1);
+  const [appointmentsSearch, setAppointmentsSearch] = useState('');
+  const [appointmentsPage, setAppointmentsPage] = useState(1);
+  const [customersSearch, setCustomersSearch] = useState('');
+  const [customersPage, setCustomersPage] = useState(1);
 
   const activeTab = useMemo<TenantTab>(() => {
     const requested = searchParams.get('tab');
@@ -479,6 +491,129 @@ export function TenantDetailPage() {
 
     return options;
   }, [tenantProfile?.planCapabilities?.features]);
+
+  const tablePageSize = 8;
+  const filteredRoles = useMemo(() => {
+    const query = rolesSearch.trim().toLowerCase();
+    if (!query) return tenantRoles;
+    return tenantRoles.filter((role) =>
+      [role.name, role.code, role.description ?? ''].some((value) => String(value).toLowerCase().includes(query)),
+    );
+  }, [rolesSearch, tenantRoles]);
+  const rolesPageCount = Math.max(1, Math.ceil(filteredRoles.length / tablePageSize));
+  const visibleRoles = filteredRoles.slice((Math.min(rolesPage, rolesPageCount) - 1) * tablePageSize, Math.min(rolesPage, rolesPageCount) * tablePageSize);
+
+  const filteredMemberships = useMemo(() => {
+    const query = membershipsSearch.trim().toLowerCase();
+    if (!query) return tenantMemberships;
+    return tenantMemberships.filter((membership) =>
+      [
+        membership.user?.fullName ?? '',
+        membership.user?.email ?? '',
+        membership.roleName ?? membership.role,
+        membership.isActive ? 'activo' : 'inactivo',
+      ].some((value) => String(value).toLowerCase().includes(query)),
+    );
+  }, [membershipsSearch, tenantMemberships]);
+  const membershipsPageCount = Math.max(1, Math.ceil(filteredMemberships.length / tablePageSize));
+  const visibleMemberships = filteredMemberships.slice(
+    (Math.min(membershipsPage, membershipsPageCount) - 1) * tablePageSize,
+    Math.min(membershipsPage, membershipsPageCount) * tablePageSize,
+  );
+
+  const filteredRules = useMemo(() => {
+    const query = rulesSearch.trim().toLowerCase();
+    if (!query) return availabilityRules;
+    return availabilityRules.filter((rule) =>
+      [
+        days[rule.dayOfWeek],
+        rule.startTime,
+        rule.endTime,
+        String(rule.slotIntervalMinutes),
+        rule.isActive ? 'activa' : 'inactiva',
+      ].some((value) => String(value).toLowerCase().includes(query)),
+    );
+  }, [availabilityRules, rulesSearch]);
+  const rulesPageCount = Math.max(1, Math.ceil(filteredRules.length / tablePageSize));
+  const visibleRules = filteredRules.slice(
+    (Math.min(rulesPage, rulesPageCount) - 1) * tablePageSize,
+    Math.min(rulesPage, rulesPageCount) * tablePageSize,
+  );
+
+  const filteredBlocks = useMemo(() => {
+    const query = blocksSearch.trim().toLowerCase();
+    if (!query) return scheduleBlocks;
+    return scheduleBlocks.filter((block) =>
+      [
+        block.reason,
+        block.blockType,
+        new Date(block.startDateTime).toLocaleString(),
+        new Date(block.endDateTime).toLocaleString(),
+      ].some((value) => String(value).toLowerCase().includes(query)),
+    );
+  }, [blocksSearch, scheduleBlocks]);
+  const blocksPageCount = Math.max(1, Math.ceil(filteredBlocks.length / tablePageSize));
+  const visibleBlocks = filteredBlocks.slice(
+    (Math.min(blocksPage, blocksPageCount) - 1) * tablePageSize,
+    Math.min(blocksPage, blocksPageCount) * tablePageSize,
+  );
+
+  const filteredAppointments = useMemo(() => {
+    const query = appointmentsSearch.trim().toLowerCase();
+    if (!query) return appointments;
+    return appointments.filter((appointment) =>
+      [
+        appointment.customer?.fullName ?? '',
+        appointment.service?.name ?? '',
+        appointmentStatusLabel(appointment.status),
+        appointment.notes ?? '',
+      ].some((value) => String(value).toLowerCase().includes(query)),
+    );
+  }, [appointments, appointmentsSearch]);
+  const appointmentsPageCount = Math.max(1, Math.ceil(filteredAppointments.length / tablePageSize));
+  const visibleAppointments = filteredAppointments.slice(
+    (Math.min(appointmentsPage, appointmentsPageCount) - 1) * tablePageSize,
+    Math.min(appointmentsPage, appointmentsPageCount) * tablePageSize,
+  );
+
+  const filteredCustomers = useMemo(() => {
+    const query = customersSearch.trim().toLowerCase();
+    if (!query) return customers;
+    return customers.filter((customer) =>
+      [customer.fullName, customer.email, customer.phone, customer.identification ?? ''].some((value) =>
+        String(value).toLowerCase().includes(query),
+      ),
+    );
+  }, [customers, customersSearch]);
+  const customersPageCount = Math.max(1, Math.ceil(filteredCustomers.length / tablePageSize));
+  const visibleCustomers = filteredCustomers.slice(
+    (Math.min(customersPage, customersPageCount) - 1) * tablePageSize,
+    Math.min(customersPage, customersPageCount) * tablePageSize,
+  );
+
+  useEffect(() => {
+    setRolesPage(1);
+  }, [rolesSearch]);
+
+  useEffect(() => {
+    setMembershipsPage(1);
+  }, [membershipsSearch]);
+
+  useEffect(() => {
+    setRulesPage(1);
+  }, [rulesSearch]);
+
+  useEffect(() => {
+    setBlocksPage(1);
+  }, [blocksSearch]);
+
+  useEffect(() => {
+    setAppointmentsPage(1);
+  }, [appointmentsSearch]);
+
+  useEffect(() => {
+    setCustomersPage(1);
+  }, [customersSearch]);
 
   function changeTab(nextTab: TenantTab) {
     const nextParams = new URLSearchParams(searchParams);
@@ -816,16 +951,22 @@ export function TenantDetailPage() {
       for (const file of Array.from(files)) {
         const uploaded = await uploadTenantFile(token, tenantId, file, 'site', 'public');
         const baseName = normalizeAssetName(file.name.replace(/\.[^.]+$/, '')) || `asset-${nextAssets.length + 1}`;
-        let candidateName = baseName;
-        let suffix = 2;
+        const existingIndex = nextAssets.findIndex((asset) => asset.name === baseName);
 
-        while (nextAssets.some((asset) => asset.name === candidateName)) {
-          candidateName = `${baseName}-${suffix}`;
-          suffix += 1;
+        if (existingIndex >= 0) {
+          nextAssets[existingIndex] = {
+            ...nextAssets[existingIndex],
+            name: baseName,
+            url: uploaded.reference,
+            alt: file.name.replace(/\.[^.]+$/, ''),
+            label: file.name.replace(/\.[^.]+$/, ''),
+            kind: 'image',
+          };
+          continue;
         }
 
         nextAssets.push({
-          name: candidateName,
+          name: baseName,
           url: uploaded.reference,
           alt: file.name.replace(/\.[^.]+$/, ''),
           label: file.name.replace(/\.[^.]+$/, ''),
@@ -959,8 +1100,23 @@ export function TenantDetailPage() {
                 </div>
                 {can('users.create') ? <Button onClick={() => setCreateUserOpen(true)}>Nuevo usuario</Button> : null}
               </div>
+              <div className="mt-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <p className="text-sm text-slate-500">
+                  {filteredMemberships.length} usuario{filteredMemberships.length === 1 ? '' : 's'}
+                </p>
+                <Input
+                  value={membershipsSearch}
+                  onChange={(event) => setMembershipsSearch(event.target.value)}
+                  placeholder="Buscar por nombre, correo o rol..."
+                  className="max-w-md"
+                />
+              </div>
               <div className="mt-6 space-y-3">
-                {tenantMemberships.map((membership) => (
+                {filteredMemberships.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-6 text-sm text-slate-500">
+                    No hay usuarios que coincidan con la búsqueda.
+                  </div>
+                ) : visibleMemberships.map((membership) => (
                   <div key={membership.id} className="rounded-2xl border border-slate-100 p-4">
                     <div className="flex items-start justify-between gap-4">
                       <div>
@@ -1004,6 +1160,14 @@ export function TenantDetailPage() {
                   </div>
                 ))}
               </div>
+              <DataTablePagination
+                className="mt-6 rounded-2xl border border-slate-200 bg-white"
+                page={Math.min(membershipsPage, membershipsPageCount)}
+                pageCount={membershipsPageCount}
+                pageSize={tablePageSize}
+                totalItems={filteredMemberships.length}
+                onPageChange={setMembershipsPage}
+              />
             </Card>
           ) : null}
 
@@ -1018,6 +1182,12 @@ export function TenantDetailPage() {
               </div>
               <div className="mt-6">
                 <DataTableShell>
+                  <DataTableToolbar
+                    summary={`${filteredRoles.length} rol${filteredRoles.length === 1 ? '' : 'es'}`}
+                    searchValue={rolesSearch}
+                    onSearchChange={setRolesSearch}
+                    searchPlaceholder="Buscar por nombre, código o descripción..."
+                  />
                   <DataTable>
                     <thead className="bg-slate-50 text-slate-500">
                       <tr>
@@ -1029,31 +1199,44 @@ export function TenantDetailPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {tenantRoles.map((role) => (
-                        <tr key={role.id} className="border-t border-slate-200">
-                          <td className="px-4 py-3">
-                            <p className="font-medium text-slate-900">{role.name}</p>
-                            <p className="text-xs text-slate-500">{role.description || 'Sin descripción'}</p>
-                          </td>
-                          <td className="px-4 py-3">{role.code}</td>
-                          <td className="px-4 py-3">{role.permissions.length}</td>
-                          <td className="px-4 py-3">{role.isActive ? 'Activo' : 'Inactivo'}</td>
-                          <td className="w-px whitespace-nowrap px-4 py-3">
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                variant="secondary"
-                                className="h-9 px-4 text-xs font-semibold"
-                                disabled={!can('roles.update')}
-                                onClick={() => setEditModal({ type: 'role', item: role })}
-                              >
-                                Editar
-                              </Button>
-                            </div>
-                          </td>
+                      {filteredRoles.length === 0 ? (
+                        <tr>
+                          <td className="px-4 py-4 text-slate-500" colSpan={5}>No hay roles que coincidan con la búsqueda.</td>
                         </tr>
-                      ))}
+                      ) : (
+                        visibleRoles.map((role) => (
+                          <tr key={role.id} className="border-t border-slate-200">
+                            <td className="px-4 py-3">
+                              <p className="font-medium text-slate-900">{role.name}</p>
+                              <p className="text-xs text-slate-500">{role.description || 'Sin descripción'}</p>
+                            </td>
+                            <td className="px-4 py-3">{role.code}</td>
+                            <td className="px-4 py-3">{role.permissions.length}</td>
+                            <td className="px-4 py-3">{role.isActive ? 'Activo' : 'Inactivo'}</td>
+                            <td className="w-px whitespace-nowrap px-4 py-3">
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  variant="secondary"
+                                  className="h-9 px-4 text-xs font-semibold"
+                                  disabled={!can('roles.update')}
+                                  onClick={() => setEditModal({ type: 'role', item: role })}
+                                >
+                                  Editar
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </DataTable>
+                  <DataTablePagination
+                    page={Math.min(rolesPage, rolesPageCount)}
+                    pageCount={rolesPageCount}
+                    pageSize={tablePageSize}
+                    totalItems={filteredRoles.length}
+                    onPageChange={setRolesPage}
+                  />
                 </DataTableShell>
               </div>
             </Card>
@@ -1307,6 +1490,19 @@ export function TenantDetailPage() {
               <ResourceCard
                 title="Reglas de disponibilidad"
                 subtitle="Ventanas de atención"
+                toolbar={(
+                  <div className="mt-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <p className="text-sm text-slate-500">
+                      {filteredRules.length} regla{filteredRules.length === 1 ? '' : 's'}
+                    </p>
+                    <Input
+                      value={rulesSearch}
+                      onChange={(event) => setRulesSearch(event.target.value)}
+                      placeholder="Buscar por día, hora o estado..."
+                      className="max-w-md"
+                    />
+                  </div>
+                )}
                 form={
                   <form
                     className="grid gap-3"
@@ -1338,7 +1534,7 @@ export function TenantDetailPage() {
                     <Button type="submit">Crear regla</Button>
                   </form>
                 }
-                items={availabilityRules.map((rule) => (
+                items={visibleRules.map((rule) => (
                   <ItemRow
                     key={rule.id}
                     title={`${days[rule.dayOfWeek]} ${rule.startTime} - ${rule.endTime}`}
@@ -1356,10 +1552,34 @@ export function TenantDetailPage() {
                     }
                   />
                 ))}
+                emptyState={filteredRules.length === 0 ? 'No hay reglas que coincidan con la búsqueda.' : undefined}
+                pagination={(
+                  <DataTablePagination
+                    className="rounded-2xl border border-slate-200 bg-white"
+                    page={Math.min(rulesPage, rulesPageCount)}
+                    pageCount={rulesPageCount}
+                    pageSize={tablePageSize}
+                    totalItems={filteredRules.length}
+                    onPageChange={setRulesPage}
+                  />
+                )}
               />
               <ResourceCard
                 title="Bloqueos de agenda"
                 subtitle="Bloqueos de agenda"
+                toolbar={(
+                  <div className="mt-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <p className="text-sm text-slate-500">
+                      {filteredBlocks.length} bloqueo{filteredBlocks.length === 1 ? '' : 's'}
+                    </p>
+                    <Input
+                      value={blocksSearch}
+                      onChange={(event) => setBlocksSearch(event.target.value)}
+                      placeholder="Buscar por motivo, tipo o fecha..."
+                      className="max-w-md"
+                    />
+                  </div>
+                )}
                 form={
                   <form
                     className="grid gap-3"
@@ -1395,7 +1615,7 @@ export function TenantDetailPage() {
                     <Button type="submit">Crear bloqueo</Button>
                   </form>
                 }
-                items={scheduleBlocks.map((block) => (
+                items={visibleBlocks.map((block) => (
                   <ItemRow
                     key={block.id}
                     title={block.reason}
@@ -1413,6 +1633,17 @@ export function TenantDetailPage() {
                     }
                   />
                 ))}
+                emptyState={filteredBlocks.length === 0 ? 'No hay bloqueos que coincidan con la búsqueda.' : undefined}
+                pagination={(
+                  <DataTablePagination
+                    className="rounded-2xl border border-slate-200 bg-white"
+                    page={Math.min(blocksPage, blocksPageCount)}
+                    pageCount={blocksPageCount}
+                    pageSize={tablePageSize}
+                    totalItems={filteredBlocks.length}
+                    onPageChange={setBlocksPage}
+                  />
+                )}
               />
             </div>
           ) : null}
@@ -1424,6 +1655,12 @@ export function TenantDetailPage() {
                 <p className="mt-1 text-sm text-slate-500">Gestiona estado, notas internas y reagendamiento desde una sola acción.</p>
               </div>
               <DataTableShell>
+                <DataTableToolbar
+                  summary={`${filteredAppointments.length} reserva${filteredAppointments.length === 1 ? '' : 's'}`}
+                  searchValue={appointmentsSearch}
+                  onSearchChange={setAppointmentsSearch}
+                  searchPlaceholder="Buscar por cliente, servicio o estado..."
+                />
                 <DataTable>
                   <thead className="bg-slate-50 text-slate-500">
                     <tr>
@@ -1435,31 +1672,44 @@ export function TenantDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {appointments.map((appointment) => (
-                      <tr key={appointment.id} className="border-t border-slate-200">
-                        <td className="px-4 py-3">{appointment.customer?.fullName ?? '-'}</td>
-                        <td className="px-4 py-3">{appointment.service?.name ?? '-'}</td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${appointmentStatusClasses(appointment.status)}`}>
-                            {appointmentStatusLabel(appointment.status)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">{new Date(appointment.startDateTime).toLocaleString()}</td>
-                        <td className="w-px whitespace-nowrap px-4 py-3">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="primary"
-                              className="h-8 px-3 text-xs font-semibold"
-                              onClick={() => setEditModal({ type: 'appointment', item: appointment })}
-                            >
-                              Gestionar
-                            </Button>
-                          </div>
-                        </td>
+                    {filteredAppointments.length === 0 ? (
+                      <tr>
+                        <td className="px-4 py-4 text-slate-500" colSpan={5}>No hay reservas que coincidan con la búsqueda.</td>
                       </tr>
-                    ))}
+                    ) : (
+                      visibleAppointments.map((appointment) => (
+                        <tr key={appointment.id} className="border-t border-slate-200">
+                          <td className="px-4 py-3">{appointment.customer?.fullName ?? '-'}</td>
+                          <td className="px-4 py-3">{appointment.service?.name ?? '-'}</td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${appointmentStatusClasses(appointment.status)}`}>
+                              {appointmentStatusLabel(appointment.status)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">{new Date(appointment.startDateTime).toLocaleString()}</td>
+                          <td className="w-px whitespace-nowrap px-4 py-3">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="primary"
+                                className="h-8 px-3 text-xs font-semibold"
+                                onClick={() => setEditModal({ type: 'appointment', item: appointment })}
+                              >
+                                Gestionar
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </DataTable>
+                <DataTablePagination
+                  page={Math.min(appointmentsPage, appointmentsPageCount)}
+                  pageCount={appointmentsPageCount}
+                  pageSize={tablePageSize}
+                  totalItems={filteredAppointments.length}
+                  onPageChange={setAppointmentsPage}
+                />
               </DataTableShell>
             </Card>
           ) : null}
@@ -1468,6 +1718,12 @@ export function TenantDetailPage() {
             <Card>
               <h3 className="text-lg font-semibold text-slate-900">Clientes</h3>
               <DataTableShell>
+                <DataTableToolbar
+                  summary={`${filteredCustomers.length} cliente${filteredCustomers.length === 1 ? '' : 's'}`}
+                  searchValue={customersSearch}
+                  onSearchChange={setCustomersSearch}
+                  searchPlaceholder="Buscar por nombre, correo, teléfono o identificación..."
+                />
                 <DataTable>
                   <thead className="bg-slate-50 text-slate-500">
                     <tr>
@@ -1479,36 +1735,49 @@ export function TenantDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {customers.map((customer) => (
-                      <tr key={customer.id} className="border-t border-slate-200">
-                        <td className="px-4 py-3">{customer.fullName}</td>
-                        <td className="px-4 py-3">{customer.identification ?? '-'}</td>
-                        <td className="px-4 py-3">{customer.email}</td>
-                        <td className="px-4 py-3">{customer.phone}</td>
-                        <td className="w-px whitespace-nowrap px-4 py-3">
-                          <div className="flex justify-end gap-2">
-                            <Button variant="primary" className="h-9 px-4 text-xs font-semibold" onClick={() => setCustomerView(customer)}>
-                              Ver
-                            </Button>
-                            <Button variant="secondary" className="h-9 px-4 text-xs font-semibold" onClick={() => setEditModal({ type: 'customer', item: customer })}>
-                              Editar
-                            </Button>
-                            <Button
-                              variant="danger"
-                              className="h-9 px-4 text-xs font-semibold"
-                              onClick={() => wrapAction(`delete-customer-${customer.id}`, async () => {
-                                await deleteCustomer(token, tenantId, customer.id);
-                                await loadData();
-                              })}
-                            >
-                              Eliminar
-                            </Button>
-                          </div>
-                        </td>
+                    {filteredCustomers.length === 0 ? (
+                      <tr>
+                        <td className="px-4 py-4 text-slate-500" colSpan={5}>No hay clientes que coincidan con la búsqueda.</td>
                       </tr>
-                    ))}
+                    ) : (
+                      visibleCustomers.map((customer) => (
+                        <tr key={customer.id} className="border-t border-slate-200">
+                          <td className="px-4 py-3">{customer.fullName}</td>
+                          <td className="px-4 py-3">{customer.identification ?? '-'}</td>
+                          <td className="px-4 py-3">{customer.email}</td>
+                          <td className="px-4 py-3">{customer.phone}</td>
+                          <td className="w-px whitespace-nowrap px-4 py-3">
+                            <div className="flex justify-end gap-2">
+                              <Button variant="primary" className="h-9 px-4 text-xs font-semibold" onClick={() => setCustomerView(customer)}>
+                                Ver
+                              </Button>
+                              <Button variant="secondary" className="h-9 px-4 text-xs font-semibold" onClick={() => setEditModal({ type: 'customer', item: customer })}>
+                                Editar
+                              </Button>
+                              <Button
+                                variant="danger"
+                                className="h-9 px-4 text-xs font-semibold"
+                                onClick={() => wrapAction(`delete-customer-${customer.id}`, async () => {
+                                  await deleteCustomer(token, tenantId, customer.id);
+                                  await loadData();
+                                })}
+                              >
+                                Eliminar
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </DataTable>
+                <DataTablePagination
+                  page={Math.min(customersPage, customersPageCount)}
+                  pageCount={customersPageCount}
+                  pageSize={tablePageSize}
+                  totalItems={filteredCustomers.length}
+                  onPageChange={setCustomersPage}
+                />
               </DataTableShell>
             </Card>
           ) : null}
@@ -1693,13 +1962,19 @@ function InfoBlock({ label, value }: { label: string; value: string }) {
 function ResourceCard({
   title,
   subtitle,
+  toolbar,
   form,
   items,
+  emptyState,
+  pagination,
 }: {
   title: string;
   subtitle: string;
+  toolbar?: ReactNode;
   form: ReactNode;
   items: ReactNode[];
+  emptyState?: string;
+  pagination?: ReactNode;
 }) {
   return (
     <Card>
@@ -1707,8 +1982,16 @@ function ResourceCard({
         <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
         <span className="text-sm text-slate-500">{subtitle}</span>
       </div>
+      {toolbar}
       <div className="mt-5">{form}</div>
-      <div className="mt-6 grid gap-3">{items}</div>
+      <div className="mt-6 grid gap-3">
+        {items.length > 0 ? items : (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-6 text-sm text-slate-500">
+            {emptyState ?? 'No hay elementos disponibles.'}
+          </div>
+        )}
+      </div>
+      {pagination ? <div className="mt-6">{pagination}</div> : null}
     </Card>
   );
 }

@@ -21,7 +21,7 @@ export class FileObjectEntity {
   @Column({ type: 'integer', default: 0 })
   sizeBytes!: number;
 
-  @Column({ type: 'varchar', length: 80, default: 's3' })
+  @Column({ type: 'varchar', length: 80, default: 'r2' })
   provider!: string;
 
   @Column({ type: 'varchar', length: 80, default: 'private' })

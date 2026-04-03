@@ -273,8 +273,11 @@ async function main() {
       isVisible: true,
       settings: {},
       content: {
+        kicker: 'Nail Studio Boutique',
         title: 'Paola Mendoza Nails',
-        subtitle: 'Sitio informativo del negocio',
+        subtitle: 'Manicure, soft gel y rituales de cuidado con una estética limpia, suave y elegante.',
+        ctaLabel: 'Agendar valoración',
+        ctaUrl: '/contacto',
       },
     },
     {
@@ -287,7 +290,11 @@ async function main() {
       isVisible: true,
       settings: {},
       content: {
-        text: 'Paola Mendoza Nails · Powered by Quickly Sites',
+        text: 'Diseñamos experiencias de manicure y cuidado con atención meticulosa, acabados refinados y una atmósfera serena.',
+        address: 'Urdesa Central, Guayaquil, Ecuador',
+        hours: 'Lunes a sábado · 09:00 a 19:00',
+        instagram: '@paolamendozanails',
+        footerWhatsapp: '+593 99 123 4567',
       },
     },
     {

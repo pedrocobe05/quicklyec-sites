@@ -308,6 +308,8 @@ Incluye:
 - [x] edición de permisos por rol desde UI
 - [x] CRUD base de roles de plataforma
 - [x] configuración de plataforma persistida
+- [x] almacenamiento multi-tenant listo para Cloudflare R2
+- [x] entrega pública directa de assets sin URLs firmadas de lectura
 
 ### Base de datos
 
@@ -319,7 +321,7 @@ Incluye:
 ## Orden recomendado de implementación
 
 1. Fortalecer flujo de dominio primario y estados de verificación.
-2. Agregar filtros, búsqueda y paginación en tablas operativas.
+2. Completar filtros, búsqueda y paginación en todas las tablas operativas.
 3. Endurecer más validaciones de agenda y reservas.
 4. Afinar ocultamiento fino por acción en toda la UI del tenant.
 5. Agregar notificaciones base y tests.
@@ -329,7 +331,7 @@ Incluye:
 Siguiente sprint recomendado:
 
 - mejora del flujo de dominios y dominio primario
-- filtros y paginación
+- completar filtros y paginación en el resto de tablas
 - endurecimiento adicional de reservas y agenda
 - pulido final del flujo de galería y assets del sitio
 
@@ -337,6 +339,9 @@ Razón:
 
 - la separación plataforma/tenant ya quedó utilizable sin flujo legacy
 - la subida de archivos por tenant ya funciona en branding y sitio
+- la biblioteca visual de assets ya permite renombrar alias, reordenar y borrar sin tocar JSON
+- header y footer del demo ya quedaron más comerciales y listos para presentación
+- la capa de archivos ya está preparada para R2 con dominio público para assets públicos
 - la siguiente brecha es mejorar operación diaria con filtros, dominios y validaciones más finas
 
 ## Notas operativas
