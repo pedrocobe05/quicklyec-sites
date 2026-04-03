@@ -1,0 +1,39 @@
+import { Column, CreateDateColumn, Entity, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { RefreshTokenEntity } from './refresh-token.entity';
+import { TenantMembershipEntity } from './tenant-membership.entity';
+
+@Entity('admin_users')
+export class AdminUserEntity {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
+
+  @Column({ length: 160 })
+  fullName!: string;
+
+  @Column({ unique: true, length: 255 })
+  email!: string;
+
+  @Column({ length: 255 })
+  passwordHash!: string;
+
+  @Column({ default: true })
+  isActive!: boolean;
+
+  @Column({ default: false })
+  isPlatformAdmin!: boolean;
+
+  @Column({ length: 40, default: 'tenant_admin' })
+  platformRole!: string;
+
+  @CreateDateColumn()
+  createdAt!: Date;
+
+  @UpdateDateColumn()
+  updatedAt!: Date;
+
+  @OneToMany(() => TenantMembershipEntity, (membership) => membership.user)
+  memberships!: TenantMembershipEntity[];
+
+  @OneToMany(() => RefreshTokenEntity, (refreshToken) => refreshToken.user)
+  refreshTokens!: RefreshTokenEntity[];
+}

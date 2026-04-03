@@ -1,0 +1,23 @@
+{
+  "name": "quickly-sites",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w @quickly-sites/api",
+    "dev:admin": "npm run dev -w @quickly-sites/admin",
+    "dev:public": "npm run dev -w @quickly-sites/public",
+    "build": "npm run build --workspaces",
+    "lint": "npm run lint --workspaces",
+    "format": "prettier --write .",
+    "typeorm": "npm run typeorm -w @quickly-sites/api",
+    "seed": "npm run seed -w @quickly-sites/api"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "npm@10.8.1"
+}

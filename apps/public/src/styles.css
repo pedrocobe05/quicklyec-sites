@@ -1,0 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:wght@400;500;700&family=Libre+Baskerville:wght@400;700&family=Lora:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #1f2937;
+  background:
+    radial-gradient(circle at top left, rgba(233, 223, 214, 0.75), transparent 30%),
+    linear-gradient(180deg, #f7f3ee 0%, #fbfaf8 48%, #f1ece6 100%);
+  font-family: 'Cormorant Garamond', serif;
+}
+
+body {
+  margin: 0;
+  background: transparent;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+#root {
+  min-height: 100vh;
+}

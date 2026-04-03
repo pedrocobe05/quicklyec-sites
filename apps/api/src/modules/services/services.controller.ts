@@ -1,0 +1,47 @@
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from 'src/modules/auth/jwt-auth.guard';
+import { TenantModuleAccess } from 'src/modules/auth/tenant-module-access.decorator';
+import { TenantMembershipGuard } from 'src/modules/auth/tenant-membership.guard';
+import { CreateServiceDto } from './dto/create-service.dto';
+import { UpdateServiceDto } from './dto/update-service.dto';
+import { ServicesService } from './services.service';
+
+@ApiTags('Services')
+@TenantModuleAccess('services')
+@Controller('services')
+export class ServicesController {
+  constructor(private readonly servicesService: ServicesService) {}
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, TenantMembershipGuard)
+  @Get()
+  listAdmin(@Query('tenantId') tenantId: string) {
+    return this.servicesService.findAdminByTenant(tenantId);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, TenantMembershipGuard)
+  @Post()
+  create(@Body() input: CreateServiceDto) {
+    return this.servicesService.create(input);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, TenantMembershipGuard)
+  @Patch(':serviceId')
+  update(
+    @Param('serviceId') serviceId: string,
+    @Query('tenantId') tenantId: string,
+    @Body() input: UpdateServiceDto,
+  ) {
+    return this.servicesService.update(serviceId, tenantId, input);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, TenantMembershipGuard)
+  @Delete(':serviceId')
+  remove(@Param('serviceId') serviceId: string, @Query('tenantId') tenantId: string) {
+    return this.servicesService.remove(serviceId, tenantId);
+  }
+}
