@@ -59,7 +59,7 @@ export function buildTypeOrmOptions(configService: ConfigService): DataSourceOpt
       RefreshTokenEntity,
       SubscriptionPlanEntity,
     ],
-    migrations: ['src/database/migrations/*.ts', 'dist/database/migrations/*.js'],
+    migrations: ['src/database/migrations/*.ts'],
     synchronize: false,
   };
 }
