@@ -24,6 +24,27 @@ function emitHttpActivity(type: 'start' | 'end') {
   }
 }
 
+function extractErrorMessage(errorText: string, status: number) {
+  const trimmed = errorText.trim();
+  if (!trimmed) {
+    return `Request failed: ${status}`;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as { message?: string | string[] };
+    if (Array.isArray(parsed.message)) {
+      return parsed.message.join(', ');
+    }
+    if (typeof parsed.message === 'string' && parsed.message.trim()) {
+      return parsed.message.trim();
+    }
+  } catch {
+    return trimmed;
+  }
+
+  return trimmed;
+}
+
 let refreshPromise: Promise<string | null> | null = null;
 
 function clearSessionAndRedirect() {
@@ -93,17 +114,18 @@ async function request<T>(path: string, options?: RequestInit, hasRetried = fals
     }
 
     if (!response.ok) {
-      const errorText = (await response.text()) || `Request failed: ${response.status}`;
+      const errorText = await response.text();
+      const errorMessage = extractErrorMessage(errorText, response.status);
 
       if (
         response.status === 403 &&
-        errorText.toLowerCase().includes('platform admin access required')
+        errorMessage.toLowerCase().includes('platform admin access required')
       ) {
         clearSessionAndRedirect();
         throw new Error('Session expired');
       }
 
-      throw new Error(errorText);
+      throw new Error(errorMessage);
     }
     return response.json() as Promise<T>;
   } finally {
