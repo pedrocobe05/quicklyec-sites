@@ -105,6 +105,18 @@ log "Restarting Nginx"
 sudo systemctl restart nginx
 
 log "Smoke test"
-curl -fsS "http://127.0.0.1:${API_PORT}/api/health" >/dev/null
+for attempt in {1..15}; do
+  if curl -fsS "http://127.0.0.1:${API_PORT}/api/health" >/dev/null; then
+    log "Smoke test passed on attempt ${attempt}"
+    break
+  fi
+
+  if [[ "$attempt" -eq 15 ]]; then
+    log "Smoke test failed after ${attempt} attempts"
+    exit 1
+  fi
+
+  sleep 2
+done
 
 log "Deploy completed successfully"
