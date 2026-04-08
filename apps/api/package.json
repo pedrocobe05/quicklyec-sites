@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "npm run start:dev",
     "dev:ts-node": "ts-node -r tsconfig-paths/register src/main.ts",
-    "build": "nest build",
-    "start": "node dist/apps/api/src/main.js",
+    "build": "rm -rf dist && nest build",
+    "start": "node dist/main.js",
     "start:dev": "node --watch --watch-path ./src --watch-path ../../packages/shared/src -r ts-node/register -r tsconfig-paths/register ./src/main.ts",
     "start:debug": "node --watch --watch-path ./src --watch-path ../../packages/shared/src --inspect -r ts-node/register -r tsconfig-paths/register ./src/main.ts",
     "lint": "eslint src --ext .ts",

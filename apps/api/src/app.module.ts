@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { resolve } from 'path';
 import { appConfig, databaseConfig } from './common/config';
 import { typeOrmOptions } from './common/database/typeorm.config';
 import { AuthModule } from './modules/auth/auth.module';
@@ -26,6 +27,12 @@ import { HttpExceptionFilter } from './core/filters/http-exception.filter';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: [
+        resolve(process.cwd(), '.env'),
+        resolve(process.cwd(), 'apps/api/.env'),
+        resolve(__dirname, '../.env'),
+        resolve(__dirname, '../../apps/api/.env'),
+      ],
       load: [appConfig, databaseConfig],
     }),
     ScheduleModule.forRoot(),
