@@ -8,6 +8,7 @@ PM2_APP_NAME="${PM2_APP_NAME:-quicklyecsites-api}"
 NODE_HEAP_MB="${NODE_HEAP_MB:-1024}"
 API_PORT="${API_PORT:-4001}"
 API_WORKSPACE="@quickly-sites/api"
+SHARED_WORKSPACE="@quickly-sites/shared"
 
 log() {
   printf '\n[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -73,6 +74,9 @@ log "Installing root dependencies"
 if [[ ! -d "$ROOT_DIR/node_modules" ]]; then
   npm ci
 fi
+
+log "Building shared workspace"
+NODE_ENV=production NODE_OPTIONS="--max-old-space-size=${NODE_HEAP_MB}" npm run build -w "$SHARED_WORKSPACE"
 
 log "Building API workspace with NODE_OPTIONS=--max-old-space-size=${NODE_HEAP_MB}"
 NODE_ENV=production NODE_OPTIONS="--max-old-space-size=${NODE_HEAP_MB}" npm run build -w "$API_WORKSPACE"
