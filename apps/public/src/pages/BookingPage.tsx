@@ -1,8 +1,10 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { Layout } from '../components/Layout';
+import { PageErrorState } from '../components/PageErrorState';
 import { PageLoadingShell } from '../components/PageLoadingShell';
 import { createAppointment, getAvailability } from '../lib/api';
 import { useSiteConfig } from '../lib/useSiteConfig';
+import { emitPublicNotification } from '../shared/notifications/notifications';
 
 function formatCurrency(value?: number | null) {
   if (value == null) {
@@ -34,7 +36,6 @@ export function BookingPage() {
   const [selectedDate, setSelectedDate] = useState('');
   const [slots, setSlots] = useState<{ start: string; end: string; staffId?: string | null; staffName?: string | null }[]>([]);
   const [selectedSlot, setSelectedSlot] = useState('');
-  const [message, setMessage] = useState<string | null>(null);
   const [availabilityMessage, setAvailabilityMessage] = useState<string | null>(null);
 
   const selectedService = useMemo(
@@ -65,7 +66,7 @@ export function BookingPage() {
   }
 
   if (!data || error) {
-    return <div className="p-10 text-red-600">{error}</div>;
+    return <PageErrorState />;
   }
 
   if (!data.capabilities.bookingEnabled) {
@@ -89,14 +90,21 @@ export function BookingPage() {
       return;
     }
 
-    const availableSlots = await getAvailability(selectedServiceId, selectedDate, selectedStaffId);
-    setSlots(availableSlots);
-    setSelectedSlot('');
-    setAvailabilityMessage(
-      availableSlots.length === 0
-        ? 'No existen horarios disponibles para la fecha seleccionada. Prueba con otro día o profesional.'
-        : null,
-    );
+    try {
+      const availableSlots = await getAvailability(selectedServiceId, selectedDate, selectedStaffId);
+      setSlots(availableSlots);
+      setSelectedSlot('');
+      setAvailabilityMessage(
+        availableSlots.length === 0
+          ? 'No existen horarios disponibles para la fecha seleccionada. Prueba con otro día o profesional.'
+          : null,
+      );
+    } catch (err) {
+      setSlots([]);
+      setSelectedSlot('');
+      setAvailabilityMessage(null);
+      emitPublicNotification(err instanceof Error ? err.message : 'No se pudo consultar la disponibilidad.', 'error');
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -104,23 +112,32 @@ export function BookingPage() {
     const form = new FormData(event.currentTarget);
 
     if (!selectedServiceId || !selectedStaffId || !selectedSlot) {
-      setMessage('Completa servicio, profesional y horario antes de confirmar.');
+      emitPublicNotification('Completa servicio, profesional y horario antes de confirmar.', 'info');
       return;
     }
 
-    await createAppointment({
-      serviceId: selectedServiceId,
-      staffId: selectedSlotData?.staffId ?? selectedStaffId,
-      startDateTime: selectedSlot,
-      customer: {
-        fullName: String(form.get('fullName') ?? ''),
-        email: String(form.get('email') ?? ''),
-        phone: String(form.get('phone') ?? ''),
-      },
-      notes: String(form.get('notes') ?? ''),
-    });
+    try {
+      await createAppointment({
+        serviceId: selectedServiceId,
+        staffId: selectedSlotData?.staffId ?? selectedStaffId,
+        startDateTime: selectedSlot,
+        customer: {
+          fullName: String(form.get('fullName') ?? ''),
+          email: String(form.get('email') ?? ''),
+          phone: String(form.get('phone') ?? ''),
+        },
+        notes: String(form.get('notes') ?? ''),
+      });
 
-    setMessage('Reserva creada correctamente.');
+      emitPublicNotification('Reserva creada correctamente.', 'success');
+      event.currentTarget.reset();
+      setSelectedDate('');
+      setSelectedSlot('');
+      setSlots([]);
+      setAvailabilityMessage(null);
+    } catch (err) {
+      emitPublicNotification(err instanceof Error ? err.message : 'No se pudo crear la reserva.', 'error');
+    }
   }
 
   return (
@@ -159,7 +176,6 @@ export function BookingPage() {
                         setSelectedSlot('');
                         setSlots([]);
                         setAvailabilityMessage(null);
-                        setMessage(null);
                       }}
                     >
                       <div className="flex items-start justify-between gap-4">
@@ -211,7 +227,6 @@ export function BookingPage() {
                           setSelectedSlot('');
                           setSlots([]);
                           setAvailabilityMessage(null);
-                          setMessage(null);
                         }}
                       >
                         {member.avatarUrl ? (
@@ -254,7 +269,6 @@ export function BookingPage() {
                     setSelectedSlot('');
                     setSlots([]);
                     setAvailabilityMessage(null);
-                    setMessage(null);
                   }}
                 />
                 <button
@@ -320,8 +334,7 @@ export function BookingPage() {
             </section>
           </form>
 
-          {message ? <p className="mt-4 text-sm text-slate-700">{message}</p> : null}
-        </section>
+            </section>
 
         <aside className="space-y-6 md:sticky md:top-24">
           <section className="rounded-[2rem] bg-slate-900 p-8 text-white shadow-sm">

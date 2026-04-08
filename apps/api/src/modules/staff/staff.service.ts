@@ -1,7 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ServiceEntity, StaffEntity, StaffServiceEntity } from 'src/common/entities';
+import {
+  AppointmentEntity,
+  AvailabilityRuleEntity,
+  ScheduleBlockEntity,
+  ServiceEntity,
+  StaffEntity,
+  StaffServiceEntity,
+} from 'src/common/entities';
 import { FilesService } from 'src/modules/files/files.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
@@ -15,6 +22,12 @@ export class StaffService {
     private readonly staffServicesRepository: Repository<StaffServiceEntity>,
     @InjectRepository(ServiceEntity)
     private readonly servicesRepository: Repository<ServiceEntity>,
+    @InjectRepository(AppointmentEntity)
+    private readonly appointmentsRepository: Repository<AppointmentEntity>,
+    @InjectRepository(AvailabilityRuleEntity)
+    private readonly availabilityRulesRepository: Repository<AvailabilityRuleEntity>,
+    @InjectRepository(ScheduleBlockEntity)
+    private readonly scheduleBlocksRepository: Repository<ScheduleBlockEntity>,
     private readonly filesService: FilesService,
   ) {}
 
@@ -144,7 +157,29 @@ export class StaffService {
       throw new NotFoundException('Staff member not found');
     }
 
+    const [serviceLinksCount, appointmentsCount, rulesCount, blocksCount] = await Promise.all([
+      this.staffServicesRepository.count({ where: { staffId } }),
+      this.appointmentsRepository.count({ where: { tenantId, staffId } }),
+      this.availabilityRulesRepository.count({ where: { tenantId, staffId } }),
+      this.scheduleBlocksRepository.count({ where: { tenantId, staffId } }),
+    ]);
+
+    if (serviceLinksCount > 0 || appointmentsCount > 0 || rulesCount > 0 || blocksCount > 0) {
+      staff.isActive = false;
+      staff.isBookable = false;
+      await this.staffRepository.save(staff);
+      return {
+        success: true,
+        mode: 'deactivated' as const,
+        message: 'Profesional desactivado para conservar trazabilidad.',
+      };
+    }
+
     await this.staffRepository.remove(staff);
-    return { success: true };
+    return {
+      success: true,
+      mode: 'deleted' as const,
+      message: 'Profesional eliminado correctamente.',
+    };
   }
 }

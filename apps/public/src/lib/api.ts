@@ -21,6 +21,27 @@ function resolveApiUrl() {
 const API_URL = resolveApiUrl();
 const DEFAULT_HOST = import.meta.env.VITE_SITE_HOST ?? 'paolamendozanails.quicklyecsites.com';
 
+function extractErrorMessage(errorText: string, status: number) {
+  const trimmed = errorText.trim();
+  if (!trimmed) {
+    return `No se pudo completar la solicitud (${status}).`;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as { message?: string | string[] };
+    if (Array.isArray(parsed.message) && parsed.message.length > 0) {
+      return parsed.message.join(', ');
+    }
+    if (typeof parsed.message === 'string' && parsed.message.trim()) {
+      return parsed.message.trim();
+    }
+  } catch {
+    return trimmed;
+  }
+
+  return trimmed;
+}
+
 async function request<T>(path: string) {
   let response: Response;
   try {
@@ -30,8 +51,8 @@ async function request<T>(path: string) {
   }
 
   if (!response.ok) {
-    const message = await response.text().catch(() => '');
-    throw new Error(message || `Request failed: ${response.status}`);
+    const errorText = await response.text().catch(() => '');
+    throw new Error(extractErrorMessage(errorText, response.status));
   }
   return (await response.json()) as T;
 }
@@ -83,7 +104,8 @@ export function createAppointment(payload: unknown) {
     body: JSON.stringify(payload),
   }).then(async (response) => {
     if (!response.ok) {
-      throw new Error(await response.text());
+      const errorText = await response.text().catch(() => '');
+      throw new Error(extractErrorMessage(errorText, response.status));
     }
     return response.json();
   }).catch((error: unknown) => {

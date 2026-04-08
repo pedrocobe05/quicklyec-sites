@@ -1,4 +1,5 @@
 import { Layout } from '../components/Layout';
+import { PageErrorState } from '../components/PageErrorState';
 import { PageLoadingShell } from '../components/PageLoadingShell';
 import { TemplateRenderer } from '../components/TemplateRenderer';
 import { useSiteConfig } from '../lib/useSiteConfig';
@@ -17,7 +18,7 @@ export function HomePage() {
   }
 
   if (!data || error) {
-    return <div className="p-10 text-red-600">No se pudo cargar el sitio: {error}</div>;
+    return <PageErrorState />;
   }
 
   return (

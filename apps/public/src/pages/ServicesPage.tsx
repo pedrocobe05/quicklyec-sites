@@ -1,4 +1,5 @@
 import { Layout } from '../components/Layout';
+import { PageErrorState } from '../components/PageErrorState';
 import { PageLoadingShell } from '../components/PageLoadingShell';
 import { TemplateRenderer } from '../components/TemplateRenderer';
 import { useSiteConfig } from '../lib/useSiteConfig';
@@ -15,17 +16,14 @@ export function ServicesPage() {
       />
     );
   }
-  if (!data || error) return <div className="p-10 text-red-600">{error}</div>;
+  if (!data || error) return <PageErrorState />;
 
   return (
     <Layout site={data}>
       <main className="mx-auto max-w-6xl px-6 py-12">
         <section className="rounded-[2rem] border border-black/5 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(245,239,233,0.92))] p-10 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-          <p className="text-xs uppercase tracking-[0.4em] text-[var(--accent)]">Catálogo</p>
-          <h1 className="mt-4 font-serif text-5xl leading-[0.98] text-slate-900 md:text-6xl">Servicios diseñados para una experiencia impecable.</h1>
-          <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-600">
-            Explora una selección de servicios pensados para proyectar una marca de uñas y spa con presencia elegante, organización y claridad.
-          </p>
+          <p className="text-xs uppercase tracking-[0.4em] text-[var(--accent)]">Servicios disponibles</p>
+          <h1 className="mt-4 font-serif text-5xl leading-[0.98] text-slate-900 md:text-6xl">Explora la oferta disponible y encuentra la atención que necesitas.</h1>≈
         </section>
         <div className="mt-10 grid gap-5 md:grid-cols-2">
           {data.services.map((service) => (

@@ -8,6 +8,7 @@ import {
   CustomerEntity,
   ScheduleBlockEntity,
   StaffServiceEntity,
+  TenantSettingEntity,
 } from 'src/common/entities';
 import { getPlanMetadata, normalizePlanCode } from 'src/modules/tenants/tenant-access.constants';
 import { ServicesService } from 'src/modules/services/services.service';
@@ -23,6 +24,16 @@ interface AvailabilityQuery {
 @Injectable()
 export class AppointmentsService {
   private static readonly BLOCKING_STATUSES = ['pending', 'confirmed'] as const;
+  private static readonly DEFAULT_TIMEZONE = 'America/Guayaquil';
+  private static readonly WEEKDAY_INDEX: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  };
 
   constructor(
     @InjectRepository(AppointmentEntity)
@@ -35,6 +46,8 @@ export class AppointmentsService {
     private readonly customersRepository: Repository<CustomerEntity>,
     @InjectRepository(StaffServiceEntity)
     private readonly staffServicesRepository: Repository<StaffServiceEntity>,
+    @InjectRepository(TenantSettingEntity)
+    private readonly tenantSettingsRepository: Repository<TenantSettingEntity>,
     private readonly servicesService: ServicesService,
   ) {}
 
@@ -45,6 +58,89 @@ export class AppointmentsService {
 
   private normalizeTimeValue(time: string) {
     return /^\d{2}:\d{2}:\d{2}$/.test(time) ? time : `${time}:00`;
+  }
+
+  private addOneDay(date: string) {
+    const [year, month, day] = date.split('-').map(Number);
+    const next = new Date(Date.UTC(year, month - 1, day + 1));
+    const nextYear = next.getUTCFullYear();
+    const nextMonth = String(next.getUTCMonth() + 1).padStart(2, '0');
+    const nextDay = String(next.getUTCDate()).padStart(2, '0');
+    return `${nextYear}-${nextMonth}-${nextDay}`;
+  }
+
+  private getZonedParts(date: Date, timeZone: string) {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      weekday: 'short',
+      hourCycle: 'h23',
+    });
+
+    const parts = formatter.formatToParts(date);
+    const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '';
+
+    return {
+      year: value('year'),
+      month: value('month'),
+      day: value('day'),
+      hour: value('hour'),
+      minute: value('minute'),
+      second: value('second'),
+      weekday: value('weekday'),
+    };
+  }
+
+  private zonedDateTimeToUtc(date: string, time: string, timeZone: string) {
+    const normalizedTime = this.normalizeTimeValue(time);
+    const [year, month, day] = date.split('-').map(Number);
+    const [hours, minutes, seconds] = normalizedTime.split(':').map(Number);
+    const desiredUtcMs = Date.UTC(year, month - 1, day, hours, minutes, seconds);
+    const guess = new Date(desiredUtcMs);
+    const zoned = this.getZonedParts(guess, timeZone);
+    const zonedUtcMs = Date.UTC(
+      Number(zoned.year),
+      Number(zoned.month) - 1,
+      Number(zoned.day),
+      Number(zoned.hour),
+      Number(zoned.minute),
+      Number(zoned.second),
+    );
+    const offsetMs = zonedUtcMs - guess.getTime();
+    return new Date(desiredUtcMs - offsetMs);
+  }
+
+  private getLocalTimeString(date: Date, timeZone: string) {
+    const zoned = this.getZonedParts(date, timeZone);
+    return `${zoned.hour}:${zoned.minute}`;
+  }
+
+  private getLocalDayOfWeek(date: Date, timeZone: string) {
+    const zoned = this.getZonedParts(date, timeZone);
+    return AppointmentsService.WEEKDAY_INDEX[zoned.weekday] ?? date.getUTCDay();
+  }
+
+  private getTenantDayRange(date: string, timeZone: string) {
+    const start = this.zonedDateTimeToUtc(date, '00:00:00', timeZone);
+    const nextDate = this.addOneDay(date);
+    const nextStart = this.zonedDateTimeToUtc(nextDate, '00:00:00', timeZone);
+    return {
+      dayStart: start,
+      dayEnd: new Date(nextStart.getTime() - 1000),
+    };
+  }
+
+  private async getTenantTimezone(tenantId: string) {
+    const settings = await this.tenantSettingsRepository.findOne({
+      where: { tenantId },
+    });
+
+    return settings?.timezone ?? AppointmentsService.DEFAULT_TIMEZONE;
   }
 
   private async applyReminderState(appointment: AppointmentEntity) {
@@ -73,8 +169,8 @@ export class AppointmentsService {
     return appointment;
   }
 
-  private toDateWithTime(date: string, time: string) {
-    return new Date(`${date}T${this.normalizeTimeValue(time)}`);
+  private toDateWithTime(date: string, time: string, timeZone: string) {
+    return this.zonedDateTimeToUtc(date, time, timeZone);
   }
 
   private overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
@@ -85,9 +181,9 @@ export class AppointmentsService {
     return new Date(Date.now() + 30 * 60 * 1000);
   }
 
-  private isRuleCompatible(rule: AvailabilityRuleEntity, startDateTime: Date, endDateTime: Date) {
-    const startTime = startDateTime.toISOString().slice(11, 16);
-    const endTime = endDateTime.toISOString().slice(11, 16);
+  private isRuleCompatible(rule: AvailabilityRuleEntity, startDateTime: Date, endDateTime: Date, timeZone: string) {
+    const startTime = this.getLocalTimeString(startDateTime, timeZone);
+    const endTime = this.getLocalTimeString(endDateTime, timeZone);
     return rule.startTime <= startTime && rule.endTime >= endTime;
   }
 
@@ -116,6 +212,7 @@ export class AppointmentsService {
     staffId?: string | null;
     ignoreAppointmentId?: string;
   }) {
+    const timeZone = await this.getTenantTimezone(input.tenantId);
     const eligibleStaffIds = await this.getEligibleStaffIds(input.serviceId, input.staffId ?? undefined);
     if (eligibleStaffIds.length === 0) {
       throw new BadRequestException('El servicio seleccionado no tiene profesionales disponibles');
@@ -163,7 +260,7 @@ export class AppointmentsService {
       throw new BadRequestException('El horario está bloqueado en agenda');
     }
 
-    const dayOfWeek = input.startDateTime.getDay();
+    const dayOfWeek = this.getLocalDayOfWeek(input.startDateTime, timeZone);
     const rules = await this.availabilityRepository.find({
       where: { tenantId: input.tenantId, dayOfWeek, isActive: true, staffId: In(eligibleStaffIds) },
     });
@@ -172,7 +269,7 @@ export class AppointmentsService {
       : rules;
 
     const coveredByRule = matchingRules.some((rule) =>
-      this.isRuleCompatible(rule, input.startDateTime, input.endDateTime),
+      this.isRuleCompatible(rule, input.startDateTime, input.endDateTime, timeZone),
     );
 
     if (!coveredByRule) {
@@ -185,23 +282,21 @@ export class AppointmentsService {
     if (service.tenantId !== query.tenantId) {
       throw new NotFoundException('Service not found');
     }
+    const timeZone = await this.getTenantTimezone(query.tenantId);
 
     const eligibleStaffIds = await this.getEligibleStaffIds(query.serviceId, query.staffId);
     if (eligibleStaffIds.length === 0) {
       return [];
     }
 
-    const targetDate = new Date(`${query.date}T00:00:00`);
-    const dayOfWeek = targetDate.getDay();
+    const { dayStart, dayEnd } = this.getTenantDayRange(query.date, timeZone);
+    const dayOfWeek = this.getLocalDayOfWeek(dayStart, timeZone);
 
     const rules = await this.availabilityRepository.find({
       where: { tenantId: query.tenantId, dayOfWeek, isActive: true, staffId: In(eligibleStaffIds) },
       relations: { staff: true },
     });
     const filteredRules = query.staffId ? rules.filter((rule) => rule.staffId === query.staffId) : rules;
-
-    const dayStart = new Date(`${query.date}T00:00:00`);
-    const dayEnd = new Date(`${query.date}T23:59:59`);
 
     const [appointments, blocks] = await Promise.all([
       this.appointmentsRepository.find({
@@ -233,8 +328,8 @@ export class AppointmentsService {
 
     for (const rule of filteredRules) {
       const interval = rule.slotIntervalMinutes;
-      let current = this.toDateWithTime(query.date, rule.startTime);
-      const end = this.toDateWithTime(query.date, rule.endTime);
+      let current = this.toDateWithTime(query.date, rule.startTime, timeZone);
+      const end = this.toDateWithTime(query.date, rule.endTime, timeZone);
 
       while (current < end) {
         const slotEnd = new Date(current.getTime() + service.durationMinutes * 60 * 1000);

@@ -11,6 +11,7 @@ import { UpdateTenantBrandingDto } from './dto/update-tenant-branding.dto';
 import { UpdateTenantMembershipDto } from './dto/update-tenant-membership.dto';
 import { UpdateTenantRoleDto } from './dto/update-tenant-role.dto';
 import { UpdateTenantSettingsDto } from './dto/update-tenant-settings.dto';
+import { SendTestEmailDto } from './dto/send-test-email.dto';
 import { TenantsService } from './tenants.service';
 
 @ApiTags('Tenants')
@@ -48,6 +49,14 @@ export class TenantsController {
   @Patch('settings')
   updateSettings(@Query('tenantId') tenantId: string, @Body() input: UpdateTenantSettingsDto) {
     return this.tenantsService.updateTenantSettings(tenantId, input);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, TenantMembershipGuard)
+  @TenantModuleAccess('settings')
+  @Post('test-email')
+  sendTestEmail(@Query('tenantId') tenantId: string, @Body() input: SendTestEmailDto) {
+    return this.tenantsService.sendTestEmail(tenantId, input.to);
   }
 
   @ApiBearerAuth()

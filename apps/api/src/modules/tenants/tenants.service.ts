@@ -192,6 +192,21 @@ export class TenantsService {
     return this.settingsRepository.save(settings);
   }
 
+  async sendTestEmail(tenantId: string, to: string) {
+    const tenant = await this.tenantsRepository.findOne({
+      where: { id: tenantId },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+
+    return this.mailService.sendTestEmail({
+      tenantId,
+      to,
+    });
+  }
+
   async createTenantDomain(input: CreateTenantDomainDto) {
     if (input.isPrimary) {
       await this.domainsRepository.update({ tenantId: input.tenantId, isPrimary: true }, { isPrimary: false });

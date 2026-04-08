@@ -25,6 +25,7 @@ interface StaffRecord {
   avatarUrl?: string | null;
   serviceIds?: string[];
   serviceNames?: string[];
+  isActive?: boolean;
 }
 
 interface ServicesStaffSectionProps {
@@ -39,6 +40,8 @@ interface ServicesStaffSectionProps {
   onCreateStaff: (event: FormEvent<HTMLFormElement>) => void;
   onEditService: (service: ServiceRecord) => void;
   onEditStaff: (staff: StaffRecord) => void;
+  onDeleteService: (service: ServiceRecord) => void;
+  onDeleteStaff: (staff: StaffRecord) => void;
   onUploadStaffAvatar: (staff: StaffRecord, file: File) => void;
   itemRow: (props: {
     title: string;
@@ -49,6 +52,9 @@ interface ServicesStaffSectionProps {
     disabled?: boolean;
     visual?: JSX.Element;
     uploadSlot?: JSX.Element;
+    secondaryActionLabel?: string;
+    onSecondaryAction?: () => void;
+    secondaryActionVariant?: 'secondary' | 'danger';
   }) => JSX.Element;
 }
 
@@ -64,6 +70,8 @@ export function ServicesStaffSection({
   onCreateStaff,
   onEditService,
   onEditStaff,
+  onDeleteService,
+  onDeleteStaff,
   onUploadStaffAvatar,
   itemRow,
 }: ServicesStaffSectionProps) {
@@ -123,9 +131,15 @@ export function ServicesStaffSection({
                     {itemRow({
                       title: service.name,
                       subtitle: `${service.durationMinutes} min · ${service.price ? `$${service.price}` : 'Sin precio'}`,
-                      meta: service.description,
-                      actionLabel: saving === `delete-service-${service.id}` ? 'Eliminando...' : 'Eliminar',
+                      meta: [
+                        service.description,
+                        service.isActive ? 'Activo' : 'Inactivo',
+                      ].filter(Boolean).join(' · '),
+                      actionLabel: 'Editar',
                       onAction: () => onEditService(service),
+                      secondaryActionLabel: saving === `delete-service-${service.id}` ? 'Procesando...' : (service.isActive ? 'Eliminar' : 'Depurar'),
+                      onSecondaryAction: () => onDeleteService(service),
+                      secondaryActionVariant: service.isActive ? 'danger' : 'secondary',
                     })}
                   </Fragment>
                 ))}
@@ -198,9 +212,13 @@ export function ServicesStaffSection({
                       meta: [
                         member.bio ?? 'Sin biografía',
                         member.serviceNames?.length ? `Servicios: ${member.serviceNames.join(', ')}` : 'Sin servicios asignados',
+                        member.isActive === false ? 'Inactivo' : 'Activo',
                       ].join(' · '),
-                      actionLabel: saving === `delete-staff-${member.id}` ? 'Eliminando...' : 'Eliminar',
+                      actionLabel: 'Editar',
                       onAction: () => onEditStaff(member),
+                      secondaryActionLabel: saving === `delete-staff-${member.id}` ? 'Procesando...' : (member.isActive === false ? 'Depurar' : 'Eliminar'),
+                      onSecondaryAction: () => onDeleteStaff(member),
+                      secondaryActionVariant: member.isActive === false ? 'secondary' : 'danger',
                       visual: (
                         <ImagePreview
                           src={member.avatarUrl}

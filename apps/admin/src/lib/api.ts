@@ -213,6 +213,14 @@ export async function updateTenantSettings(accessToken: string, tenantId: string
   });
 }
 
+export async function sendTenantTestEmail(accessToken: string, tenantId: string, to: string) {
+  return request(`/tenants/test-email?tenantId=${tenantId}`, {
+    method: 'POST',
+    headers: authHeaders(accessToken),
+    body: JSON.stringify({ to }),
+  });
+}
+
 export async function createTenantDomain(accessToken: string, payload: Record<string, unknown>) {
   return request('/tenants/domains', {
     method: 'POST',

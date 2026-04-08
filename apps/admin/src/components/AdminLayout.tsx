@@ -449,9 +449,9 @@ export function AdminLayout({
               <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/80 border-r-transparent" />
             </span>
             <div className="min-w-0">
-              <p className="text-sm font-semibold tracking-[0.08em] text-white">Actualizando vista</p>
+              <p className="text-sm font-semibold tracking-[0.08em] text-white">Actualizando</p>
               <p className="text-xs text-white/70">
-                Cargando contenido y sincronizando cambios para que la transición se sienta continua.
+                Procesando cambios y refrescando datos.
               </p>
             </div>
           </div>

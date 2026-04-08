@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -111,6 +112,38 @@ export class MailService {
         body: `<p style="margin:0 0 10px 0;"><strong>Servicio:</strong> ${input.serviceName}</p><p style="margin:0;"><strong>Fecha:</strong> ${input.startDateTime}</p>`,
       }),
     });
+  }
+
+  async sendTestEmail(input: {
+    to: string;
+    tenantId: string;
+  }) {
+    const transporter = await this.createTransporter(input.tenantId);
+    if (!transporter) {
+      throw new BadRequestException('No hay una configuración SMTP válida para este tenant.');
+    }
+
+    const theme = await this.resolveTheme(input.tenantId);
+    await transporter.sendMail({
+      from: `"${theme.fromName}" <${theme.fromEmail}>`,
+      to: input.to,
+      subject: 'Prueba de correo',
+      text: `Esta es una prueba de configuración SMTP para ${theme.tenantName}. Si recibiste este mensaje, el envío funciona correctamente.`,
+      html: this.renderEmailTemplate({
+        theme,
+        title: 'Prueba de correo',
+        intro: 'Esta es una prueba de la configuración SMTP del tenant.',
+        body: `
+          <p style="margin:0 0 10px 0;"><strong>Tenant:</strong> ${theme.tenantName}</p>
+          <p style="margin:0;">Si recibiste este correo, el envío está funcionando correctamente.</p>
+        `,
+      }),
+    });
+
+    return {
+      success: true,
+      message: `Correo de prueba enviado a ${input.to}.`,
+    };
   }
 
   private async createTransporter(tenantId: string) {

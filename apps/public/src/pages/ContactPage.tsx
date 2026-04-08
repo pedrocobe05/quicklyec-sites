@@ -1,4 +1,5 @@
 import { Layout } from '../components/Layout';
+import { PageErrorState } from '../components/PageErrorState';
 import { PageLoadingShell } from '../components/PageLoadingShell';
 import { TemplateRenderer } from '../components/TemplateRenderer';
 import { useSiteConfig } from '../lib/useSiteConfig';
@@ -15,7 +16,7 @@ export function ContactPage() {
       />
     );
   }
-  if (!data || error) return <div className="p-10 text-red-600">{error}</div>;
+  if (!data || error) return <PageErrorState />;
 
   return (
     <Layout site={data}>

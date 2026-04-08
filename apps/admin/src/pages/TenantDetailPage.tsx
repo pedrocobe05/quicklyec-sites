@@ -19,7 +19,9 @@ import {
   createStaff,
   deleteCustomer,
   deleteAvailabilityRule,
+  deleteService,
   deleteScheduleBlock,
+  deleteStaff,
   deleteTenantDomain,
   getAppointments,
   getAvailabilityRules,
@@ -34,6 +36,7 @@ import {
   getTenantRoles,
   getTenantProfile,
   resetTenantMembershipPassword,
+  sendTenantTestEmail,
   updateAppointment,
   updateAppointmentStatus,
   updateAvailabilityRule,
@@ -756,11 +759,17 @@ export function TenantDetailPage() {
       .catch((err: Error) => notify(err.message, 'error'));
   }, [selectedPage?.id, tenantId, token]);
 
-  async function wrapAction(key: string, action: () => Promise<void>) {
+  async function wrapAction(
+    key: string,
+    action: () => Promise<void>,
+    options?: { successMessage?: string; suppressSuccess?: boolean },
+  ) {
     setSaving(key);
     try {
       await action();
-      notify('Cambios guardados.', 'success');
+      if (!options?.suppressSuccess) {
+        notify(options?.successMessage ?? 'Cambios guardados.', 'success');
+      }
     } catch (err) {
       const message = (err as Error).message;
       notify(message, 'error');
@@ -1352,21 +1361,33 @@ export function TenantDetailPage() {
                 className="mt-6 grid gap-4"
                 onSubmit={(event) => {
                   event.preventDefault();
+                  const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
                   const form = new FormData(event.currentTarget);
+                  const payload = {
+                    mailConfig: {
+                      host: String(form.get('host') ?? ''),
+                      port: Number(form.get('port') ?? 587),
+                      secure: form.get('secure') === 'on',
+                      user: String(form.get('user') ?? ''),
+                      pass: String(form.get('pass') ?? ''),
+                      fromEmail: String(form.get('fromEmail') ?? ''),
+                      fromName: String(form.get('fromName') ?? ''),
+                    },
+                  };
+
+                  const testRecipient = String(form.get('testRecipient') ?? '').trim();
+                  const isTesting = submitter?.dataset.action === 'test';
                   wrapAction('mail-settings', async () => {
-                    await updateTenantSettings(token, tenantId, {
-                      mailConfig: {
-                        host: String(form.get('host') ?? ''),
-                        port: Number(form.get('port') ?? 587),
-                        secure: form.get('secure') === 'on',
-                        user: String(form.get('user') ?? ''),
-                        pass: String(form.get('pass') ?? ''),
-                        fromEmail: String(form.get('fromEmail') ?? ''),
-                        fromName: String(form.get('fromName') ?? ''),
-                      },
-                    });
+                    await updateTenantSettings(token, tenantId, payload);
+                    if (isTesting) {
+                      if (!testRecipient) {
+                        throw new Error('Ingresa un correo para la prueba.');
+                      }
+                      const result = await sendTenantTestEmail(token, tenantId, testRecipient) as { message?: string };
+                      notify(result.message ?? 'Correo de prueba enviado.', 'success');
+                    }
                     await loadData();
-                  });
+                  }, { suppressSuccess: isTesting });
                 }}
               >
                 <div className="grid gap-4 md:grid-cols-2">
@@ -1396,7 +1417,18 @@ export function TenantDetailPage() {
                 <label className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
                   <Checkbox type="checkbox" name="secure" defaultChecked={Boolean(tenantProfile?.settings?.mailConfig?.secure)} /> Usar SSL / seguro
                 </label>
-                <div className="flex justify-end">
+                <div className="grid gap-4 md:grid-cols-[1fr_auto_auto] md:items-end">
+                  <FormField label="Correo para prueba">
+                    <Input
+                      name="testRecipient"
+                      type="email"
+                      placeholder="destinatario@dominio.com"
+                      defaultValue={tenantProfile?.settings?.contactEmail ?? ''}
+                    />
+                  </FormField>
+                  <Button type="submit" variant="secondary" data-action="test" isLoading={saving === 'mail-settings'} loadingLabel="Probando...">
+                    Guardar y enviar prueba
+                  </Button>
                   <Button type="submit" isLoading={saving === 'mail-settings'} loadingLabel="Guardando...">
                     Guardar configuración
                   </Button>
@@ -1538,6 +1570,20 @@ export function TenantDetailPage() {
               }}
               onEditService={(service) => setEditModal({ type: 'service', item: service })}
               onEditStaff={(member) => setEditModal({ type: 'staff', item: member })}
+              onDeleteService={(service) => {
+                void wrapAction(`delete-service-${service.id}`, async () => {
+                  const result = await deleteService(token, tenantId, service.id) as { message?: string };
+                  await loadData();
+                  notify(result.message ?? 'Servicio actualizado.', 'success');
+                }, { suppressSuccess: true });
+              }}
+              onDeleteStaff={(member) => {
+                void wrapAction(`delete-staff-${member.id}`, async () => {
+                  const result = await deleteStaff(token, tenantId, member.id) as { message?: string };
+                  await loadData();
+                  notify(result.message ?? 'Profesional actualizado.', 'success');
+                }, { suppressSuccess: true });
+              }}
               onUploadStaffAvatar={handleUploadStaffAvatar}
               itemRow={(props) => <ItemRow {...props} />}
             />
@@ -1585,6 +1631,20 @@ export function TenantDetailPage() {
               }}
               onEditService={(service) => setEditModal({ type: 'service', item: service })}
               onEditStaff={(member) => setEditModal({ type: 'staff', item: member })}
+              onDeleteService={(service) => {
+                void wrapAction(`delete-service-${service.id}`, async () => {
+                  const result = await deleteService(token, tenantId, service.id) as { message?: string };
+                  await loadData();
+                  notify(result.message ?? 'Servicio actualizado.', 'success');
+                }, { suppressSuccess: true });
+              }}
+              onDeleteStaff={(member) => {
+                void wrapAction(`delete-staff-${member.id}`, async () => {
+                  const result = await deleteStaff(token, tenantId, member.id) as { message?: string };
+                  await loadData();
+                  notify(result.message ?? 'Profesional actualizado.', 'success');
+                }, { suppressSuccess: true });
+              }}
               onUploadStaffAvatar={handleUploadStaffAvatar}
               itemRow={(props) => <ItemRow {...props} />}
             />

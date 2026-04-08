@@ -6,6 +6,7 @@ import {
   CustomerEntity,
   ScheduleBlockEntity,
   StaffServiceEntity,
+  TenantSettingEntity,
 } from 'src/common/entities';
 import { MailModule } from 'src/modules/mail/mail.module';
 import { ServicesModule } from 'src/modules/services/services.module';
@@ -21,6 +22,7 @@ import { AppointmentsService } from './appointments.service';
       ScheduleBlockEntity,
       CustomerEntity,
       StaffServiceEntity,
+      TenantSettingEntity,
     ]),
     ServicesModule,
     MailModule,

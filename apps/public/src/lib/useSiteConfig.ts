@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { PublicSiteConfig } from '@quickly-sites/shared';
 import { getSiteConfig } from './api';
+import { emitPublicNotification } from '../shared/notifications/notifications';
 
 export function useSiteConfig(slug = '/') {
   const [data, setData] = useState<PublicSiteConfig | null>(null);
@@ -16,6 +17,7 @@ export function useSiteConfig(slug = '/') {
       })
       .catch((err: Error) => {
         setError(err.message);
+        emitPublicNotification(err.message, 'error');
       })
       .finally(() => setLoading(false));
   }, [slug]);
