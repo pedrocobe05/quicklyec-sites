@@ -75,6 +75,9 @@ if [[ ! -d "$ROOT_DIR/node_modules" ]]; then
   npm ci
 fi
 
+log "Cleaning previous API and shared build artifacts"
+rm -rf "$ROOT_DIR/apps/api/dist" "$ROOT_DIR/packages/shared/dist"
+
 log "Building shared workspace"
 NODE_ENV=production NODE_OPTIONS="--max-old-space-size=${NODE_HEAP_MB}" npm run build -w "$SHARED_WORKSPACE"
 
