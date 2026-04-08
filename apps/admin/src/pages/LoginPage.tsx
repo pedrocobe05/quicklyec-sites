@@ -2,7 +2,6 @@ import { FormEvent, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { login } from '../lib/api';
 import { BrandMark } from '../shared/components/brand/BrandMark';
-import { Alert } from '../shared/components/ui/Alert';
 import { FormField } from '../shared/components/forms/FormField';
 import { Button } from '../shared/components/ui/Button';
 import { Card } from '../shared/components/ui/Card';
@@ -13,7 +12,6 @@ export function LoginPage() {
   const navigate = useNavigate();
   const { notify } = useNotification();
   const token = localStorage.getItem('qs_access_token');
-  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   if (token) {
@@ -23,7 +21,6 @@ export function LoginPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    setError(null);
     setIsLoading(true);
     try {
       const response = (await login(
@@ -37,7 +34,6 @@ export function LoginPage() {
       navigate('/');
     } catch (err) {
       const message = (err as Error).message;
-      setError(message);
       notify(message, 'error');
     } finally {
       setIsLoading(false);
@@ -74,7 +70,6 @@ export function LoginPage() {
               </p>
             </div>
             <form className="space-y-5" onSubmit={handleSubmit}>
-              {error ? <Alert variant="error">{error}</Alert> : null}
               <FormField label="Correo" required>
                 <Input
                   name="email"
