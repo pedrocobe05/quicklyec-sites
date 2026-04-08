@@ -1,6 +1,24 @@
 import { PublicSiteConfig } from '@quickly-sites/shared';
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api';
+function resolveApiUrl() {
+  const configuredUrl = import.meta.env.VITE_API_URL;
+  if (configuredUrl) {
+    return configuredUrl;
+  }
+
+  if (typeof window === 'undefined') {
+    return 'http://localhost:4000/api';
+  }
+
+  const { hostname } = window.location;
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'http://localhost:4000/api';
+  }
+
+  return 'https://api.quicklyecsites.com/api';
+}
+
+const API_URL = resolveApiUrl();
 const DEFAULT_HOST = import.meta.env.VITE_SITE_HOST ?? 'paolamendozanails.quicklysites.local';
 
 async function request<T>(path: string) {
