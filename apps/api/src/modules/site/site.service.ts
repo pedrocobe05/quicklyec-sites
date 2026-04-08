@@ -315,12 +315,15 @@ export class SiteService {
         category: service.category,
         color: service.color,
       })),
-      staff: staff.map((member) => ({
-        id: member.id,
-        name: member.name,
-        bio: member.bio,
-        avatarUrl: member.avatarUrl,
-      })),
+      staff: await Promise.all(
+        staff.map(async (member) => ({
+          id: member.id,
+          name: member.name,
+          bio: member.bio,
+          avatarUrl: await this.filesService.resolveStoredReference(member.avatarUrl, tenantId),
+          serviceIds: member.staffServices?.map((link) => link.serviceId) ?? [],
+        })),
+      ),
     };
 
     response.page.seo.ogImageUrl = resolvedOgImageUrl ?? response.page.seo.ogImageUrl ?? null;

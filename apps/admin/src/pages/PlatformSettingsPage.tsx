@@ -5,6 +5,7 @@ import { Button } from '../shared/components/ui/Button';
 import { Card } from '../shared/components/ui/Card';
 import { FormField } from '../shared/components/forms/FormField';
 import { Input } from '../shared/components/ui/Input';
+import { Skeleton } from '../shared/components/ui/Skeleton';
 import { useNotification } from '../shared/notifications/use-notification';
 
 interface PlatformSettingsRecord {
@@ -71,7 +72,24 @@ export function PlatformSettingsPage() {
         </div>
 
         {loading ? (
-          <p className="mt-6 text-sm text-slate-500">Cargando configuración...</p>
+          <div className="mt-6 grid gap-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <Skeleton className="h-20" />
+              <Skeleton className="h-20" />
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Skeleton className="h-20" />
+              <Skeleton className="h-20" />
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Skeleton className="h-20" />
+              <Skeleton className="h-20" />
+            </div>
+            <Skeleton className="h-20" />
+            <div className="flex justify-end">
+              <Skeleton className="h-11 w-40" />
+            </div>
+          </div>
         ) : (
           <form className="mt-6 grid gap-4" onSubmit={handleSubmit}>
             <div className="grid gap-4 md:grid-cols-2">

@@ -1,11 +1,20 @@
 import { Layout } from '../components/Layout';
+import { PageLoadingShell } from '../components/PageLoadingShell';
 import { TemplateRenderer } from '../components/TemplateRenderer';
 import { useSiteConfig } from '../lib/useSiteConfig';
 
 export function ContactPage() {
   const { data, loading, error } = useSiteConfig('/contacto');
 
-  if (loading) return <div className="p-10 text-slate-600">Cargando contacto...</div>;
+  if (loading) {
+    return (
+      <PageLoadingShell
+        eyebrow="Cargando contacto"
+        title="Estamos preparando los canales de atención y los bloques editoriales."
+        description="La vista se está montando con una transición más suave para que la experiencia se sienta continua."
+      />
+    );
+  }
   if (!data || error) return <div className="p-10 text-red-600">{error}</div>;
 
   return (
@@ -24,7 +33,7 @@ export function ContactPage() {
             <div className="mt-6 grid gap-4">
               <div className="rounded-[1.5rem] bg-[var(--secondary)] px-5 py-4">
                 <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Correo</p>
-                <p className="mt-2 text-lg text-slate-900">{data.tenant.contactEmail ?? 'demo@quicklysites.local'}</p>
+                <p className="mt-2 text-lg text-slate-900">{data.tenant.contactEmail ?? 'demo@quicklyecsites.local'}</p>
               </div>
               <div className="rounded-[1.5rem] bg-[var(--secondary)] px-5 py-4">
                 <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Teléfono</p>

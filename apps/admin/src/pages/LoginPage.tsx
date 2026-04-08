@@ -99,7 +99,7 @@ export function LoginPage() {
             <div className="mt-8 rounded-[1.5rem] border border-[rgba(255,203,48,0.18)] bg-[rgba(255,203,48,0.08)] px-4 py-4 text-sm text-slate-700">
               Plataforma: `sites@quicklyec.com`
               <br />
-              Tenant demo: `admin@quicklysites.local`
+              Tenant demo: `admin@quicklyecsites.local`
             </div>
           </Card>
         </div>

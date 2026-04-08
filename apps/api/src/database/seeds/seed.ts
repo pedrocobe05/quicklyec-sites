@@ -4,12 +4,18 @@ import { DataSource } from 'typeorm';
 import dataSource from 'src/common/database/data-source';
 import {
   AdminUserEntity,
+  AppointmentEntity,
+  AvailabilityRuleEntity,
+  CustomerEntity,
   PlatformRoleEntity,
   PlatformSettingEntity,
+  ScheduleBlockEntity,
   ServiceEntity,
   SitePageEntity,
   SiteSectionEntity,
   SiteTemplateEntity,
+  StaffEntity,
+  StaffServiceEntity,
   TenantBrandingEntity,
   TenantDomainEntity,
   TenantEntity,
@@ -48,6 +54,12 @@ async function main() {
   const pageRepository = dataSource.getRepository(SitePageEntity);
   const sectionRepository = dataSource.getRepository(SiteSectionEntity);
   const serviceRepository = dataSource.getRepository(ServiceEntity);
+  const staffRepository = dataSource.getRepository(StaffEntity);
+  const staffServiceRepository = dataSource.getRepository(StaffServiceEntity);
+  const availabilityRuleRepository = dataSource.getRepository(AvailabilityRuleEntity);
+  const scheduleBlockRepository = dataSource.getRepository(ScheduleBlockEntity);
+  const customerRepository = dataSource.getRepository(CustomerEntity);
+  const appointmentRepository = dataSource.getRepository(AppointmentEntity);
   const userRepository = dataSource.getRepository(AdminUserEntity);
   const membershipRepository = dataSource.getRepository(TenantMembershipEntity);
   const roleRepository = dataSource.getRepository(TenantRoleEntity);
@@ -88,7 +100,7 @@ async function main() {
       supportEmail: 'sites@quicklyec.com',
       supportPhone: null,
       publicAppUrl: 'http://localhost:5174',
-      quicklysitesBaseDomain: 'quicklysites.local',
+      quicklysitesBaseDomain: 'quicklyecsites.local',
       defaultSenderName: 'Quickly Sites',
       defaultSenderEmail: 'sites@quicklyec.com',
       metadata: null,
@@ -963,7 +975,7 @@ async function main() {
   await domainRepository.save([
     {
       tenantId: healthPrimeTenant.id,
-      domain: 'healthprime.quicklysites.local',
+      domain: 'healthprime.quicklyecsites.local',
       type: 'subdomain',
       isPrimary: true,
       verificationStatus: 'verified',
@@ -984,7 +996,7 @@ async function main() {
   await settingsRepository.save({
     tenantId: healthPrimeTenant.id,
     publicSiteEnabled: true,
-    bookingEnabled: false,
+    bookingEnabled: true,
     timezone: 'America/Guayaquil',
     locale: 'es-EC',
     currency: 'USD',
@@ -992,10 +1004,10 @@ async function main() {
     contactPhone: '+593 99 765 4321',
     whatsappNumber: '+593 99 765 4321',
     siteIndexingEnabled: true,
-    defaultSeoTitle: 'Health Prime Studio | Atención profesional con experiencia moderna',
-    defaultSeoDescription: 'Demo premium para clínicas, odontología, veterinaria y servicios especializados de salud.',
+    defaultSeoTitle: 'Health Prime Studio | Atención profesional y reservas online',
+    defaultSeoDescription: 'Demo premium para clínicas, odontología, veterinaria y servicios especializados con reservas online.',
     defaultOgImageUrl: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118',
-    canonicalDomain: 'healthprime.quicklysites.local',
+    canonicalDomain: 'healthprime.quicklyecsites.local',
   });
 
   await brandingRepository.save({
@@ -1005,7 +1017,7 @@ async function main() {
     primaryColor: '#0F3B57',
     secondaryColor: '#F5F8FA',
     accentColor: '#6BAA9B',
-    fontFamily: 'Lora',
+    fontFamily: 'Manrope',
     borderRadius: '1.5rem',
     buttonStyle: 'pill',
     customCss: null,
@@ -1021,9 +1033,9 @@ async function main() {
     isIndexable: true,
     seoTitle: 'Health Prime Studio | Sitio premium para servicios de salud',
     seoDescription: 'Template demo premium para clínicas, odontología, veterinaria y consultorios modernos.',
-    canonicalUrl: 'https://healthprime.quicklysites.local',
+    canonicalUrl: 'https://healthprime.quicklyecsites.local',
     ogTitle: 'Health Prime Studio',
-    ogDescription: 'Diseño elegante, confiable y altamente personalizable para servicios de salud.',
+    ogDescription: 'Diseño elegante, confiable y altamente personalizable para servicios de salud con reservas online.',
     ogImageUrl: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118',
     metaRobots: 'index,follow',
   });
@@ -1077,8 +1089,8 @@ async function main() {
         kicker: 'Health Care Demo',
         title: 'Health Prime Studio',
         subtitle: 'Una presencia digital premium para clínicas, odontología, veterinaria y servicios especializados.',
-        ctaLabel: 'Solicitar valoración',
-        ctaUrl: '/contacto',
+        ctaLabel: 'Reservar cita',
+        ctaUrl: '/reservar',
       },
     },
     {
@@ -1725,7 +1737,7 @@ async function main() {
                 <h2>Convierte este demo en clínica, odontología o veterinaria cambiando solo contenido, imágenes y tono.</h2>
               </div>
               <div class="contact-cta-clinic__actions">
-                <a href="/contacto" class="primary-link">Ir a contacto</a>
+                <a href="/reservar" class="primary-link">Reservar cita</a>
                 <a href="/servicios" class="secondary-link">Explorar servicios</a>
               </div>
             </div>
@@ -1909,7 +1921,7 @@ async function main() {
     },
   ]);
 
-  await serviceRepository.save([
+  const [healthPrimeGeneralService, healthPrimeSpecialtyService, healthPrimePreventiveService] = await serviceRepository.save([
     {
       tenantId: healthPrimeTenant.id,
       name: 'Consulta general',
@@ -1942,7 +1954,241 @@ async function main() {
     },
   ]);
 
-  const adminEmail = 'admin@quicklysites.local';
+  const [healthPrimeDoctor, healthPrimeSpecialist] = await staffRepository.save([
+    {
+      tenantId: healthPrimeTenant.id,
+      name: 'Dra. Valeria Torres',
+      bio: 'Dirección clínica y atención integral. Perfil adaptable a medicina general, odontología o coordinación veterinaria.',
+      avatarUrl: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=900&q=80',
+      email: 'valeria@healthprimeclinic.com',
+      phone: '+593 99 765 4321',
+      isBookable: true,
+      isActive: true,
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      name: 'Dr. Mateo Rivera',
+      bio: 'Especialidades, procedimientos y seguimiento clínico con enfoque humano y tecnología.',
+      avatarUrl: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&w=900&q=80',
+      email: 'mateo@healthprimeclinic.com',
+      phone: '+593 99 765 4322',
+      isBookable: true,
+      isActive: true,
+    },
+  ]);
+
+  await staffServiceRepository.save([
+    {
+      staffId: healthPrimeDoctor.id,
+      serviceId: healthPrimeGeneralService.id,
+    },
+    {
+      staffId: healthPrimeDoctor.id,
+      serviceId: healthPrimePreventiveService.id,
+    },
+    {
+      staffId: healthPrimeSpecialist.id,
+      serviceId: healthPrimeSpecialtyService.id,
+    },
+    {
+      staffId: healthPrimeSpecialist.id,
+      serviceId: healthPrimePreventiveService.id,
+    },
+  ]);
+
+  await availabilityRuleRepository.save([
+    {
+      tenantId: healthPrimeTenant.id,
+      staffId: healthPrimeDoctor.id,
+      dayOfWeek: 0,
+      startTime: '08:00',
+      endTime: '14:00',
+      slotIntervalMinutes: 30,
+      isActive: true,
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      staffId: healthPrimeDoctor.id,
+      dayOfWeek: 1,
+      startTime: '08:00',
+      endTime: '14:00',
+      slotIntervalMinutes: 30,
+      isActive: true,
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      staffId: healthPrimeDoctor.id,
+      dayOfWeek: 2,
+      startTime: '08:00',
+      endTime: '14:00',
+      slotIntervalMinutes: 30,
+      isActive: true,
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      staffId: healthPrimeDoctor.id,
+      dayOfWeek: 3,
+      startTime: '08:00',
+      endTime: '14:00',
+      slotIntervalMinutes: 30,
+      isActive: true,
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      staffId: healthPrimeDoctor.id,
+      dayOfWeek: 4,
+      startTime: '08:00',
+      endTime: '14:00',
+      slotIntervalMinutes: 30,
+      isActive: true,
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      staffId: healthPrimeDoctor.id,
+      dayOfWeek: 5,
+      startTime: '08:00',
+      endTime: '14:00',
+      slotIntervalMinutes: 30,
+      isActive: true,
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      staffId: healthPrimeDoctor.id,
+      dayOfWeek: 6,
+      startTime: '08:00',
+      endTime: '14:00',
+      slotIntervalMinutes: 30,
+      isActive: true,
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      staffId: healthPrimeSpecialist.id,
+      dayOfWeek: 0,
+      startTime: '11:00',
+      endTime: '18:00',
+      slotIntervalMinutes: 30,
+      isActive: true,
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      staffId: healthPrimeSpecialist.id,
+      dayOfWeek: 1,
+      startTime: '11:00',
+      endTime: '18:00',
+      slotIntervalMinutes: 30,
+      isActive: true,
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      staffId: healthPrimeSpecialist.id,
+      dayOfWeek: 2,
+      startTime: '11:00',
+      endTime: '18:00',
+      slotIntervalMinutes: 30,
+      isActive: true,
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      staffId: healthPrimeSpecialist.id,
+      dayOfWeek: 3,
+      startTime: '11:00',
+      endTime: '18:00',
+      slotIntervalMinutes: 30,
+      isActive: true,
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      staffId: healthPrimeSpecialist.id,
+      dayOfWeek: 4,
+      startTime: '11:00',
+      endTime: '18:00',
+      slotIntervalMinutes: 30,
+      isActive: true,
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      staffId: healthPrimeSpecialist.id,
+      dayOfWeek: 5,
+      startTime: '11:00',
+      endTime: '18:00',
+      slotIntervalMinutes: 30,
+      isActive: true,
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      staffId: healthPrimeSpecialist.id,
+      dayOfWeek: 6,
+      startTime: '11:00',
+      endTime: '18:00',
+      slotIntervalMinutes: 30,
+      isActive: true,
+    },
+  ]);
+
+  await scheduleBlockRepository.save({
+    tenantId: healthPrimeTenant.id,
+    staffId: healthPrimeSpecialist.id,
+    startDateTime: new Date('2026-05-14T12:00:00-05:00'),
+    endDateTime: new Date('2026-05-14T13:30:00-05:00'),
+    reason: 'Bloqueo demo por procedimiento interno',
+    blockType: 'manual',
+  });
+
+  const [healthPrimeCustomerOne, healthPrimeCustomerTwo] = await customerRepository.save([
+    {
+      tenantId: healthPrimeTenant.id,
+      fullName: 'Daniela Paredes',
+      email: 'daniela.paredes@example.com',
+      phone: '+593 98 222 1111',
+      identification: '0923456789',
+      notes: 'Cliente demo para mostrar seguimiento y gestión de reservas.',
+      tags: { segment: 'premium', source: 'demo' },
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      fullName: 'Carlos Méndez',
+      email: 'carlos.mendez@example.com',
+      phone: '+593 98 333 2222',
+      identification: '0912345678',
+      notes: 'Cliente demo de control preventivo.',
+      tags: { segment: 'preventive', source: 'demo' },
+    },
+  ]);
+
+  await appointmentRepository.save([
+    {
+      tenantId: healthPrimeTenant.id,
+      customerId: healthPrimeCustomerOne.id,
+      serviceId: healthPrimeSpecialtyService.id,
+      staffId: healthPrimeSpecialist.id,
+      source: 'admin_panel',
+      status: 'confirmed',
+      startDateTime: new Date('2026-05-12T10:00:00-05:00'),
+      endDateTime: new Date('2026-05-12T11:00:00-05:00'),
+      notes: 'Reserva demo confirmada para mostrar agenda operativa.',
+      internalNotes: 'Cliente interesada en tratamiento recurrente.',
+      reminderScheduledAt: new Date('2026-05-11T10:00:00-05:00'),
+      reminderSentAt: null,
+      reminderError: null,
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      customerId: healthPrimeCustomerTwo.id,
+      serviceId: healthPrimePreventiveService.id,
+      staffId: healthPrimeDoctor.id,
+      source: 'public_site',
+      status: 'pending',
+      startDateTime: new Date('2026-05-14T09:30:00-05:00'),
+      endDateTime: new Date('2026-05-14T10:00:00-05:00'),
+      notes: 'Solicitud demo generada desde el sitio público.',
+      internalNotes: 'Mostrar flujo de aprobación y recordatorio premium.',
+      reminderScheduledAt: new Date('2026-05-13T09:30:00-05:00'),
+      reminderSentAt: null,
+      reminderError: null,
+    },
+  ]);
+
+  const adminEmail = 'admin@quicklyecsites.local';
   let adminUser = await userRepository.findOne({ where: { email: adminEmail } });
   if (!adminUser) {
     adminUser = await userRepository.save({
@@ -1951,6 +2197,21 @@ async function main() {
       passwordHash: await bcrypt.hash('Admin123*', 10),
       isActive: true,
     });
+  }
+
+  const healthPrimeAdminEmail = 'admin@healthprimeclinic.com';
+  let healthPrimeAdminUser = await userRepository.findOne({ where: { email: healthPrimeAdminEmail } });
+  if (!healthPrimeAdminUser) {
+    healthPrimeAdminUser = await userRepository.save({
+      fullName: 'Health Prime Tenant Admin',
+      email: healthPrimeAdminEmail,
+      passwordHash: await bcrypt.hash('HealthPrime123*', 10),
+      isActive: true,
+    });
+  } else {
+    healthPrimeAdminUser.isActive = true;
+    healthPrimeAdminUser.passwordHash = await bcrypt.hash('HealthPrime123*', 10);
+    await userRepository.save(healthPrimeAdminUser);
   }
 
   const existingMembership = await membershipRepository.findOne({
@@ -1976,6 +2237,22 @@ async function main() {
   if (!existingHealthPrimeMembership) {
     await membershipRepository.save({
       userId: adminUser.id,
+      tenantId: healthPrimeTenant.id,
+      roleId: healthPrimeAdminRole.id,
+      role: healthPrimeAdminRole.code,
+      isActive: true,
+      allowedModules: null,
+      permissions: null,
+    });
+  }
+
+  const existingHealthPrimeAdminMembership = await membershipRepository.findOne({
+    where: { userId: healthPrimeAdminUser.id, tenantId: healthPrimeTenant.id },
+  });
+
+  if (!existingHealthPrimeAdminMembership) {
+    await membershipRepository.save({
+      userId: healthPrimeAdminUser.id,
       tenantId: healthPrimeTenant.id,
       roleId: healthPrimeAdminRole.id,
       role: healthPrimeAdminRole.code,

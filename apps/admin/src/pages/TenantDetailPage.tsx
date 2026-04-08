@@ -70,6 +70,7 @@ type TenantTab =
   | 'domains'
   | 'site'
   | 'services'
+  | 'staff'
   | 'agenda'
   | 'appointments'
   | 'customers';
@@ -201,10 +202,15 @@ interface StaffRecord {
   bio?: string | null;
   email?: string | null;
   phone?: string | null;
+  avatarUrl?: string | null;
+  serviceIds?: string[];
+  serviceNames?: string[];
 }
 
 interface AvailabilityRuleRecord {
   id: string;
+  staffId?: string | null;
+  staff?: { id: string; name: string } | null;
   dayOfWeek: number;
   startTime: string;
   endTime: string;
@@ -214,6 +220,8 @@ interface AvailabilityRuleRecord {
 
 interface ScheduleBlockRecord {
   id: string;
+  staffId?: string | null;
+  staff?: { id: string; name: string } | null;
   startDateTime: string;
   endDateTime: string;
   reason: string;
@@ -228,6 +236,7 @@ interface AppointmentRecord {
   internalNotes?: string | null;
   customer?: { fullName?: string } | null;
   service?: { name?: string } | null;
+  staff?: { id?: string; name?: string } | null;
 }
 
 interface CustomerRecord {
@@ -399,8 +408,11 @@ export function TenantDetailPage() {
   const [membershipsPage, setMembershipsPage] = useState(1);
   const [rulesSearch, setRulesSearch] = useState('');
   const [rulesPage, setRulesPage] = useState(1);
+  const [rulesStaffFilter, setRulesStaffFilter] = useState('');
   const [blocksSearch, setBlocksSearch] = useState('');
   const [blocksPage, setBlocksPage] = useState(1);
+  const [blocksStaffFilter, setBlocksStaffFilter] = useState('');
+  const [agendaStaffFilter, setAgendaStaffFilter] = useState('');
   const [appointmentsSearch, setAppointmentsSearch] = useState('');
   const [appointmentsPage, setAppointmentsPage] = useState(1);
   const [customersSearch, setCustomersSearch] = useState('');
@@ -417,6 +429,7 @@ export function TenantDetailPage() {
       'domains',
       'site',
       'services',
+      'staff',
       'agenda',
       'appointments',
       'customers',
@@ -438,6 +451,7 @@ export function TenantDetailPage() {
       domains: '/domains',
       site: '/site',
       services: '/services',
+      staff: '/staff',
       agenda: '/agenda',
       appointments: '/appointments',
       customers: '/customers',
@@ -448,6 +462,8 @@ export function TenantDetailPage() {
 
   const effectivePermissions = tenantProfile?.effectivePermissions ?? [];
   const can = (permission: string) => Boolean(user?.isPlatformAdmin) || effectivePermissions.includes(permission);
+  const canAccessServices = can('services.view');
+  const canAccessStaff = can('staff.view');
 
   const visibleTabs = useMemo(() => {
     return [
@@ -458,7 +474,8 @@ export function TenantDetailPage() {
       { id: 'email', label: 'Correo', visible: can('settings.update') || can('branding.update') },
       { id: 'domains', label: 'Dominios', visible: can('domains.view') },
       { id: 'site', label: 'Sitio', visible: can('site.view') },
-      { id: 'services', label: 'Servicios', visible: can('services.view') || can('staff.view') },
+      { id: 'services', label: 'Servicios', visible: can('services.view') },
+      { id: 'staff', label: 'Staff', visible: can('staff.view') },
       { id: 'agenda', label: 'Agenda', visible: can('agenda.view') },
       { id: 'appointments', label: 'Reservas', visible: can('appointments.view') },
       { id: 'customers', label: 'Clientes', visible: can('customers.view') },
@@ -522,17 +539,25 @@ export function TenantDetailPage() {
 
   const filteredRules = useMemo(() => {
     const query = rulesSearch.trim().toLowerCase();
-    if (!query) return availabilityRules;
     return availabilityRules.filter((rule) =>
-      [
-        days[rule.dayOfWeek],
-        rule.startTime,
-        rule.endTime,
-        String(rule.slotIntervalMinutes),
-        rule.isActive ? 'activa' : 'inactiva',
-      ].some((value) => String(value).toLowerCase().includes(query)),
+      (!rulesStaffFilter
+        ? true
+        : rulesStaffFilter === '__general__'
+          ? !rule.staffId
+          : rule.staffId === rulesStaffFilter)
+      && (
+        !query
+        || [
+          rule.staff?.name ?? '',
+          days[rule.dayOfWeek],
+          rule.startTime,
+          rule.endTime,
+          String(rule.slotIntervalMinutes),
+          rule.isActive ? 'activa' : 'inactiva',
+        ].some((value) => String(value).toLowerCase().includes(query))
+      )
     );
-  }, [availabilityRules, rulesSearch]);
+  }, [availabilityRules, rulesSearch, rulesStaffFilter]);
   const rulesPageCount = Math.max(1, Math.ceil(filteredRules.length / tablePageSize));
   const visibleRules = filteredRules.slice(
     (Math.min(rulesPage, rulesPageCount) - 1) * tablePageSize,
@@ -541,16 +566,24 @@ export function TenantDetailPage() {
 
   const filteredBlocks = useMemo(() => {
     const query = blocksSearch.trim().toLowerCase();
-    if (!query) return scheduleBlocks;
     return scheduleBlocks.filter((block) =>
-      [
-        block.reason,
-        block.blockType,
-        new Date(block.startDateTime).toLocaleString(),
-        new Date(block.endDateTime).toLocaleString(),
-      ].some((value) => String(value).toLowerCase().includes(query)),
+      (!blocksStaffFilter
+        ? true
+        : blocksStaffFilter === '__general__'
+          ? !block.staffId
+          : block.staffId === blocksStaffFilter)
+      && (
+        !query
+        || [
+          block.staff?.name ?? '',
+          block.reason,
+          block.blockType,
+          new Date(block.startDateTime).toLocaleString(),
+          new Date(block.endDateTime).toLocaleString(),
+        ].some((value) => String(value).toLowerCase().includes(query))
+      )
     );
-  }, [blocksSearch, scheduleBlocks]);
+  }, [blocksSearch, scheduleBlocks, blocksStaffFilter]);
   const blocksPageCount = Math.max(1, Math.ceil(filteredBlocks.length / tablePageSize));
   const visibleBlocks = filteredBlocks.slice(
     (Math.min(blocksPage, blocksPageCount) - 1) * tablePageSize,
@@ -600,11 +633,16 @@ export function TenantDetailPage() {
 
   useEffect(() => {
     setRulesPage(1);
-  }, [rulesSearch]);
+  }, [rulesSearch, rulesStaffFilter]);
 
   useEffect(() => {
     setBlocksPage(1);
-  }, [blocksSearch]);
+  }, [blocksSearch, blocksStaffFilter]);
+
+  useEffect(() => {
+    setRulesStaffFilter(agendaStaffFilter);
+    setBlocksStaffFilter(agendaStaffFilter);
+  }, [agendaStaffFilter]);
 
   useEffect(() => {
     setAppointmentsPage(1);
@@ -675,7 +713,13 @@ export function TenantDetailPage() {
     setPages(typedPages);
     setGlobalSections(globalSectionsData as SectionRecord[]);
     setServices(servicesData as ServiceRecord[]);
-    setStaff(staffData as StaffRecord[]);
+    setStaff(
+      (staffData as Array<StaffRecord & { staffServices?: Array<{ serviceId: string; service?: { name?: string | null } | null }> }>).map((member) => ({
+        ...member,
+        serviceIds: member.staffServices?.map((link) => link.serviceId) ?? [],
+        serviceNames: member.staffServices?.map((link) => link.service?.name ?? '').filter(Boolean) ?? [],
+      })),
+    );
     setAppointments(appointmentsData as AppointmentRecord[]);
     setCustomers(customersData as CustomerRecord[]);
     setAvailabilityRules(rulesData as AvailabilityRuleRecord[]);
@@ -774,6 +818,8 @@ export function TenantDetailPage() {
             bio: String(form.get('bio') ?? ''),
             email: String(form.get('email') ?? ''),
             phone: String(form.get('phone') ?? ''),
+            avatarUrl: String(form.get('avatarUrl') ?? ''),
+            serviceIds: form.getAll('serviceIds').map(String),
           });
           break;
         case 'page':
@@ -813,6 +859,7 @@ export function TenantDetailPage() {
           break;
         case 'rule':
           await updateAvailabilityRule(token, tenantId, editModal.item.id, {
+            staffId: String(form.get('staffId') ?? '').trim() || undefined,
             dayOfWeek: Number(form.get('dayOfWeek') ?? editModal.item.dayOfWeek),
             startTime: String(form.get('startTime') ?? ''),
             endTime: String(form.get('endTime') ?? ''),
@@ -822,6 +869,7 @@ export function TenantDetailPage() {
           break;
         case 'block':
           await updateScheduleBlock(token, tenantId, editModal.item.id, {
+            staffId: String(form.get('staffId') ?? '').trim() || undefined,
             reason: String(form.get('reason') ?? ''),
             blockType: String(form.get('blockType') ?? editModal.item.blockType),
             startDateTime: toIsoDateTime(String(form.get('startDateTime') ?? editModal.item.startDateTime)),
@@ -976,6 +1024,18 @@ export function TenantDetailPage() {
           ...section.content,
           assets: nextAssets,
         },
+      });
+      await loadData();
+    });
+  }
+
+  async function handleUploadStaffAvatar(member: StaffRecord, file: File) {
+    if (!token || !tenantId) return;
+
+    await wrapAction(`upload-staff-avatar-${member.id}`, async () => {
+      const uploaded = await uploadTenantFile(token, tenantId, file, 'site', 'public');
+      await updateStaff(token, tenantId, member.id, {
+        avatarUrl: uploaded.reference,
       });
       await loadData();
     });
@@ -1439,7 +1499,6 @@ export function TenantDetailPage() {
           {activeTab === 'services' ? (
             <ServicesStaffSection
               currentPath="/services"
-              showBoth
               canAccessServices
               canAccessStaff
               saving={saving}
@@ -1471,6 +1530,7 @@ export function TenantDetailPage() {
                     bio: String(form.get('bio') ?? ''),
                     email: String(form.get('email') ?? ''),
                     phone: String(form.get('phone') ?? ''),
+                    serviceIds: form.getAll('serviceIds').map(String),
                   });
                   event.currentTarget.reset();
                   await loadData();
@@ -1478,12 +1538,80 @@ export function TenantDetailPage() {
               }}
               onEditService={(service) => setEditModal({ type: 'service', item: service })}
               onEditStaff={(member) => setEditModal({ type: 'staff', item: member })}
+              onUploadStaffAvatar={handleUploadStaffAvatar}
+              itemRow={(props) => <ItemRow {...props} />}
+            />
+          ) : null}
+
+          {activeTab === 'staff' ? (
+            <ServicesStaffSection
+              currentPath="/staff"
+              canAccessServices={canAccessServices}
+              canAccessStaff={canAccessStaff}
+              saving={saving}
+              services={services}
+              staff={staff}
+              onCreateService={(event) => {
+                event.preventDefault();
+                const form = new FormData(event.currentTarget);
+                wrapAction('service', async () => {
+                  await createService(token, {
+                    tenantId,
+                    name: String(form.get('name') ?? ''),
+                    description: String(form.get('description') ?? ''),
+                    durationMinutes: Number(form.get('durationMinutes') ?? 0),
+                    price: form.get('price') ? Number(form.get('price')) : undefined,
+                    category: String(form.get('category') ?? ''),
+                  });
+                  event.currentTarget.reset();
+                  await loadData();
+                });
+              }}
+              onCreateStaff={(event) => {
+                event.preventDefault();
+                const form = new FormData(event.currentTarget);
+                wrapAction('staff', async () => {
+                  await createStaff(token, {
+                    tenantId,
+                    name: String(form.get('name') ?? ''),
+                    bio: String(form.get('bio') ?? ''),
+                    email: String(form.get('email') ?? ''),
+                    phone: String(form.get('phone') ?? ''),
+                    serviceIds: form.getAll('serviceIds').map(String),
+                  });
+                  event.currentTarget.reset();
+                  await loadData();
+                });
+              }}
+              onEditService={(service) => setEditModal({ type: 'service', item: service })}
+              onEditStaff={(member) => setEditModal({ type: 'staff', item: member })}
+              onUploadStaffAvatar={handleUploadStaffAvatar}
               itemRow={(props) => <ItemRow {...props} />}
             />
           ) : null}
 
           {activeTab === 'agenda' ? (
-            <div className="grid gap-6 xl:grid-cols-2">
+            <div className="space-y-6">
+              <Card>
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900">Vista de agenda</h3>
+                    <p className="mt-1 text-sm text-slate-500">Filtra reglas y bloqueos por profesional para operar la agenda de forma más clara.</p>
+                  </div>
+                  <div className="w-full max-w-sm">
+                    <Select value={agendaStaffFilter} onChange={(event) => setAgendaStaffFilter(event.target.value)}>
+                      <option value="">Todos los profesionales</option>
+                      <option value="__general__">Solo elementos generales</option>
+                      {staff.map((member) => (
+                        <option key={member.id} value={member.id}>
+                          {member.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                </div>
+              </Card>
+              <div className="grid gap-6 xl:grid-cols-2">
               <ResourceCard
                 title="Reglas de disponibilidad"
                 subtitle="Ventanas de atención"
@@ -1492,12 +1620,23 @@ export function TenantDetailPage() {
                     <p className="text-sm text-slate-500">
                       {filteredRules.length} regla{filteredRules.length === 1 ? '' : 's'}
                     </p>
-                    <Input
-                      value={rulesSearch}
-                      onChange={(event) => setRulesSearch(event.target.value)}
-                      placeholder="Buscar por día, hora o estado..."
-                      className="max-w-md"
-                    />
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                      <Select value={rulesStaffFilter} onChange={(event) => setRulesStaffFilter(event.target.value)} className="min-w-[220px]">
+                        <option value="">Todos los profesionales</option>
+                        <option value="__general__">Reglas generales</option>
+                        {staff.map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {member.name}
+                          </option>
+                        ))}
+                      </Select>
+                      <Input
+                        value={rulesSearch}
+                        onChange={(event) => setRulesSearch(event.target.value)}
+                        placeholder="Buscar por profesional, día u hora..."
+                        className="max-w-md"
+                      />
+                    </div>
                   </div>
                 )}
                 form={
@@ -1510,6 +1649,7 @@ export function TenantDetailPage() {
                       wrapAction('rule', async () => {
                         await createAvailabilityRule(token, {
                           tenantId,
+                          staffId: String(form.get('staffId') ?? '').trim() || undefined,
                           dayOfWeek: Number(form.get('dayOfWeek') ?? 0),
                           startTime: String(form.get('startTime') ?? ''),
                           endTime: String(form.get('endTime') ?? ''),
@@ -1521,7 +1661,17 @@ export function TenantDetailPage() {
                       });
                     }}
                   >
-                    <div className="grid gap-3 md:grid-cols-4">
+                    <div className="grid gap-3 md:grid-cols-5">
+                      <FormField label="Profesional">
+                        <Select name="staffId" defaultValue="">
+                          <option value="">Todos / general</option>
+                          {staff.map((member) => (
+                            <option key={member.id} value={member.id}>
+                              {member.name}
+                            </option>
+                          ))}
+                        </Select>
+                      </FormField>
                       <FormField label="Día"><Select name="dayOfWeek">{days.map((day, index) => <option key={day} value={index}>{day}</option>)}</Select></FormField>
                       <FormField label="Hora inicio"><Input name="startTime" type="time" defaultValue="09:00" /></FormField>
                       <FormField label="Hora fin"><Input name="endTime" type="time" defaultValue="18:00" /></FormField>
@@ -1535,7 +1685,7 @@ export function TenantDetailPage() {
                   <ItemRow
                     key={rule.id}
                     title={`${days[rule.dayOfWeek]} ${rule.startTime} - ${rule.endTime}`}
-                    subtitle={`${rule.slotIntervalMinutes} min`}
+                    subtitle={`${rule.slotIntervalMinutes} min${rule.staff?.name ? ` · ${rule.staff.name}` : ' · General'}`}
                     meta={rule.isActive ? 'Activa' : 'Inactiva'}
                     actionLabel="Editar"
                     onAction={() => setEditModal({ type: 'rule', item: rule })}
@@ -1569,12 +1719,23 @@ export function TenantDetailPage() {
                     <p className="text-sm text-slate-500">
                       {filteredBlocks.length} bloqueo{filteredBlocks.length === 1 ? '' : 's'}
                     </p>
-                    <Input
-                      value={blocksSearch}
-                      onChange={(event) => setBlocksSearch(event.target.value)}
-                      placeholder="Buscar por motivo, tipo o fecha..."
-                      className="max-w-md"
-                    />
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                      <Select value={blocksStaffFilter} onChange={(event) => setBlocksStaffFilter(event.target.value)} className="min-w-[220px]">
+                        <option value="">Todos los profesionales</option>
+                        <option value="__general__">Bloqueos generales</option>
+                        {staff.map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {member.name}
+                          </option>
+                        ))}
+                      </Select>
+                      <Input
+                        value={blocksSearch}
+                        onChange={(event) => setBlocksSearch(event.target.value)}
+                        placeholder="Buscar por profesional, motivo o fecha..."
+                        className="max-w-md"
+                      />
+                    </div>
                   </div>
                 )}
                 form={
@@ -1587,6 +1748,7 @@ export function TenantDetailPage() {
                       wrapAction('block', async () => {
                         await createScheduleBlock(token, {
                           tenantId,
+                          staffId: String(form.get('staffId') ?? '').trim() || undefined,
                           startDateTime: toIsoDateTime(String(form.get('startDateTime') ?? '')),
                           endDateTime: toIsoDateTime(String(form.get('endDateTime') ?? '')),
                           reason: String(form.get('reason') ?? ''),
@@ -1597,6 +1759,16 @@ export function TenantDetailPage() {
                       });
                     }}
                   >
+                    <FormField label="Profesional">
+                      <Select name="staffId" defaultValue="">
+                        <option value="">Todos / general</option>
+                        {staff.map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {member.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </FormField>
                     <div className="grid gap-3 md:grid-cols-2">
                       <FormField label="Inicio"><Input name="startDateTime" type="datetime-local" required /></FormField>
                       <FormField label="Fin"><Input name="endDateTime" type="datetime-local" required /></FormField>
@@ -1617,7 +1789,7 @@ export function TenantDetailPage() {
                     key={block.id}
                     title={block.reason}
                     subtitle={`${new Date(block.startDateTime).toLocaleString()} → ${new Date(block.endDateTime).toLocaleString()}`}
-                    meta={block.blockType}
+                    meta={block.staff?.name ? `${block.blockType} · ${block.staff.name}` : `${block.blockType} · General`}
                     actionLabel="Editar"
                     onAction={() => setEditModal({ type: 'block', item: block })}
                     secondaryActionLabel="Eliminar"
@@ -1642,6 +1814,7 @@ export function TenantDetailPage() {
                   />
                 )}
               />
+              </div>
             </div>
           ) : null}
 
@@ -1660,27 +1833,29 @@ export function TenantDetailPage() {
                 />
                 <DataTable>
                   <thead className="bg-slate-50 text-slate-500">
-                    <tr>
-                      <th className="px-4 py-3">Cliente</th>
-                      <th className="px-4 py-3">Servicio</th>
-                      <th className="px-4 py-3">Estado</th>
-                      <th className="px-4 py-3">Inicio</th>
-                      <th className="w-px whitespace-nowrap px-4 py-3 text-right">Acciones</th>
+                      <tr>
+                        <th className="px-4 py-3">Cliente</th>
+                        <th className="px-4 py-3">Servicio</th>
+                        <th className="px-4 py-3">Profesional</th>
+                        <th className="px-4 py-3">Estado</th>
+                        <th className="px-4 py-3">Inicio</th>
+                        <th className="w-px whitespace-nowrap px-4 py-3 text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredAppointments.length === 0 ? (
-                      <tr>
-                        <td className="px-4 py-4 text-slate-500" colSpan={5}>No hay reservas que coincidan con la búsqueda.</td>
-                      </tr>
-                    ) : (
-                      visibleAppointments.map((appointment) => (
-                        <tr key={appointment.id} className="border-t border-slate-200">
-                          <td className="px-4 py-3">{appointment.customer?.fullName ?? '-'}</td>
-                          <td className="px-4 py-3">{appointment.service?.name ?? '-'}</td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${appointmentStatusClasses(appointment.status)}`}>
-                              {appointmentStatusLabel(appointment.status)}
+                      {filteredAppointments.length === 0 ? (
+                        <tr>
+                          <td className="px-4 py-4 text-slate-500" colSpan={6}>No hay reservas que coincidan con la búsqueda.</td>
+                        </tr>
+                      ) : (
+                        visibleAppointments.map((appointment) => (
+                          <tr key={appointment.id} className="border-t border-slate-200">
+                            <td className="px-4 py-3">{appointment.customer?.fullName ?? '-'}</td>
+                            <td className="px-4 py-3">{appointment.service?.name ?? '-'}</td>
+                            <td className="px-4 py-3">{appointment.staff?.name ?? 'Por asignar'}</td>
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${appointmentStatusClasses(appointment.status)}`}>
+                                {appointmentStatusLabel(appointment.status)}
                             </span>
                           </td>
                           <td className="px-4 py-3">{new Date(appointment.startDateTime).toLocaleString()}</td>
@@ -1797,6 +1972,8 @@ export function TenantDetailPage() {
           permissions: [...group.permissions],
         }))}
         sectionTypeOptions={sectionTypeOptions}
+        services={services.map((service) => ({ id: service.id, name: service.name }))}
+        staffOptions={staff.map((member) => ({ id: member.id, name: member.name }))}
       />
 
       <Modal

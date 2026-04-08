@@ -68,7 +68,7 @@ export function getSiteConfig(slug = '/') {
 export function getAvailability(serviceId: string, date: string, staffId?: string) {
   const host = resolveCurrentHost();
   const staffQuery = staffId ? `&staffId=${staffId}` : '';
-  return request<{ start: string; end: string; staffId?: string | null }[]>(
+  return request<{ start: string; end: string; staffId?: string | null; staffName?: string | null }[]>(
     `/public/availability?host=${host}&serviceId=${serviceId}&date=${date}${staffQuery}`,
   );
 }

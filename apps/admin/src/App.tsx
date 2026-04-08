@@ -55,7 +55,7 @@ export default function App() {
       <Route path="/site" element={<TenantTabRedirect tab="site" />} />
       <Route path="/branding" element={<TenantTabRedirect tab="branding" />} />
       <Route path="/services" element={<TenantTabRedirect tab="services" />} />
-      <Route path="/staff" element={<TenantTabRedirect tab="services" />} />
+      <Route path="/staff" element={<TenantTabRedirect tab="staff" />} />
       <Route path="/agenda" element={<TenantTabRedirect tab="agenda" />} />
       <Route path="/appointments" element={<TenantTabRedirect tab="appointments" />} />
       <Route path="/customers" element={<TenantTabRedirect tab="customers" />} />

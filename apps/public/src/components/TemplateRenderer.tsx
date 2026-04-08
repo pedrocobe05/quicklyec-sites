@@ -165,7 +165,7 @@ function ContactSection({ site }: { site: PublicSiteConfig }) {
     <section className="rounded-[calc(var(--radius)+0.25rem)] border border-black/5 bg-white/90 p-8 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
       <h2 className="font-serif text-4xl text-slate-900">Contacto</h2>
       <div className="mt-6 grid gap-3 text-slate-600">
-        <p>Email: {site.tenant.contactEmail ?? 'demo@quicklysites.local'}</p>
+        <p>Email: {site.tenant.contactEmail ?? 'demo@quicklyecsites.local'}</p>
         <p>Teléfono: {site.tenant.contactPhone ?? '+593 999 999 999'}</p>
         <p>WhatsApp: {site.tenant.whatsappNumber ?? '+593 999 999 999'}</p>
       </div>

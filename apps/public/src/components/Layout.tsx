@@ -1,11 +1,12 @@
 import { CSSProperties, PropsWithChildren, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { PublicSiteConfig } from '@quickly-sites/shared';
 
 export function Layout({
   site,
   children,
 }: PropsWithChildren<{ site: PublicSiteConfig }>) {
+  const location = useLocation();
   const theme = site.theme;
   const showBooking = site.capabilities.bookingEnabled;
   const globalSections = useMemo(() => {
@@ -27,8 +28,6 @@ export function Layout({
       globalHeader?.content.body ??
       (showBooking ? 'Sitio y reservas online' : 'Sitio informativo del negocio'),
   );
-  const headerCtaLabel = String(globalHeader?.content.ctaLabel ?? '');
-  const headerCtaUrl = String(globalHeader?.content.ctaUrl ?? '');
   const footerText = String(globalFooter?.content.text ?? globalFooter?.content.body ?? `${site.tenant.name} · Powered by Quickly Sites`);
   const footerAddress = String(globalFooter?.content.address ?? '');
   const footerHours = String(globalFooter?.content.hours ?? '');
@@ -73,30 +72,22 @@ export function Layout({
               <p className="text-sm text-slate-500">{headerSubtitle}</p>
             </div>
           </div>
-          <div className="flex flex-col gap-3 md:items-end">
-            <nav className="flex flex-wrap items-center gap-2 rounded-full border border-black/5 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm">
-              {navItems.map((item) => (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className="rounded-full px-4 py-2 transition hover:bg-[var(--secondary)] hover:text-slate-900"
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-            {headerCtaLabel && headerCtaUrl ? (
+          <nav className="flex flex-wrap items-center gap-2 rounded-full border border-black/5 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm">
+            {navItems.map((item) => (
               <Link
-                to={headerCtaUrl}
-                className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+                key={item.to}
+                to={item.to}
+                className="rounded-full px-4 py-2 transition hover:bg-[var(--secondary)] hover:text-slate-900"
               >
-                {headerCtaLabel}
+                {item.label}
               </Link>
-            ) : null}
-          </div>
+            ))}
+          </nav>
         </div>
       </header>
-      {children}
+      <div key={`${location.pathname}${location.search}`} className="public-route-stage animate-route-in">
+        {children}
+      </div>
       {globalHtmlSections.length > 0 ? (
         <div className="mx-auto mt-10 grid max-w-6xl gap-6 px-6">
           {globalHtmlSections.map((section) => (
@@ -139,7 +130,7 @@ export function Layout({
             <div className="mt-4 grid gap-3 text-sm text-slate-600">
               {footerAddress ? <p>{footerAddress}</p> : null}
               {footerHours ? <p>{footerHours}</p> : null}
-              <p>{site.tenant.contactEmail ?? 'demo@quicklysites.local'}</p>
+              <p>{site.tenant.contactEmail ?? 'demo@quicklyecsites.local'}</p>
               <p>{site.tenant.contactPhone ?? '+593 999 999 999'}</p>
               {footerWhatsapp ? <p>{footerWhatsapp}</p> : null}
               {footerInstagram ? <p>{footerInstagram}</p> : null}

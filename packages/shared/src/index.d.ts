@@ -56,6 +56,7 @@ export interface PublicStaff {
     name: string;
     bio?: string | null;
     avatarUrl?: string | null;
+    serviceIds?: string[];
 }
 export interface PublicSiteConfig {
     tenant: {
@@ -82,6 +83,7 @@ export interface AvailabilitySlot {
     start: string;
     end: string;
     staffId?: string | null;
+    staffName?: string | null;
 }
 export interface CreatePublicAppointmentInput {
     serviceId: string;

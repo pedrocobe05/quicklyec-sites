@@ -22,17 +22,42 @@ type TenantMembershipRecord = {
 };
 type DomainRecord = { id: string; domain: string; type: string; verificationStatus: string; isPrimary: boolean };
 type ServiceRecord = { id: string; name: string; description: string; durationMinutes: number; price?: number | null; category?: string | null; isActive: boolean };
-type StaffRecord = { id: string; name: string; bio?: string | null; email?: string | null; phone?: string | null };
+type StaffRecord = {
+  id: string;
+  name: string;
+  bio?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  avatarUrl?: string | null;
+  serviceIds?: string[];
+};
 type PageRecord = { id: string; slug: string; title: string; isHome: boolean; isPublished: boolean; ogImageUrl?: string | null };
 type SectionRecord = { id: string; type: string; variant: string; position: number; isVisible: boolean; content: Record<string, unknown> };
-type AvailabilityRuleRecord = { id: string; dayOfWeek: number; startTime: string; endTime: string; slotIntervalMinutes: number; isActive: boolean };
-type ScheduleBlockRecord = { id: string; startDateTime: string; endDateTime: string; reason: string; blockType: string };
+type AvailabilityRuleRecord = {
+  id: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  slotIntervalMinutes: number;
+  isActive: boolean;
+  staffId?: string | null;
+};
+type ScheduleBlockRecord = {
+  id: string;
+  startDateTime: string;
+  endDateTime: string;
+  reason: string;
+  blockType: string;
+  staffId?: string | null;
+};
 type AppointmentRecord = {
   id: string;
   startDateTime: string;
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show';
   notes?: string | null;
   internalNotes?: string | null;
+  staff?: { id?: string; name?: string } | null;
+  service?: { name?: string } | null;
 };
 type CustomerRecord = { id: string; fullName: string; email: string; phone: string; identification?: string | null; notes?: string | null };
 type SectionAssetRecord = { name: string; url: string; alt?: string | null; label?: string | null; kind?: 'image' };
@@ -90,6 +115,8 @@ interface EditEntityModalProps {
     permissions: string[];
   }>;
   sectionTypeOptions?: Array<{ value: string; label: string; description?: string }>;
+  services?: Array<{ id: string; name: string }>;
+  staffOptions?: Array<{ id: string; name: string }>;
 }
 
 export function EditEntityModal({
@@ -104,6 +131,8 @@ export function EditEntityModal({
   planOptions = [],
   rolePermissionGroups = [],
   sectionTypeOptions = [],
+  services = [],
+  staffOptions = [],
 }: EditEntityModalProps) {
   const [sectionAssets, setSectionAssets] = useState<SectionAssetRecord[]>([]);
 
@@ -264,6 +293,16 @@ export function EditEntityModal({
 
             {editModal.type === 'staff' ? (
               <>
+                <FormField label="Foto">
+                  <Input name="avatarUrl" defaultValue={editModal.item.avatarUrl ?? ''} />
+                </FormField>
+                <ImagePreview
+                  src={editModal.item.avatarUrl}
+                  alt={editModal.item.name}
+                  label="Vista previa"
+                  className="h-32 w-full max-w-xs"
+                  imgClassName="h-24 w-full object-cover"
+                />
                 <FormField label="Nombre" required>
                   <Input name="name" defaultValue={editModal.item.name} />
                 </FormField>
@@ -277,6 +316,24 @@ export function EditEntityModal({
                   <FormField label="Teléfono">
                     <Input name="phone" defaultValue={editModal.item.phone ?? ''} />
                   </FormField>
+                </div>
+                <div className="grid gap-2 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-medium text-slate-700">Servicios asignados</p>
+                  {services.length === 0 ? (
+                    <p className="text-sm text-slate-500">No hay servicios disponibles para asignar.</p>
+                  ) : (
+                    services.map((service) => (
+                      <label key={service.id} className="flex items-center gap-2 text-sm text-slate-700">
+                        <Checkbox
+                          type="checkbox"
+                          name="serviceIds"
+                          value={service.id}
+                          defaultChecked={Boolean(editModal.item.serviceIds?.includes(service.id))}
+                        />
+                        <span>{service.name}</span>
+                      </label>
+                    ))
+                  )}
                 </div>
               </>
             ) : null}
@@ -301,6 +358,87 @@ export function EditEntityModal({
                     <Checkbox type="checkbox" name="isHome" defaultChecked={editModal.item.isHome} /> Inicio
                   </label>
                 </div>
+              </>
+            ) : null}
+
+            {editModal.type === 'rule' ? (
+              <>
+                <FormField label="Profesional">
+                  <Select name="staffId" defaultValue={editModal.item.staffId ?? ''}>
+                    <option value="">Todos / general</option>
+                    {staffOptions.map((staff) => (
+                      <option key={staff.id} value={staff.id}>
+                        {staff.name}
+                      </option>
+                    ))}
+                  </Select>
+                </FormField>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField label="Día">
+                    <Select name="dayOfWeek" defaultValue={String(editModal.item.dayOfWeek)}>
+                      {days.map((day, index) => (
+                        <option key={day} value={index}>
+                          {day}
+                        </option>
+                      ))}
+                    </Select>
+                  </FormField>
+                  <FormField label="Intervalo">
+                    <Input name="slotIntervalMinutes" type="number" defaultValue={editModal.item.slotIntervalMinutes} />
+                  </FormField>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField label="Hora inicio">
+                    <Input name="startTime" type="time" defaultValue={editModal.item.startTime} />
+                  </FormField>
+                  <FormField label="Hora fin">
+                    <Input name="endTime" type="time" defaultValue={editModal.item.endTime} />
+                  </FormField>
+                </div>
+                <label className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
+                  <Checkbox type="checkbox" name="isActive" defaultChecked={editModal.item.isActive} /> Activa
+                </label>
+              </>
+            ) : null}
+
+            {editModal.type === 'block' ? (
+              <>
+                <FormField label="Profesional">
+                  <Select name="staffId" defaultValue={editModal.item.staffId ?? ''}>
+                    <option value="">Todos / general</option>
+                    {staffOptions.map((staff) => (
+                      <option key={staff.id} value={staff.id}>
+                        {staff.name}
+                      </option>
+                    ))}
+                  </Select>
+                </FormField>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField label="Inicio">
+                    <Input
+                      name="startDateTime"
+                      type="datetime-local"
+                      defaultValue={editModal.item.startDateTime.slice(0, 16)}
+                    />
+                  </FormField>
+                  <FormField label="Fin">
+                    <Input
+                      name="endDateTime"
+                      type="datetime-local"
+                      defaultValue={editModal.item.endDateTime.slice(0, 16)}
+                    />
+                  </FormField>
+                </div>
+                <FormField label="Motivo">
+                  <Input name="reason" defaultValue={editModal.item.reason} />
+                </FormField>
+                <FormField label="Tipo">
+                  <Select name="blockType" defaultValue={editModal.item.blockType}>
+                    <option value="manual">Manual</option>
+                    <option value="staff_unavailable">No disponible</option>
+                    <option value="holiday">Feriado</option>
+                  </Select>
+                </FormField>
               </>
             ) : null}
 
@@ -553,55 +691,16 @@ export function EditEntityModal({
               </>
             ) : null}
 
-            {editModal.type === 'rule' ? (
-              <>
-                <div className="grid gap-4 md:grid-cols-4">
-                  <FormField label="Día">
-                    <Select name="dayOfWeek" defaultValue={String(editModal.item.dayOfWeek)}>
-                      {days.map((day, index) => <option key={day} value={index}>{day}</option>)}
-                    </Select>
-                  </FormField>
-                  <FormField label="Hora inicio">
-                    <Input name="startTime" type="time" defaultValue={editModal.item.startTime} />
-                  </FormField>
-                  <FormField label="Hora fin">
-                    <Input name="endTime" type="time" defaultValue={editModal.item.endTime} />
-                  </FormField>
-                  <FormField label="Intervalo">
-                    <Input name="slotIntervalMinutes" type="number" defaultValue={editModal.item.slotIntervalMinutes} />
-                  </FormField>
-                </div>
-                <label className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
-                  <Checkbox type="checkbox" name="isActive" defaultChecked={editModal.item.isActive} /> Activa
-                </label>
-              </>
-            ) : null}
-
-            {editModal.type === 'block' ? (
-              <>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <FormField label="Inicio">
-                    <Input name="startDateTime" type="datetime-local" defaultValue={toDateTimeLocal(editModal.item.startDateTime)} />
-                  </FormField>
-                  <FormField label="Fin">
-                    <Input name="endDateTime" type="datetime-local" defaultValue={toDateTimeLocal(editModal.item.endDateTime)} />
-                  </FormField>
-                </div>
-                <FormField label="Motivo">
-                  <Input name="reason" defaultValue={editModal.item.reason} />
-                </FormField>
-                <FormField label="Tipo">
-                  <Select name="blockType" defaultValue={editModal.item.blockType}>
-                    <option value="manual">Manual</option>
-                    <option value="staff_unavailable">No disponible</option>
-                    <option value="holiday">Feriado</option>
-                  </Select>
-                </FormField>
-              </>
-            ) : null}
-
             {editModal.type === 'appointment' ? (
               <>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField label="Profesional asignado">
+                    <Input value={editModal.item.staff?.name ?? 'Por asignar'} readOnly />
+                  </FormField>
+                  <FormField label="Servicio">
+                    <Input value={editModal.item.service?.name ?? 'Sin servicio'} readOnly />
+                  </FormField>
+                </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <FormField label="Nueva fecha y hora" required>
                     <Input name="startDateTime" type="datetime-local" defaultValue={toDateTimeLocal(editModal.item.startDateTime)} />

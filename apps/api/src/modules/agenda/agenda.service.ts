@@ -94,6 +94,7 @@ export class AgendaService {
   listAvailabilityRules(tenantId: string) {
     return this.availabilityRulesRepository.find({
       where: { tenantId },
+      relations: { staff: true },
       order: { dayOfWeek: 'ASC', startTime: 'ASC' },
     });
   }
@@ -187,6 +188,7 @@ export class AgendaService {
   listScheduleBlocks(tenantId: string) {
     return this.scheduleBlocksRepository.find({
       where: { tenantId },
+      relations: { staff: true },
       order: { startDateTime: 'DESC' },
     });
   }

@@ -1,12 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { AvailabilitySlot } from '@quickly-sites/shared';
-import { IsNull, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import {
   AppointmentEntity,
   AvailabilityRuleEntity,
   CustomerEntity,
   ScheduleBlockEntity,
+  StaffServiceEntity,
 } from 'src/common/entities';
 import { getPlanMetadata, normalizePlanCode } from 'src/modules/tenants/tenant-access.constants';
 import { ServicesService } from 'src/modules/services/services.service';
@@ -32,12 +33,18 @@ export class AppointmentsService {
     private readonly scheduleBlocksRepository: Repository<ScheduleBlockEntity>,
     @InjectRepository(CustomerEntity)
     private readonly customersRepository: Repository<CustomerEntity>,
+    @InjectRepository(StaffServiceEntity)
+    private readonly staffServicesRepository: Repository<StaffServiceEntity>,
     private readonly servicesService: ServicesService,
   ) {}
 
   private computeReminderScheduledAt(startDateTime: Date) {
     const reminderDate = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
     return reminderDate > new Date() ? reminderDate : new Date();
+  }
+
+  private normalizeTimeValue(time: string) {
+    return /^\d{2}:\d{2}:\d{2}$/.test(time) ? time : `${time}:00`;
   }
 
   private async applyReminderState(appointment: AppointmentEntity) {
@@ -67,17 +74,38 @@ export class AppointmentsService {
   }
 
   private toDateWithTime(date: string, time: string) {
-    return new Date(`${date}T${time}:00`);
+    return new Date(`${date}T${this.normalizeTimeValue(time)}`);
   }
 
   private overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
     return aStart < bEnd && bStart < aEnd;
   }
 
+  private getMinimumBookableStart() {
+    return new Date(Date.now() + 30 * 60 * 1000);
+  }
+
   private isRuleCompatible(rule: AvailabilityRuleEntity, startDateTime: Date, endDateTime: Date) {
     const startTime = startDateTime.toISOString().slice(11, 16);
     const endTime = endDateTime.toISOString().slice(11, 16);
     return rule.startTime <= startTime && rule.endTime >= endTime;
+  }
+
+  private async getEligibleStaffIds(serviceId: string, requestedStaffId?: string) {
+    const links = await this.staffServicesRepository.find({
+      where: { serviceId },
+    });
+
+    const eligibleStaffIds = [...new Set(links.map((link) => link.staffId))];
+    if (eligibleStaffIds.length === 0) {
+      return [];
+    }
+
+    if (!requestedStaffId) {
+      return eligibleStaffIds;
+    }
+
+    return eligibleStaffIds.includes(requestedStaffId) ? [requestedStaffId] : [];
   }
 
   private async ensureAppointmentSlotAvailable(input: {
@@ -88,13 +116,21 @@ export class AppointmentsService {
     staffId?: string | null;
     ignoreAppointmentId?: string;
   }) {
+    const eligibleStaffIds = await this.getEligibleStaffIds(input.serviceId, input.staffId ?? undefined);
+    if (eligibleStaffIds.length === 0) {
+      throw new BadRequestException('El servicio seleccionado no tiene profesionales disponibles');
+    }
+
     const appointments = await this.appointmentsRepository.find({
       where: { tenantId: input.tenantId },
     });
     const blocks = await this.scheduleBlocksRepository.find({
       where: input.staffId
         ? [{ tenantId: input.tenantId, staffId: input.staffId }, { tenantId: input.tenantId, staffId: IsNull() }]
-        : [{ tenantId: input.tenantId }],
+        : [
+          ...eligibleStaffIds.map((staffId) => ({ tenantId: input.tenantId, staffId })),
+          { tenantId: input.tenantId, staffId: IsNull() },
+        ],
     });
 
     const hasAppointment = appointments.some((appointment) => {
@@ -107,11 +143,12 @@ export class AppointmentsService {
       }
 
       if (input.staffId) {
-        return appointment.staffId === input.staffId
+        return (appointment.staffId === input.staffId || appointment.staffId == null)
           && this.overlaps(input.startDateTime, input.endDateTime, appointment.startDateTime, appointment.endDateTime);
       }
 
-      return this.overlaps(input.startDateTime, input.endDateTime, appointment.startDateTime, appointment.endDateTime);
+      return (appointment.staffId == null || eligibleStaffIds.includes(appointment.staffId))
+        && this.overlaps(input.startDateTime, input.endDateTime, appointment.startDateTime, appointment.endDateTime);
     });
 
     if (hasAppointment) {
@@ -128,7 +165,7 @@ export class AppointmentsService {
 
     const dayOfWeek = input.startDateTime.getDay();
     const rules = await this.availabilityRepository.find({
-      where: { tenantId: input.tenantId, dayOfWeek, isActive: true },
+      where: { tenantId: input.tenantId, dayOfWeek, isActive: true, staffId: In(eligibleStaffIds) },
     });
     const matchingRules = input.staffId
       ? rules.filter((rule) => rule.staffId === input.staffId)
@@ -145,15 +182,23 @@ export class AppointmentsService {
 
   async getAvailability(query: AvailabilityQuery): Promise<AvailabilitySlot[]> {
     const service = await this.servicesService.findOne(query.serviceId);
+    if (service.tenantId !== query.tenantId) {
+      throw new NotFoundException('Service not found');
+    }
+
+    const eligibleStaffIds = await this.getEligibleStaffIds(query.serviceId, query.staffId);
+    if (eligibleStaffIds.length === 0) {
+      return [];
+    }
+
     const targetDate = new Date(`${query.date}T00:00:00`);
     const dayOfWeek = targetDate.getDay();
 
     const rules = await this.availabilityRepository.find({
-      where: { tenantId: query.tenantId, dayOfWeek, isActive: true },
+      where: { tenantId: query.tenantId, dayOfWeek, isActive: true, staffId: In(eligibleStaffIds) },
+      relations: { staff: true },
     });
-    const filteredRules = query.staffId
-      ? rules.filter((rule) => rule.staffId === query.staffId)
-      : rules;
+    const filteredRules = query.staffId ? rules.filter((rule) => rule.staffId === query.staffId) : rules;
 
     const dayStart = new Date(`${query.date}T00:00:00`);
     const dayEnd = new Date(`${query.date}T23:59:59`);
@@ -164,8 +209,11 @@ export class AppointmentsService {
       }),
       this.scheduleBlocksRepository.find({
         where: query.staffId
-          ? [{ tenantId: query.tenantId, staffId: query.staffId }]
-          : [{ tenantId: query.tenantId }],
+          ? [{ tenantId: query.tenantId, staffId: query.staffId }, { tenantId: query.tenantId, staffId: IsNull() }]
+          : [
+            ...eligibleStaffIds.map((staffId) => ({ tenantId: query.tenantId, staffId })),
+            { tenantId: query.tenantId, staffId: IsNull() },
+          ],
       }),
     ]);
 
@@ -174,11 +222,12 @@ export class AppointmentsService {
         AppointmentsService.BLOCKING_STATUSES.includes(appointment.status as (typeof AppointmentsService.BLOCKING_STATUSES)[number])
         && appointment.startDateTime >= dayStart
         && appointment.startDateTime <= dayEnd
-        && (!query.staffId || appointment.staffId === query.staffId),
+        && (appointment.staffId == null || eligibleStaffIds.includes(appointment.staffId)),
     );
     const sameDayBlocks = blocks.filter(
       (block) => block.startDateTime <= dayEnd && block.endDateTime >= dayStart,
     );
+    const minimumBookableStart = this.getMinimumBookableStart();
 
     const slots: AvailabilitySlot[] = [];
 
@@ -193,11 +242,18 @@ export class AppointmentsService {
           break;
         }
 
+        if (current < minimumBookableStart) {
+          current = new Date(current.getTime() + interval * 60 * 1000);
+          continue;
+        }
+
         const hasAppointment = sameDayAppointments.some((appointment) =>
-          this.overlaps(current, slotEnd, appointment.startDateTime, appointment.endDateTime),
+          (appointment.staffId === rule.staffId || appointment.staffId == null)
+          && this.overlaps(current, slotEnd, appointment.startDateTime, appointment.endDateTime),
         );
         const hasBlock = sameDayBlocks.some((block) =>
-          this.overlaps(current, slotEnd, block.startDateTime, block.endDateTime),
+          (block.staffId === rule.staffId || block.staffId == null)
+          && this.overlaps(current, slotEnd, block.startDateTime, block.endDateTime),
         );
 
         if (!hasAppointment && !hasBlock) {
@@ -205,6 +261,7 @@ export class AppointmentsService {
             start: current.toISOString(),
             end: slotEnd.toISOString(),
             staffId: rule.staffId,
+            staffName: rule.staff?.name ?? null,
           });
         }
 
@@ -212,7 +269,7 @@ export class AppointmentsService {
       }
     }
 
-    return slots;
+    return slots.sort((left, right) => left.start.localeCompare(right.start) || (left.staffName ?? '').localeCompare(right.staffName ?? ''));
   }
 
   async createPublicAppointment(tenantId: string, input: {

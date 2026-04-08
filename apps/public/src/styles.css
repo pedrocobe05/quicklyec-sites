@@ -29,3 +29,25 @@ a {
 #root {
   min-height: 100vh;
 }
+
+.public-route-stage {
+  will-change: opacity, transform, filter;
+}
+
+.animate-route-in {
+  animation: public-route-fade-in 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes public-route-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.995);
+    filter: blur(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}

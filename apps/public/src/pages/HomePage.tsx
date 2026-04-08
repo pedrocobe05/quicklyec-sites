@@ -1,4 +1,5 @@
 import { Layout } from '../components/Layout';
+import { PageLoadingShell } from '../components/PageLoadingShell';
 import { TemplateRenderer } from '../components/TemplateRenderer';
 import { useSiteConfig } from '../lib/useSiteConfig';
 
@@ -6,7 +7,13 @@ export function HomePage() {
   const { data, loading, error } = useSiteConfig('/');
 
   if (loading) {
-    return <div className="p-10 text-slate-600">Cargando sitio...</div>;
+    return (
+      <PageLoadingShell
+        eyebrow="Cargando sitio"
+        title="Preparando una experiencia visual más suave y continua."
+        description="Estamos cargando las secciones, estilos y contenido del sitio para que la transición se sienta natural."
+      />
+    );
   }
 
   if (!data || error) {

@@ -4,6 +4,7 @@ import { Input } from '../../../shared/components/ui/Input';
 import { Textarea } from '../../../shared/components/ui/Textarea';
 import { FormField } from '../../../shared/components/forms/FormField';
 import { Card } from '../../../shared/components/ui/Card';
+import { ImagePreview } from '../../../shared/components/ui/ImagePreview';
 
 interface ServiceRecord {
   id: string;
@@ -20,6 +21,10 @@ interface StaffRecord {
   name: string;
   bio?: string | null;
   email?: string | null;
+  phone?: string | null;
+  avatarUrl?: string | null;
+  serviceIds?: string[];
+  serviceNames?: string[];
 }
 
 interface ServicesStaffSectionProps {
@@ -34,6 +39,7 @@ interface ServicesStaffSectionProps {
   onCreateStaff: (event: FormEvent<HTMLFormElement>) => void;
   onEditService: (service: ServiceRecord) => void;
   onEditStaff: (staff: StaffRecord) => void;
+  onUploadStaffAvatar: (staff: StaffRecord, file: File) => void;
   itemRow: (props: {
     title: string;
     subtitle: string;
@@ -41,6 +47,8 @@ interface ServicesStaffSectionProps {
     actionLabel: string;
     onAction: () => void;
     disabled?: boolean;
+    visual?: JSX.Element;
+    uploadSlot?: JSX.Element;
   }) => JSX.Element;
 }
 
@@ -56,52 +64,73 @@ export function ServicesStaffSection({
   onCreateStaff,
   onEditService,
   onEditStaff,
+  onUploadStaffAvatar,
   itemRow,
 }: ServicesStaffSectionProps) {
+  const visibleCards =
+    (canAccessServices && (showBoth || currentPath !== '/staff') ? 1 : 0)
+    + (canAccessStaff && (showBoth || currentPath !== '/services') ? 1 : 0);
+
   return (
-    <div className="grid gap-6 xl:grid-cols-2">
+    <div className={visibleCards > 1 ? 'grid gap-6 xl:grid-cols-2' : 'grid gap-6'}>
       {canAccessServices && (showBoth || currentPath !== '/staff') ? (
         <Card id="services" className="scroll-mt-6 rounded-[2rem]">
           <div className="flex items-center justify-between">
             <h3 className="font-serif text-2xl">Servicios</h3>
             <span className="text-sm text-slate-500">Oferta comercial y duración</span>
           </div>
-          <div className="mt-5">
-            <form className="grid gap-3" onSubmit={onCreateService}>
-              <FormField label="Nombre" required>
-                <Input name="name" placeholder="Nombre" />
-              </FormField>
-              <FormField label="Descripción">
-                <Textarea name="description" placeholder="Descripción" className="min-h-20" />
-              </FormField>
-              <div className="grid gap-3 md:grid-cols-3">
-                <FormField label="Minutos">
-                  <Input name="durationMinutes" type="number" placeholder="Minutos" />
-                </FormField>
-                <FormField label="Precio">
-                  <Input name="price" type="number" step="0.01" placeholder="Precio" />
-                </FormField>
-                <FormField label="Categoría">
-                  <Input name="category" placeholder="Categoría" />
-                </FormField>
+          <div className="mt-6 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+            <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50/80 p-5">
+              <div className="mb-4">
+                <h4 className="text-base font-semibold text-slate-900">Nuevo servicio</h4>
+                <p className="mt-1 text-sm text-slate-500">Crea el catálogo general del tenant desde aquí.</p>
               </div>
-              <Button type="submit" className="rounded-full px-5 py-3 text-sm font-semibold">
-                {saving === 'service' ? 'Guardando...' : 'Crear servicio'}
-              </Button>
-            </form>
-          </div>
-          <div className="mt-6 grid gap-3">
-            {services.map((service) => (
-              <Fragment key={service.id}>
-                {itemRow({
-                  title: service.name,
-                  subtitle: `${service.durationMinutes} min · ${service.price ? `$${service.price}` : 'Sin precio'}`,
-                  meta: service.description,
-                  actionLabel: saving === `delete-service-${service.id}` ? 'Eliminando...' : 'Eliminar',
-                  onAction: () => onEditService(service),
-                })}
-              </Fragment>
-            ))}
+              <form className="grid gap-3" onSubmit={onCreateService}>
+                <FormField label="Nombre" required>
+                  <Input name="name" placeholder="Nombre" />
+                </FormField>
+                <FormField label="Descripción">
+                  <Textarea name="description" placeholder="Descripción" className="min-h-20" />
+                </FormField>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <FormField label="Minutos">
+                    <Input name="durationMinutes" type="number" placeholder="Minutos" />
+                  </FormField>
+                  <FormField label="Precio">
+                    <Input name="price" type="number" step="0.01" placeholder="Precio" />
+                  </FormField>
+                  <FormField label="Categoría">
+                    <Input name="category" placeholder="Categoría" />
+                  </FormField>
+                </div>
+                <Button type="submit" className="rounded-full px-5 py-3 text-sm font-semibold">
+                  {saving === 'service' ? 'Guardando...' : 'Crear servicio'}
+                </Button>
+              </form>
+            </div>
+            <div>
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h4 className="text-base font-semibold text-slate-900">Servicios creados</h4>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {services.length} servicio{services.length === 1 ? '' : 's'} en este tenant.
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-3">
+                {services.map((service) => (
+                  <Fragment key={service.id}>
+                    {itemRow({
+                      title: service.name,
+                      subtitle: `${service.durationMinutes} min · ${service.price ? `$${service.price}` : 'Sin precio'}`,
+                      meta: service.description,
+                      actionLabel: saving === `delete-service-${service.id}` ? 'Eliminando...' : 'Eliminar',
+                      onAction: () => onEditService(service),
+                    })}
+                  </Fragment>
+                ))}
+              </div>
+            </div>
           </div>
         </Card>
       ) : null}
@@ -109,42 +138,98 @@ export function ServicesStaffSection({
       {canAccessStaff && (showBoth || currentPath !== '/services') ? (
         <Card id="staff" className="scroll-mt-6 rounded-[2rem]">
           <div className="flex items-center justify-between">
-            <h3 className="font-serif text-2xl">Equipo</h3>
-            <span className="text-sm text-slate-500">Equipo visible para reservas</span>
+            <h3 className="font-serif text-2xl">Staff</h3>
+            <span className="text-sm text-slate-500">Personal y servicios asignados</span>
           </div>
-          <div className="mt-5">
-            <form className="grid gap-3" onSubmit={onCreateStaff}>
-              <FormField label="Nombre" required>
-                <Input name="name" placeholder="Nombre" />
-              </FormField>
-              <FormField label="Biografía">
-                <Textarea name="bio" placeholder="Biografía" className="min-h-20" />
-              </FormField>
-              <div className="grid gap-3 md:grid-cols-2">
-                <FormField label="Correo">
-                  <Input name="email" placeholder="Correo" />
-                </FormField>
-                <FormField label="Teléfono">
-                  <Input name="phone" placeholder="Teléfono" />
-                </FormField>
+          <div className="mt-6 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+            <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50/80 p-5">
+              <div className="mb-4">
+                <h4 className="text-base font-semibold text-slate-900">Nuevo integrante</h4>
+                <p className="mt-1 text-sm text-slate-500">Crea el personal del tenant y asigna qué servicios puede atender.</p>
               </div>
-              <Button type="submit" className="rounded-full px-5 py-3 text-sm font-semibold">
-                {saving === 'staff' ? 'Guardando...' : 'Crear integrante'}
-              </Button>
-            </form>
-          </div>
-          <div className="mt-6 grid gap-3">
-            {staff.map((member) => (
-              <Fragment key={member.id}>
-                {itemRow({
-                  title: member.name,
-                  subtitle: member.email ?? 'Sin correo',
-                  meta: member.bio ?? 'Sin biografía',
-                  actionLabel: saving === `delete-staff-${member.id}` ? 'Eliminando...' : 'Eliminar',
-                  onAction: () => onEditStaff(member),
-                })}
-              </Fragment>
-            ))}
+              <form className="grid gap-3" onSubmit={onCreateStaff}>
+                <FormField label="Nombre" required>
+                  <Input name="name" placeholder="Nombre" />
+                </FormField>
+                <FormField label="Biografía">
+                  <Textarea name="bio" placeholder="Biografía" className="min-h-20" />
+                </FormField>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <FormField label="Correo">
+                    <Input name="email" placeholder="Correo" />
+                  </FormField>
+                  <FormField label="Teléfono">
+                    <Input name="phone" placeholder="Teléfono" />
+                  </FormField>
+                </div>
+                <div className="grid gap-2 rounded-3xl border border-slate-200 bg-white p-4">
+                  <p className="text-sm font-medium text-slate-700">Servicios que presta</p>
+                  {services.length === 0 ? (
+                    <p className="text-sm text-slate-500">Crea servicios primero para poder asignarlos al personal.</p>
+                  ) : (
+                    services.map((service) => (
+                      <label key={service.id} className="flex items-center gap-2 text-sm text-slate-700">
+                        <input type="checkbox" name="serviceIds" value={service.id} />
+                        <span>{service.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                <Button type="submit" className="rounded-full px-5 py-3 text-sm font-semibold">
+                  {saving === 'staff' ? 'Guardando...' : 'Crear integrante'}
+                </Button>
+              </form>
+            </div>
+            <div>
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h4 className="text-base font-semibold text-slate-900">Personal creado</h4>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {staff.length} integrante{staff.length === 1 ? '' : 's'} en este tenant.
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-3">
+                {staff.map((member) => (
+                  <Fragment key={member.id}>
+                    {itemRow({
+                      title: member.name,
+                      subtitle: member.email ?? 'Sin correo',
+                      meta: [
+                        member.bio ?? 'Sin biografía',
+                        member.serviceNames?.length ? `Servicios: ${member.serviceNames.join(', ')}` : 'Sin servicios asignados',
+                      ].join(' · '),
+                      actionLabel: saving === `delete-staff-${member.id}` ? 'Eliminando...' : 'Eliminar',
+                      onAction: () => onEditStaff(member),
+                      visual: (
+                        <ImagePreview
+                          src={member.avatarUrl}
+                          alt={member.name}
+                          className="h-16 w-16"
+                          imgClassName="h-16 w-16 object-cover"
+                        />
+                      ),
+                      uploadSlot: (
+                        <label className="inline-flex cursor-pointer items-center rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50">
+                          Foto
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              if (!file) return;
+                              onUploadStaffAvatar(member, file);
+                              event.currentTarget.value = '';
+                            }}
+                          />
+                        </label>
+                      ),
+                    })}
+                  </Fragment>
+                ))}
+              </div>
+            </div>
           </div>
         </Card>
       ) : null}

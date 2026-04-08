@@ -433,7 +433,7 @@ export class PlatformService {
       throw new BadRequestException('Subscription plan not found');
     }
 
-    const primaryDomain = this.normalizeHost(input.primaryDomain ?? `${slug}.quicklysites.local`);
+    const primaryDomain = this.normalizeHost(input.primaryDomain ?? `${slug}.quicklyecsites.local`);
     const customDomain = input.customDomain ? this.normalizeHost(input.customDomain) : null;
 
     const existingPrimaryDomain = await this.domainsRepository.findOne({ where: { domain: primaryDomain } });
@@ -682,7 +682,7 @@ export class PlatformService {
         supportEmail: 'sites@quicklyec.com',
         supportPhone: null,
         publicAppUrl: null,
-        quicklysitesBaseDomain: 'quicklysites.local',
+        quicklysitesBaseDomain: 'quicklyecsites.local',
         defaultSenderName: 'Quickly Sites',
         defaultSenderEmail: 'sites@quicklyec.com',
         metadata: null,

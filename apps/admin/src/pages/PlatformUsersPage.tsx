@@ -14,6 +14,7 @@ import { DataTable, DataTablePagination, DataTableShell, DataTableToolbar } from
 import { FormField } from '../shared/components/forms/FormField';
 import { Input } from '../shared/components/ui/Input';
 import { Select } from '../shared/components/ui/Select';
+import { Skeleton } from '../shared/components/ui/Skeleton';
 import { useNotification } from '../shared/notifications/use-notification';
 
 interface PlatformUserRecord {
@@ -152,9 +153,18 @@ export function PlatformUsersPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr>
-                  <td className="px-4 py-4 text-slate-500" colSpan={4}>Cargando usuarios...</td>
-                </tr>
+                Array.from({ length: 4 }).map((_, index) => (
+                  <tr key={`platform-user-skeleton-${index}`} className="border-t border-slate-200">
+                    <td className="px-4 py-3" colSpan={4}>
+                      <div className="grid gap-3 md:grid-cols-[1.3fr_0.5fr_0.5fr_0.9fr] md:items-center">
+                        <Skeleton className="h-16" />
+                        <Skeleton className="h-12" />
+                        <Skeleton className="h-12" />
+                        <Skeleton className="h-12" />
+                      </div>
+                    </td>
+                  </tr>
+                ))
               ) : filteredUsers.length === 0 ? (
                 <tr>
                   <td className="px-4 py-4 text-slate-500" colSpan={4}>No hay usuarios de plataforma.</td>

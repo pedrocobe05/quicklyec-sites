@@ -55,7 +55,7 @@ export class PlatformRolesAndSettings1711960000000 implements MigrationInterface
         `
           INSERT INTO "platform_settings" (
             "id", "platformName", "supportEmail", "supportPhone", "publicAppUrl", "quicklysitesBaseDomain", "defaultSenderName", "defaultSenderEmail", "metadata", "createdAt", "updatedAt"
-          ) VALUES ($1, 'Quickly Sites', 'sites@quicklyec.com', NULL, 'http://localhost:5174', 'quicklysites.local', 'Quickly Sites', 'sites@quicklyec.com', NULL, now(), now())
+          ) VALUES ($1, 'Quickly Sites', 'sites@quicklyec.com', NULL, 'http://localhost:5174', 'quicklyecsites.local', 'Quickly Sites', 'sites@quicklyec.com', NULL, now(), now())
         `,
         [randomUUID()],
       );

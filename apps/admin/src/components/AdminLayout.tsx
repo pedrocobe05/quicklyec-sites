@@ -173,6 +173,7 @@ export function AdminLayout({
     : null;
 
   const [pendingHttpRequests, setPendingHttpRequests] = useState(0);
+  const [showHttpOverlay, setShowHttpOverlay] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
 
@@ -265,6 +266,22 @@ export function AdminLayout({
       window.removeEventListener('qs:http:end', handleHttpEnd as EventListener);
     };
   }, []);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    if (pendingHttpRequests > 0) {
+      timer = setTimeout(() => setShowHttpOverlay(true), 140);
+    } else {
+      timer = setTimeout(() => setShowHttpOverlay(false), 220);
+    }
+
+    return () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  }, [pendingHttpRequests]);
 
   useEffect(() => {
     setMobileSidebarOpen(false);
@@ -419,12 +436,30 @@ export function AdminLayout({
 
   return (
     <div className="quickly-page-shell isolate flex h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(255,203,48,0.08),_transparent_24%),linear-gradient(180deg,_#fbfaf6_0%,_#f3f5f9_100%)]">
-      {pendingHttpRequests > 0 ? (
-        <div className="pointer-events-none fixed right-6 top-6 z-[260] flex items-center gap-3 rounded-full border border-[rgba(0,1,32,0.08)] bg-[rgba(0,1,32,0.92)] px-4 py-2 text-sm font-medium text-white shadow-2xl backdrop-blur">
-          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-r-transparent" />
-          <span>Cargando...</span>
+      <div
+        className={cn(
+          'pointer-events-none fixed inset-x-0 top-0 z-[260] flex justify-center px-4 transition-all duration-300',
+          showHttpOverlay ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0',
+        )}
+      >
+        <div className="mt-4 w-full max-w-md overflow-hidden rounded-[1.6rem] border border-[rgba(0,1,32,0.08)] bg-[linear-gradient(135deg,rgba(6,12,42,0.94),rgba(15,23,42,0.9))] px-4 py-3 text-white shadow-[0_24px_80px_rgba(0,1,32,0.22)] backdrop-blur-xl">
+          <div className="flex items-center gap-3">
+            <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10">
+              <span className="absolute inset-0 animate-ping rounded-full bg-[rgba(255,203,48,0.12)]" />
+              <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/80 border-r-transparent" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold tracking-[0.08em] text-white">Actualizando vista</p>
+              <p className="text-xs text-white/70">
+                Cargando contenido y sincronizando cambios para que la transición se sienta continua.
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+            <div className="h-full w-1/2 animate-pulse rounded-full bg-[linear-gradient(90deg,#ffcb30,#ffffff)]" />
+          </div>
         </div>
-      ) : null}
+      </div>
 
       <aside className="sidebar-professional fixed inset-y-0 left-0 z-20 hidden w-72 flex-col overflow-hidden border-r border-[rgba(0,64,145,0.12)] bg-[linear-gradient(180deg,#eef5ff_0%,#e4edf9_100%)] px-5 py-6 text-slate-700 shadow-[8px_0_28px_rgba(0,64,145,0.06)] lg:flex">
         {sidebar}

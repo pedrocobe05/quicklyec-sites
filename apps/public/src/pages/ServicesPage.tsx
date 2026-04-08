@@ -1,11 +1,20 @@
 import { Layout } from '../components/Layout';
+import { PageLoadingShell } from '../components/PageLoadingShell';
 import { TemplateRenderer } from '../components/TemplateRenderer';
 import { useSiteConfig } from '../lib/useSiteConfig';
 
 export function ServicesPage() {
   const { data, loading, error } = useSiteConfig('/servicios');
 
-  if (loading) return <div className="p-10 text-slate-600">Cargando servicios...</div>;
+  if (loading) {
+    return (
+      <PageLoadingShell
+        eyebrow="Cargando servicios"
+        title="Estamos preparando el catálogo con una transición más agradable."
+        description="Se están cargando los bloques, tarjetas y contenido para que el cambio de página no se sienta abrupto."
+      />
+    );
+  }
   if (!data || error) return <div className="p-10 text-red-600">{error}</div>;
 
   return (

@@ -12,6 +12,7 @@ import { Card } from '../shared/components/ui/Card';
 import { DataTable, DataTablePagination, DataTableShell, DataTableToolbar } from '../shared/components/ui/DataTable';
 import { FormField } from '../shared/components/forms/FormField';
 import { Input } from '../shared/components/ui/Input';
+import { Skeleton } from '../shared/components/ui/Skeleton';
 import { Textarea } from '../shared/components/ui/Textarea';
 import { useNotification } from '../shared/notifications/use-notification';
 
@@ -132,7 +133,19 @@ export function PlatformRolesPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td className="px-4 py-4 text-slate-500" colSpan={5}>Cargando roles...</td></tr>
+                Array.from({ length: 4 }).map((_, index) => (
+                  <tr key={`platform-role-skeleton-${index}`} className="border-t border-slate-200">
+                    <td className="px-4 py-3" colSpan={5}>
+                      <div className="grid gap-3 md:grid-cols-[1.2fr_0.5fr_0.4fr_0.4fr_0.9fr] md:items-center">
+                        <Skeleton className="h-16" />
+                        <Skeleton className="h-12" />
+                        <Skeleton className="h-12" />
+                        <Skeleton className="h-12" />
+                        <Skeleton className="h-12" />
+                      </div>
+                    </td>
+                  </tr>
+                ))
               ) : filteredRoles.length === 0 ? (
                 <tr><td className="px-4 py-4 text-slate-500" colSpan={5}>No hay roles configurados.</td></tr>
               ) : (
