@@ -471,7 +471,7 @@ Con:
 - testimonios demo
 - horarios demo
 - dominio demo:
-  - paolamendozanails.quicklysites.local
+  - paolamendozanails.quicklyecsites.com
 
 ---
 

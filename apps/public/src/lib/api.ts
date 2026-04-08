@@ -19,7 +19,7 @@ function resolveApiUrl() {
 }
 
 const API_URL = resolveApiUrl();
-const DEFAULT_HOST = import.meta.env.VITE_SITE_HOST ?? 'paolamendozanails.quicklysites.local';
+const DEFAULT_HOST = import.meta.env.VITE_SITE_HOST ?? 'paolamendozanails.quicklyecsites.com';
 
 async function request<T>(path: string) {
   let response: Response;

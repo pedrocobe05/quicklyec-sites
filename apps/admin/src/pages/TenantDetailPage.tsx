@@ -388,7 +388,6 @@ export function TenantDetailPage() {
   const [saving, setSaving] = useState<string | null>(null);
   const [uploadingAsset, setUploadingAsset] = useState<'logo' | 'favicon' | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [editModal, setEditModal] = useState<EditModalState | null>(null);
   const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
   const [createUserOpen, setCreateUserOpen] = useState(false);
@@ -695,7 +694,6 @@ export function TenantDetailPage() {
     if (!token || !tenantId) return;
     loadData()
       .catch((err: Error) => {
-        setError(err.message);
         notify(err.message, 'error');
       })
       .finally(() => setIsLoading(false));
@@ -721,7 +719,6 @@ export function TenantDetailPage() {
       notify('Cambios guardados.', 'success');
     } catch (err) {
       const message = (err as Error).message;
-      setError(message);
       notify(message, 'error');
     } finally {
       setSaving(null);
@@ -1781,8 +1778,6 @@ export function TenantDetailPage() {
               </DataTableShell>
             </Card>
           ) : null}
-
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
         </section>
       )}
 

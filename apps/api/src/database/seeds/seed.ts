@@ -34,9 +34,11 @@ async function resetTenant(dataSourceRef: DataSource, slug: string) {
 
 async function main() {
   const demoTenantId = '7c039917-7b50-4abb-a562-341684e63509';
+  const healthPrimeTenantId = 'f3d1fb76-b58c-4c9a-a349-4a7697694cd0';
   await dataSource.initialize();
 
   await resetTenant(dataSource, 'paolamendozanails');
+  await resetTenant(dataSource, 'healthprimeclinic');
 
   const tenantRepository = dataSource.getRepository(TenantEntity);
   const domainRepository = dataSource.getRepository(TenantDomainEntity);
@@ -162,7 +164,7 @@ async function main() {
   await domainRepository.save([
     {
       tenantId: tenant.id,
-      domain: 'paolamendozanails.quicklysites.local',
+      domain: 'paolamendozanails.quicklyecsites.com',
       type: 'subdomain',
       isPrimary: true,
       verificationStatus: 'verified',
@@ -194,7 +196,7 @@ async function main() {
     defaultSeoTitle: 'Paola Mendoza Nails | Manicure y spa',
     defaultSeoDescription: 'Conoce manicure, pedicure y tratamientos spa de Paola Mendoza Nails.',
     defaultOgImageUrl: 'https://images.unsplash.com/photo-1604654894610-df63bc536371',
-    canonicalDomain: 'paolamendozanails.quicklysites.local',
+    canonicalDomain: 'paolamendozanails.quicklyecsites.com',
   });
 
   await brandingRepository.save({
@@ -220,7 +222,7 @@ async function main() {
     isIndexable: true,
     seoTitle: 'Paola Mendoza Nails | Reserva manicure y spa online',
     seoDescription: 'Sitio oficial de Paola Mendoza Nails. Servicios de manicure, pedicure, spa de manos y reservas online.',
-    canonicalUrl: 'https://paolamendozanails.quicklysites.local',
+    canonicalUrl: 'https://paolamendozanails.quicklyecsites.com',
     ogTitle: 'Paola Mendoza Nails',
     ogDescription: 'Reserva tu próximo servicio beauty online.',
     ogImageUrl: 'https://images.unsplash.com/photo-1604654894610-df63bc536371',
@@ -935,6 +937,1011 @@ async function main() {
     },
   ]);
 
+  const healthPrimeTenant = await tenantRepository.save({
+    id: healthPrimeTenantId,
+    name: 'Health Prime Studio',
+    slug: 'healthprimeclinic',
+    status: 'active',
+    plan: 'premium',
+  });
+
+  let healthPrimeAdminRole = await roleRepository.findOne({
+    where: { tenantId: healthPrimeTenant.id, code: DEFAULT_TENANT_ROLE_DEFINITIONS[0].code },
+  });
+  if (!healthPrimeAdminRole) {
+    healthPrimeAdminRole = await roleRepository.save({
+      tenantId: healthPrimeTenant.id,
+      code: DEFAULT_TENANT_ROLE_DEFINITIONS[0].code,
+      name: DEFAULT_TENANT_ROLE_DEFINITIONS[0].name,
+      description: DEFAULT_TENANT_ROLE_DEFINITIONS[0].description,
+      isSystem: true,
+      isActive: true,
+      permissions: [...DEFAULT_TENANT_ROLE_DEFINITIONS[0].permissions],
+    });
+  }
+
+  await domainRepository.save([
+    {
+      tenantId: healthPrimeTenant.id,
+      domain: 'healthprime.quicklysites.local',
+      type: 'subdomain',
+      isPrimary: true,
+      verificationStatus: 'verified',
+      verifiedAt: new Date(),
+      sslStatus: 'active',
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      domain: 'www.healthprimeclinic.com',
+      type: 'custom',
+      isPrimary: false,
+      verificationStatus: 'pending',
+      verifiedAt: null,
+      sslStatus: 'pending',
+    },
+  ]);
+
+  await settingsRepository.save({
+    tenantId: healthPrimeTenant.id,
+    publicSiteEnabled: true,
+    bookingEnabled: false,
+    timezone: 'America/Guayaquil',
+    locale: 'es-EC',
+    currency: 'USD',
+    contactEmail: 'hola@healthprimeclinic.com',
+    contactPhone: '+593 99 765 4321',
+    whatsappNumber: '+593 99 765 4321',
+    siteIndexingEnabled: true,
+    defaultSeoTitle: 'Health Prime Studio | Atención profesional con experiencia moderna',
+    defaultSeoDescription: 'Demo premium para clínicas, odontología, veterinaria y servicios especializados de salud.',
+    defaultOgImageUrl: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118',
+    canonicalDomain: 'healthprime.quicklysites.local',
+  });
+
+  await brandingRepository.save({
+    tenantId: healthPrimeTenant.id,
+    logoUrl: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef',
+    faviconUrl: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef',
+    primaryColor: '#0F3B57',
+    secondaryColor: '#F5F8FA',
+    accentColor: '#6BAA9B',
+    fontFamily: 'Lora',
+    borderRadius: '1.5rem',
+    buttonStyle: 'pill',
+    customCss: null,
+  });
+
+  const healthPrimeHomePage = await pageRepository.save({
+    tenantId: healthPrimeTenant.id,
+    templateId: template.id,
+    slug: 'home',
+    title: 'Health Prime Studio',
+    isHome: true,
+    isPublished: true,
+    isIndexable: true,
+    seoTitle: 'Health Prime Studio | Sitio premium para servicios de salud',
+    seoDescription: 'Template demo premium para clínicas, odontología, veterinaria y consultorios modernos.',
+    canonicalUrl: 'https://healthprime.quicklysites.local',
+    ogTitle: 'Health Prime Studio',
+    ogDescription: 'Diseño elegante, confiable y altamente personalizable para servicios de salud.',
+    ogImageUrl: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118',
+    metaRobots: 'index,follow',
+  });
+
+  const [healthPrimeServicesPage, healthPrimeContactPage] = await pageRepository.save([
+    {
+      tenantId: healthPrimeTenant.id,
+      templateId: template.id,
+      slug: 'servicios',
+      title: 'Servicios',
+      isHome: false,
+      isPublished: true,
+      isIndexable: true,
+      seoTitle: 'Servicios | Health Prime Studio',
+      seoDescription: 'Servicios destacados y líneas de atención de Health Prime Studio.',
+      canonicalUrl: null,
+      ogTitle: null,
+      ogDescription: null,
+      ogImageUrl: null,
+      metaRobots: 'index,follow',
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      templateId: template.id,
+      slug: 'contacto',
+      title: 'Contacto',
+      isHome: false,
+      isPublished: true,
+      isIndexable: true,
+      seoTitle: 'Contacto | Health Prime Studio',
+      seoDescription: 'Información de contacto y atención de Health Prime Studio.',
+      canonicalUrl: null,
+      ogTitle: null,
+      ogDescription: null,
+      ogImageUrl: null,
+      metaRobots: 'index,follow',
+    },
+  ]);
+
+  await sectionRepository.save([
+    {
+      tenantId: healthPrimeTenant.id,
+      pageId: null,
+      scope: 'global',
+      type: 'header',
+      variant: 'default',
+      position: 1,
+      isVisible: true,
+      settings: {},
+      content: {
+        kicker: 'Health Care Demo',
+        title: 'Health Prime Studio',
+        subtitle: 'Una presencia digital premium para clínicas, odontología, veterinaria y servicios especializados.',
+        ctaLabel: 'Solicitar valoración',
+        ctaUrl: '/contacto',
+      },
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      pageId: null,
+      scope: 'global',
+      type: 'footer',
+      variant: 'default',
+      position: 2,
+      isVisible: true,
+      settings: {},
+      content: {
+        text: 'Comunica confianza, claridad y cuidado con un diseño editorial listo para adaptarse a distintos giros de salud.',
+        address: 'Kennedy Norte, Guayaquil, Ecuador',
+        hours: 'Lunes a sábado · 08:00 a 18:00',
+        instagram: '@healthprimestudio',
+        footerWhatsapp: '+593 99 765 4321',
+      },
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      pageId: healthPrimeHomePage.id,
+      scope: 'page',
+      type: 'custom_html',
+      variant: 'hero-medical-editorial',
+      position: 1,
+      isVisible: true,
+      settings: { surface: 'raw' },
+      content: {
+        html: `
+          <section class="medical-hero">
+            <div class="medical-hero__copy">
+              <span class="eyebrow">Health Prime</span>
+              <h1>Una experiencia digital confiable, luminosa y altamente adaptable para servicios de salud.</h1>
+              <p>Este demo muestra cómo Quickly Sites puede vestir una clínica, un consultorio, un centro odontológico o una veterinaria con una narrativa premium, clara y lista para transmitir profesionalismo desde el primer segundo.</p>
+              <div class="medical-hero__actions">
+                <a href="/servicios" class="primary-link">Ver servicios</a>
+                <a href="/contacto" class="secondary-link">Solicitar atención</a>
+              </div>
+            </div>
+            <div class="medical-hero__visual">
+              <div class="medical-hero__shot">
+                <img src="{{asset:hero-main}}" alt="Atención clínica premium" />
+              </div>
+              <article class="medical-summary">
+                <span class="eyebrow">Percepción</span>
+                <strong>Confianza + claridad</strong>
+                <p>La combinación ideal para salud, odontología, veterinaria y servicios especializados.</p>
+              </article>
+            </div>
+          </section>
+        `,
+        css: `
+          & .medical-hero {
+            display: grid;
+            gap: 1.5rem;
+            align-items: stretch;
+          }
+          @media (min-width: 980px) {
+            & .medical-hero {
+              grid-template-columns: 1.05fr 0.95fr;
+            }
+          }
+          & .medical-hero__copy,
+          & .medical-hero__shot,
+          & .medical-summary {
+            border: 1px solid rgba(15, 59, 87, 0.08);
+            border-radius: 2rem;
+            background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(244,248,250,0.92));
+            box-shadow: 0 24px 80px rgba(15, 59, 87, 0.08);
+          }
+          & .medical-hero__copy {
+            padding: clamp(2rem, 4vw, 4rem);
+          }
+          & .eyebrow {
+            display: inline-block;
+            margin-bottom: 1rem;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.34em;
+            color: #5f8e88;
+          }
+          & h1 {
+            margin: 0;
+            font-size: clamp(2.4rem, 5vw, 4.9rem);
+            line-height: 0.96;
+            color: #0f2d3f;
+          }
+          & p {
+            margin: 1.4rem 0 0;
+            max-width: 62ch;
+            font-size: 1.02rem;
+            line-height: 1.9;
+            color: #546371;
+          }
+          & .medical-hero__actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.85rem;
+            margin-top: 2rem;
+          }
+          & .primary-link,
+          & .secondary-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 3rem;
+            padding: 0 1.35rem;
+            border-radius: 999px;
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 600;
+          }
+          & .primary-link {
+            background: #0f3b57;
+            color: #ffffff;
+          }
+          & .secondary-link {
+            border: 1px solid rgba(15,59,87,0.12);
+            background: rgba(255,255,255,0.76);
+            color: #1f3c4d;
+          }
+          & .medical-hero__visual {
+            display: grid;
+            gap: 1.5rem;
+          }
+          & .medical-hero__shot {
+            overflow: hidden;
+            min-height: 34rem;
+            background: #edf4f6;
+          }
+          & .medical-hero__shot img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+          }
+          & .medical-summary {
+            padding: 1.7rem;
+          }
+          & .medical-summary strong {
+            display: block;
+            font-size: 1.9rem;
+            line-height: 1;
+            color: #0f2d3f;
+          }
+        `,
+      },
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      pageId: healthPrimeHomePage.id,
+      scope: 'page',
+      type: 'custom_html',
+      variant: 'trust-metrics',
+      position: 2,
+      isVisible: true,
+      settings: { surface: 'raw' },
+      content: {
+        html: `
+          <section class="trust-metrics">
+            <article><strong>+12 años</strong><span>de experiencia clínica comunicada con claridad</span></article>
+            <article><strong>3 giros</strong><span>médico, odontología y veterinaria con la misma base visual</span></article>
+            <article><strong>100% adaptable</strong><span>bloques custom para construir una web realmente propia</span></article>
+          </section>
+        `,
+        css: `
+          & .trust-metrics {
+            display: grid;
+            gap: 1rem;
+          }
+          @media (min-width: 860px) {
+            & .trust-metrics {
+              grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+          }
+          & article {
+            border: 1px solid rgba(15, 59, 87, 0.08);
+            border-radius: 1.75rem;
+            padding: 1.5rem;
+            background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(242,248,247,0.88));
+            box-shadow: 0 18px 50px rgba(15, 59, 87, 0.06);
+          }
+          & strong {
+            display: block;
+            font-size: clamp(1.8rem, 4vw, 2.8rem);
+            line-height: 1;
+            color: #0f3b57;
+          }
+          & span {
+            display: block;
+            margin-top: 0.7rem;
+            font-size: 0.96rem;
+            line-height: 1.8;
+            color: #5b6978;
+          }
+        `,
+      },
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      pageId: healthPrimeHomePage.id,
+      scope: 'page',
+      type: 'custom_html',
+      variant: 'services-clinical-grid',
+      position: 3,
+      isVisible: true,
+      settings: { surface: 'raw' },
+      content: {
+        html: `
+          <section class="clinical-services">
+            <header>
+              <span class="eyebrow">Líneas de atención</span>
+              <h2>El mismo sistema puede presentar distintas especialidades con una estética seria y memorable.</h2>
+            </header>
+            <div class="clinical-services__grid">
+              <article>
+                <img src="{{asset:service-general-care}}" alt="Atención general" />
+                <strong>Atención general</strong>
+                <p>Ideal para medicina familiar, evaluación primaria o control preventivo.</p>
+              </article>
+              <article>
+                <img src="{{asset:service-specialty-care}}" alt="Especialidades" />
+                <strong>Especialidades</strong>
+                <p>Un bloque pensado para odontología, procedimientos clínicos o áreas diferenciales.</p>
+              </article>
+              <article>
+                <img src="{{asset:service-preventive-care}}" alt="Prevención y seguimiento" />
+                <strong>Prevención y seguimiento</strong>
+                <p>Perfecto para vacunación, revisiones, planes de cuidado o control postconsulta.</p>
+              </article>
+            </div>
+          </section>
+        `,
+        css: `
+          & .clinical-services {
+            border: 1px solid rgba(15, 59, 87, 0.08);
+            border-radius: 2rem;
+            padding: clamp(1.5rem, 3vw, 2.5rem);
+            background: rgba(255,255,255,0.92);
+            box-shadow: 0 18px 50px rgba(15, 59, 87, 0.06);
+          }
+          & .eyebrow {
+            display: inline-block;
+            font-size: 0.72rem;
+            letter-spacing: 0.35em;
+            text-transform: uppercase;
+            color: #5f8e88;
+            margin-bottom: 1rem;
+          }
+          & h2 {
+            margin: 0;
+            max-width: 18ch;
+            font-size: clamp(1.9rem, 4vw, 3.1rem);
+            line-height: 1.02;
+            color: #0f2d3f;
+          }
+          & .clinical-services__grid {
+            display: grid;
+            gap: 1rem;
+            margin-top: 2rem;
+          }
+          @media (min-width: 900px) {
+            & .clinical-services__grid {
+              grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+          }
+          & article {
+            border-radius: 1.5rem;
+            overflow: hidden;
+            background: linear-gradient(180deg, #f9fbfc, #edf4f6);
+          }
+          & article img {
+            width: 100%;
+            height: 13rem;
+            object-fit: cover;
+            display: block;
+          }
+          & article strong,
+          & article p {
+            display: block;
+            padding-left: 1.4rem;
+            padding-right: 1.4rem;
+          }
+          & strong {
+            padding-top: 1.2rem;
+            font-size: 1.08rem;
+            color: #0f2d3f;
+          }
+          & p {
+            margin: 0.8rem 0 0;
+            font-size: 0.96rem;
+            line-height: 1.85;
+            color: #5b6978;
+          }
+        `,
+      },
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      pageId: healthPrimeHomePage.id,
+      scope: 'page',
+      type: 'custom_html',
+      variant: 'why-choose-us',
+      position: 4,
+      isVisible: true,
+      settings: { surface: 'raw' },
+      content: {
+        html: `
+          <section class="why-choose">
+            <article class="why-choose__copy">
+              <span class="eyebrow">Confianza</span>
+              <h2>Una web de salud debe verse humana, organizada y técnicamente sólida al mismo tiempo.</h2>
+              <p>Este bloque demuestra cómo puedes vender experiencia, cercanía, procesos claros y calidad de atención sin caer en un diseño frío o genérico.</p>
+            </article>
+            <article class="why-choose__visual">
+              <img src="{{asset:team-ambient}}" alt="Equipo de salud" />
+            </article>
+          </section>
+        `,
+        css: `
+          & .why-choose {
+            display: grid;
+            gap: 1.5rem;
+          }
+          @media (min-width: 920px) {
+            & .why-choose {
+              grid-template-columns: 1.1fr 0.9fr;
+              align-items: stretch;
+            }
+          }
+          & .why-choose__copy,
+          & .why-choose__visual {
+            border: 1px solid rgba(15, 59, 87, 0.08);
+            border-radius: 2rem;
+            background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(244,248,250,0.92));
+            box-shadow: 0 18px 50px rgba(15, 59, 87, 0.06);
+          }
+          & .why-choose__copy {
+            padding: 2rem;
+          }
+          & .why-choose__visual {
+            overflow: hidden;
+            min-height: 22rem;
+          }
+          & .why-choose__visual img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+          }
+          & .eyebrow {
+            display: inline-block;
+            font-size: 0.72rem;
+            letter-spacing: 0.35em;
+            text-transform: uppercase;
+            color: #5f8e88;
+            margin-bottom: 1rem;
+          }
+          & h2 {
+            margin: 0 0 1rem;
+            font-size: clamp(1.9rem, 4vw, 3.2rem);
+            line-height: 1.02;
+            color: #0f2d3f;
+          }
+          & p {
+            margin: 0;
+            font-size: 1rem;
+            line-height: 1.92;
+            color: #5b6978;
+          }
+        `,
+      },
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      pageId: healthPrimeHomePage.id,
+      scope: 'page',
+      type: 'custom_html',
+      variant: 'specialists-showcase',
+      position: 5,
+      isVisible: true,
+      settings: { surface: 'raw' },
+      content: {
+        html: `
+          <section class="specialists-showcase">
+            <header>
+              <span class="eyebrow">Equipo</span>
+              <h2>Presenta profesionales y áreas de atención sin rehacer toda la web para cada giro.</h2>
+            </header>
+            <div class="specialists-showcase__grid">
+              <article>
+                <img src="{{asset:specialist-one}}" alt="Especialista uno" />
+                <strong>Dirección clínica</strong>
+                <p>Perfil adaptable a medicina general, odontología o coordinación veterinaria.</p>
+              </article>
+              <article>
+                <img src="{{asset:specialist-two}}" alt="Especialista dos" />
+                <strong>Especialidades</strong>
+                <p>Ideal para ortodoncia, dermatología, cirugía menor o medicina preventiva.</p>
+              </article>
+              <article>
+                <img src="{{asset:specialist-three}}" alt="Especialista tres" />
+                <strong>Atención humana</strong>
+                <p>Bloque perfecto para transmitir calidez y credibilidad en negocios de salud.</p>
+              </article>
+            </div>
+          </section>
+        `,
+        css: `
+          & .specialists-showcase {
+            display: grid;
+            gap: 1.4rem;
+          }
+          & .eyebrow {
+            display: inline-block;
+            font-size: 0.72rem;
+            letter-spacing: 0.35em;
+            text-transform: uppercase;
+            color: #5f8e88;
+            margin-bottom: 1rem;
+          }
+          & h2 {
+            margin: 0;
+            max-width: 18ch;
+            font-size: clamp(1.9rem, 4vw, 3rem);
+            line-height: 1.02;
+            color: #0f2d3f;
+          }
+          & .specialists-showcase__grid {
+            display: grid;
+            gap: 1rem;
+          }
+          @media (min-width: 920px) {
+            & .specialists-showcase__grid {
+              grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+          }
+          & article {
+            border: 1px solid rgba(15, 59, 87, 0.08);
+            border-radius: 1.6rem;
+            overflow: hidden;
+            background: rgba(255,255,255,0.94);
+            box-shadow: 0 18px 50px rgba(15, 59, 87, 0.05);
+          }
+          & article img {
+            width: 100%;
+            height: 15rem;
+            object-fit: cover;
+            display: block;
+          }
+          & article strong,
+          & article p {
+            display: block;
+            padding-left: 1.35rem;
+            padding-right: 1.35rem;
+          }
+          & article strong {
+            padding-top: 1.1rem;
+            font-size: 1.06rem;
+            color: #0f2d3f;
+          }
+          & article p {
+            margin: 0.8rem 0 0;
+            font-size: 0.95rem;
+            line-height: 1.8;
+            color: #5b6978;
+          }
+        `,
+      },
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      pageId: healthPrimeHomePage.id,
+      scope: 'page',
+      type: 'custom_html',
+      variant: 'testimonials-medical',
+      position: 6,
+      isVisible: true,
+      settings: { surface: 'raw' },
+      content: {
+        html: `
+          <section class="testimonials-medical">
+            <div class="testimonials-medical__copy">
+              <span class="eyebrow">Reputación</span>
+              <h2>La confianza también se diseña.</h2>
+            </div>
+            <div class="testimonials-medical__stack">
+              <blockquote>
+                <p>“El sitio transmite orden, profesionalismo y una sensación inmediata de confianza.”</p>
+                <footer>Cliente ideal de clínica</footer>
+              </blockquote>
+              <blockquote>
+                <p>“Se siente moderno, premium y adaptable sin perder el tono humano que necesitamos en salud.”</p>
+                <footer>Demo comercial</footer>
+              </blockquote>
+            </div>
+          </section>
+        `,
+        css: `
+          & .testimonials-medical {
+            display: grid;
+            gap: 1.4rem;
+            border-radius: 2rem;
+            padding: clamp(1.5rem, 3vw, 2.4rem);
+            background: #0f2d3f;
+            color: #f8fbfc;
+            box-shadow: 0 24px 80px rgba(15, 59, 87, 0.18);
+          }
+          @media (min-width: 900px) {
+            & .testimonials-medical {
+              grid-template-columns: 0.9fr 1.1fr;
+            }
+          }
+          & .eyebrow {
+            display: inline-block;
+            font-size: 0.72rem;
+            letter-spacing: 0.34em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.6);
+            margin-bottom: 1rem;
+          }
+          & h2 {
+            margin: 0;
+            font-size: clamp(2rem, 4vw, 3.1rem);
+            line-height: 1.02;
+            color: #ffffff;
+          }
+          & .testimonials-medical__stack {
+            display: grid;
+            gap: 1rem;
+          }
+          & blockquote {
+            margin: 0;
+            border-radius: 1.5rem;
+            padding: 1.4rem;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.08);
+          }
+          & p {
+            margin: 0;
+            font-size: 1rem;
+            line-height: 1.9;
+          }
+          & footer {
+            margin-top: 0.9rem;
+            font-size: 0.72rem;
+            letter-spacing: 0.28em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.52);
+          }
+        `,
+      },
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      pageId: healthPrimeHomePage.id,
+      scope: 'page',
+      type: 'custom_html',
+      variant: 'insurance-or-process',
+      position: 7,
+      isVisible: true,
+      settings: { surface: 'raw' },
+      content: {
+        html: `
+          <section class="care-process">
+            <article>
+              <span class="step">01</span>
+              <strong>Consulta inicial</strong>
+              <p>Explica con claridad cómo empieza el proceso de atención.</p>
+            </article>
+            <article>
+              <span class="step">02</span>
+              <strong>Evaluación y plan</strong>
+              <p>Ideal para procedimientos, seguimiento clínico o revisiones preventivas.</p>
+            </article>
+            <article>
+              <span class="step">03</span>
+              <strong>Seguimiento</strong>
+              <p>Comunica profesionalismo, continuidad y una operación bien organizada.</p>
+            </article>
+          </section>
+        `,
+        css: `
+          & .care-process {
+            display: grid;
+            gap: 1rem;
+          }
+          @media (min-width: 860px) {
+            & .care-process {
+              grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+          }
+          & article {
+            border: 1px solid rgba(15, 59, 87, 0.08);
+            border-radius: 1.7rem;
+            padding: 1.5rem;
+            background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(242,248,247,0.88));
+            box-shadow: 0 18px 50px rgba(15, 59, 87, 0.06);
+          }
+          & .step {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 3rem;
+            height: 3rem;
+            border-radius: 999px;
+            background: rgba(107,170,155,0.14);
+            color: #0f3b57;
+            font-size: 0.92rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+          }
+          & strong {
+            display: block;
+            margin-top: 1rem;
+            font-size: 1.08rem;
+            color: #0f2d3f;
+          }
+          & p {
+            margin: 0.8rem 0 0;
+            font-size: 0.96rem;
+            line-height: 1.8;
+            color: #5b6978;
+          }
+        `,
+      },
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      pageId: healthPrimeHomePage.id,
+      scope: 'page',
+      type: 'custom_html',
+      variant: 'contact-cta-clinic',
+      position: 8,
+      isVisible: true,
+      settings: { surface: 'raw' },
+      content: {
+        html: `
+          <section class="contact-cta-clinic">
+            <div class="contact-cta-clinic__copy">
+              <div>
+                <span class="eyebrow">Conversión</span>
+                <h2>Convierte este demo en clínica, odontología o veterinaria cambiando solo contenido, imágenes y tono.</h2>
+              </div>
+              <div class="contact-cta-clinic__actions">
+                <a href="/contacto" class="primary-link">Ir a contacto</a>
+                <a href="/servicios" class="secondary-link">Explorar servicios</a>
+              </div>
+            </div>
+            <div class="contact-cta-clinic__visual">
+              <img src="{{asset:contact-ambient}}" alt="Recepción clínica moderna" />
+            </div>
+          </section>
+        `,
+        css: `
+          & .contact-cta-clinic {
+            display: grid;
+            gap: 1.4rem;
+            border: 1px solid rgba(15,59,87,0.08);
+            border-radius: 2rem;
+            padding: clamp(1.5rem, 3vw, 2.3rem);
+            background: linear-gradient(135deg, rgba(255,255,255,0.96), rgba(241,248,247,0.9));
+            box-shadow: 0 18px 50px rgba(15, 59, 87, 0.06);
+          }
+          @media (min-width: 900px) {
+            & .contact-cta-clinic {
+              grid-template-columns: 1fr 22rem;
+              align-items: center;
+            }
+          }
+          & .eyebrow {
+            display: inline-block;
+            font-size: 0.72rem;
+            letter-spacing: 0.35em;
+            text-transform: uppercase;
+            color: #5f8e88;
+            margin-bottom: 1rem;
+          }
+          & h2 {
+            margin: 0;
+            max-width: 18ch;
+            font-size: clamp(1.9rem, 4vw, 3rem);
+            line-height: 1.02;
+            color: #0f2d3f;
+          }
+          & .contact-cta-clinic__actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.85rem;
+            margin-top: 1.5rem;
+          }
+          & .contact-cta-clinic__visual {
+            overflow: hidden;
+            border-radius: 1.6rem;
+            min-height: 18rem;
+            background: #edf4f6;
+          }
+          & .contact-cta-clinic__visual img {
+            width: 100%;
+            height: 100%;
+            display: block;
+            object-fit: cover;
+          }
+          & .primary-link,
+          & .secondary-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 3rem;
+            padding: 0 1.35rem;
+            border-radius: 999px;
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 600;
+          }
+          & .primary-link {
+            background: #0f3b57;
+            color: #ffffff;
+          }
+          & .secondary-link {
+            border: 1px solid rgba(15,59,87,0.12);
+            background: rgba(255,255,255,0.76);
+            color: #1f3c4d;
+          }
+        `,
+      },
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      pageId: healthPrimeServicesPage.id,
+      scope: 'page',
+      type: 'custom_html',
+      variant: 'services-note-medical',
+      position: 1,
+      isVisible: true,
+      settings: {},
+      content: {
+        html: `
+          <div class="services-note-medical">
+            <div class="services-note-medical__lead">
+              <span class="eyebrow">Servicios</span>
+              <h2>Desde atención general hasta especialidades, el contenido puede adaptarse sin rediseñar todo el sitio.</h2>
+            </div>
+            <div class="services-note-medical__copy">
+              <p>Este demo está pensado para vender claridad, experiencia y orden operativo. La misma estructura puede hablar de medicina, odontología o veterinaria solo cambiando bloques, imágenes y copy.</p>
+            </div>
+          </div>
+        `,
+        css: `
+          & .services-note-medical {
+            display: grid;
+            gap: 1.5rem;
+            padding: 0.5rem 0;
+          }
+          @media (min-width: 900px) {
+            & .services-note-medical {
+              grid-template-columns: 1fr 1fr;
+            }
+          }
+          & .eyebrow {
+            display: inline-block;
+            font-size: 0.7rem;
+            letter-spacing: 0.38em;
+            text-transform: uppercase;
+            color: #5f8e88;
+            margin-bottom: 1rem;
+          }
+          & h2 {
+            margin: 0;
+            font-size: clamp(1.9rem, 4vw, 3rem);
+            line-height: 1.02;
+            color: #0f2d3f;
+          }
+          & p {
+            margin: 0;
+            font-size: 1rem;
+            line-height: 1.9;
+            color: #5b6978;
+          }
+        `,
+      },
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      pageId: healthPrimeContactPage.id,
+      scope: 'page',
+      type: 'custom_html',
+      variant: 'contact-note-clinic',
+      position: 1,
+      isVisible: true,
+      settings: {},
+      content: {
+        html: `
+          <div class="contact-note-clinic">
+            <span class="eyebrow">Atención</span>
+            <h2>Un contacto claro también comunica profesionalismo y confianza.</h2>
+            <p>Usa este bloque para reforzar tu propuesta de atención, horarios, cobertura, especialidades o cualquier mensaje estratégico que deba verse antes del formulario.</p>
+          </div>
+        `,
+        css: `
+          & .contact-note-clinic {
+            padding: 0.5rem 0;
+          }
+          & .eyebrow {
+            display: inline-block;
+            font-size: 0.7rem;
+            letter-spacing: 0.38em;
+            text-transform: uppercase;
+            color: #5f8e88;
+            margin-bottom: 1rem;
+          }
+          & h2 {
+            margin: 0 0 1rem;
+            font-size: clamp(1.8rem, 4vw, 2.8rem);
+            line-height: 1.02;
+            color: #0f2d3f;
+          }
+          & p {
+            margin: 0;
+            max-width: 58ch;
+            font-size: 1rem;
+            line-height: 1.9;
+            color: #5b6978;
+          }
+        `,
+      },
+    },
+  ]);
+
+  await serviceRepository.save([
+    {
+      tenantId: healthPrimeTenant.id,
+      name: 'Consulta general',
+      description: 'Evaluación inicial, orientación clínica y control preventivo.',
+      durationMinutes: 45,
+      price: 35,
+      isActive: true,
+      category: 'general',
+      color: '#0F3B57',
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      name: 'Atención especializada',
+      description: 'Ideal para odontología, procedimientos o especialidades clínicas.',
+      durationMinutes: 60,
+      price: 55,
+      isActive: true,
+      category: 'specialty',
+      color: '#2E6F88',
+    },
+    {
+      tenantId: healthPrimeTenant.id,
+      name: 'Plan preventivo',
+      description: 'Seguimiento, revisiones periódicas y continuidad del cuidado.',
+      durationMinutes: 30,
+      price: 28,
+      isActive: true,
+      category: 'preventive',
+      color: '#6BAA9B',
+    },
+  ]);
+
   const adminEmail = 'admin@quicklysites.local';
   let adminUser = await userRepository.findOne({ where: { email: adminEmail } });
   if (!adminUser) {
@@ -956,6 +1963,22 @@ async function main() {
       tenantId: tenant.id,
       roleId: adminRole.id,
       role: adminRole.code,
+      isActive: true,
+      allowedModules: null,
+      permissions: null,
+    });
+  }
+
+  const existingHealthPrimeMembership = await membershipRepository.findOne({
+    where: { userId: adminUser.id, tenantId: healthPrimeTenant.id },
+  });
+
+  if (!existingHealthPrimeMembership) {
+    await membershipRepository.save({
+      userId: adminUser.id,
+      tenantId: healthPrimeTenant.id,
+      roleId: healthPrimeAdminRole.id,
+      role: healthPrimeAdminRole.code,
       isActive: true,
       allowedModules: null,
       permissions: null,
@@ -991,6 +2014,22 @@ async function main() {
       tenantId: tenant.id,
       roleId: adminRole.id,
       role: adminRole.code,
+      isActive: true,
+      allowedModules: null,
+      permissions: null,
+    });
+  }
+
+  const platformHealthPrimeMembership = await membershipRepository.findOne({
+    where: { userId: platformUser.id, tenantId: healthPrimeTenant.id },
+  });
+
+  if (!platformHealthPrimeMembership) {
+    await membershipRepository.save({
+      userId: platformUser.id,
+      tenantId: healthPrimeTenant.id,
+      roleId: healthPrimeAdminRole.id,
+      role: healthPrimeAdminRole.code,
       isActive: true,
       allowedModules: null,
       permissions: null,

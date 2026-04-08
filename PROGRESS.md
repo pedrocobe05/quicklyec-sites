@@ -347,7 +347,7 @@ Razón:
 ## Notas operativas
 
 - BD actual: `localhost:4533 / quicklysites / postgres / 2412`
-- tenant demo: `paolamendozanails.quicklysites.local`
+- tenant demo: `paolamendozanails.quicklyecsites.com`
 - admin demo: `admin@quicklysites.local`
 - password demo: `Admin123*`
 
