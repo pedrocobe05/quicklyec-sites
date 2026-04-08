@@ -14,4 +14,4 @@ const configService = new ConfigService({
   },
 });
 
-export default new DataSource(buildTypeOrmOptions(configService));
+export default new DataSource(buildTypeOrmOptions(configService, { includeMigrations: true }));

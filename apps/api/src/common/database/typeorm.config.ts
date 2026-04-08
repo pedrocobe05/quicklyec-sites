@@ -26,7 +26,16 @@ import {
   SubscriptionPlanEntity,
 } from '../entities';
 
-export function buildTypeOrmOptions(configService: ConfigService): DataSourceOptions {
+type BuildTypeOrmOptionsOptions = {
+  includeMigrations?: boolean;
+};
+
+export function buildTypeOrmOptions(
+  configService: ConfigService,
+  options: BuildTypeOrmOptionsOptions = {},
+): DataSourceOptions {
+  const { includeMigrations = false } = options;
+
   return {
     type: 'postgres',
     host: configService.get<string>('database.host'),
@@ -59,7 +68,7 @@ export function buildTypeOrmOptions(configService: ConfigService): DataSourceOpt
       RefreshTokenEntity,
       SubscriptionPlanEntity,
     ],
-    migrations: ['src/database/migrations/*.ts'],
+    migrations: includeMigrations ? ['src/database/migrations/*.ts'] : [],
     synchronize: false,
   };
 }
