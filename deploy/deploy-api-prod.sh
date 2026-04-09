@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NGINX_CONF_SRC="$ROOT_DIR/deploy/nginx/api.quicklyecsites.com.conf"
 NGINX_CONF_DST="/etc/nginx/conf.d/api.quicklyecsites.com.conf"
+NGINX_SNIPPET_SRC="$ROOT_DIR/deploy/nginx/quickly-sites-api-proxy.conf"
+NGINX_SNIPPET_DST="/etc/nginx/snippets/quickly-sites-api-proxy.conf"
 PM2_APP_NAME="${PM2_APP_NAME:-quicklyecsites-api}"
 NODE_HEAP_MB="${NODE_HEAP_MB:-1024}"
 API_PORT="${API_PORT:-4001}"
@@ -30,6 +32,11 @@ require_cmd curl
 
 if [[ ! -f "$NGINX_CONF_SRC" ]]; then
   log "Nginx source conf not found: $NGINX_CONF_SRC"
+  exit 1
+fi
+
+if [[ ! -f "$NGINX_SNIPPET_SRC" ]]; then
+  log "Nginx proxy snippet not found: $NGINX_SNIPPET_SRC"
   exit 1
 fi
 
@@ -67,6 +74,14 @@ else
   log "Nginx conf is already up to date"
 fi
 
+if [[ ! -f "$NGINX_SNIPPET_DST" ]] || ! cmp -s "$NGINX_SNIPPET_SRC" "$NGINX_SNIPPET_DST"; then
+  log "Updating Nginx proxy snippet at $NGINX_SNIPPET_DST"
+  sudo mkdir -p "$(dirname "$NGINX_SNIPPET_DST")"
+  sudo install -m 0644 "$NGINX_SNIPPET_SRC" "$NGINX_SNIPPET_DST"
+else
+  log "Nginx proxy snippet is already up to date"
+fi
+
 log "Testing Nginx configuration"
 sudo nginx -t
 
@@ -102,7 +117,7 @@ log "Saving PM2 process list"
 pm2 save
 
 log "Restarting Nginx"
-sudo systemctl restart nginx
+sudo systemctl reload nginx
 
 log "Smoke test"
 for attempt in {1..15}; do

@@ -1,6 +1,7 @@
 import { Controller, Get, Headers, Post, Query, Body, Res } from '@nestjs/common';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { minutes, Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 import { AppointmentsService } from 'src/modules/appointments/appointments.service';
 import { CreatePublicAppointmentDto } from 'src/modules/appointments/dto/create-public-appointment.dto';
@@ -35,6 +36,7 @@ export class PublicController {
   }
 
   @Get('availability')
+  @Throttle({ default: { limit: 30, ttl: minutes(1) } })
   async getAvailability(
     @Headers('host') headerHost: string,
     @Query('host') queryHost: string | undefined,
@@ -60,6 +62,7 @@ export class PublicController {
 
   @Post('appointments')
   @Idempotent()
+  @Throttle({ default: { limit: 5, ttl: minutes(10) } })
   async createAppointment(
     @Headers('host') headerHost: string,
     @Query('host') queryHost: string | undefined,
