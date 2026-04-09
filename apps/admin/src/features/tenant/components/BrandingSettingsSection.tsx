@@ -29,6 +29,7 @@ interface BrandingSettingsSectionProps {
     contactEmail?: string | null;
     contactPhone?: string | null;
     whatsappNumber?: string | null;
+    contactAddress?: string | null;
   } | null;
   onUploadBrandingAsset?: (field: 'logo' | 'favicon', file: File) => void;
   onSubmitBranding: (event: FormEvent<HTMLFormElement>) => void;
@@ -148,6 +149,9 @@ export function BrandingSettingsSection({
               <Input name="whatsappNumber" defaultValue={settings?.whatsappNumber ?? ''} placeholder="WhatsApp" />
             </FormField>
           </div>
+          <FormField label="Dirección">
+            <Input name="contactAddress" defaultValue={settings?.contactAddress ?? ''} placeholder="Dirección del negocio" />
+          </FormField>
           <label className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
             <Checkbox type="checkbox" name="siteIndexingEnabled" defaultChecked={settings?.siteIndexingEnabled ?? true} />
             Permitir indexación del sitio

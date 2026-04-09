@@ -102,6 +102,7 @@ interface TenantProfileResponse {
     contactEmail?: string | null;
     contactPhone?: string | null;
     whatsappNumber?: string | null;
+    contactAddress?: string | null;
     mailConfig?: {
       host?: string;
       port?: number;
@@ -234,6 +235,7 @@ interface ScheduleBlockRecord {
 interface AppointmentRecord {
   id: string;
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show';
+  createdAt?: string;
   startDateTime: string;
   notes?: string | null;
   internalNotes?: string | null;
@@ -325,6 +327,27 @@ function toIsoDateTime(value: string) {
   return parsed.toISOString();
 }
 
+function formatRelativeUpdate(value: Date | null) {
+  if (!value) {
+    return 'Sin sincronizar todavía';
+  }
+
+  const seconds = Math.max(0, Math.round((Date.now() - value.getTime()) / 1000));
+  if (seconds < 10) {
+    return 'Actualizado hace unos segundos';
+  }
+  if (seconds < 60) {
+    return `Actualizado hace ${seconds}s`;
+  }
+
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) {
+    return `Actualizado hace ${minutes} min`;
+  }
+
+  return `Actualizado ${value.toLocaleString()}`;
+}
+
 function normalizeAssetName(name: string) {
   return name
     .normalize('NFD')
@@ -393,6 +416,8 @@ export function TenantDetailPage() {
   const [services, setServices] = useState<ServiceRecord[]>([]);
   const [staff, setStaff] = useState<StaffRecord[]>([]);
   const [appointments, setAppointments] = useState<AppointmentRecord[]>([]);
+  const [appointmentsRefreshing, setAppointmentsRefreshing] = useState(false);
+  const [appointmentsLastUpdatedAt, setAppointmentsLastUpdatedAt] = useState<Date | null>(null);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [availabilityRules, setAvailabilityRules] = useState<AvailabilityRuleRecord[]>([]);
   const [scheduleBlocks, setScheduleBlocks] = useState<ScheduleBlockRecord[]>([]);
@@ -418,6 +443,7 @@ export function TenantDetailPage() {
   const [agendaStaffFilter, setAgendaStaffFilter] = useState('');
   const [appointmentsSearch, setAppointmentsSearch] = useState('');
   const [appointmentsPage, setAppointmentsPage] = useState(1);
+  const [appointmentsSort, setAppointmentsSort] = useState<'nearest' | 'created_desc'>('nearest');
   const [customersSearch, setCustomersSearch] = useState('');
   const [customersPage, setCustomersPage] = useState(1);
 
@@ -595,16 +621,30 @@ export function TenantDetailPage() {
 
   const filteredAppointments = useMemo(() => {
     const query = appointmentsSearch.trim().toLowerCase();
-    if (!query) return appointments;
-    return appointments.filter((appointment) =>
+    const matchingAppointments = !query
+      ? appointments
+      : appointments.filter((appointment) =>
       [
         appointment.customer?.fullName ?? '',
         appointment.service?.name ?? '',
+        appointment.staff?.name ?? '',
         appointmentStatusLabel(appointment.status),
         appointment.notes ?? '',
       ].some((value) => String(value).toLowerCase().includes(query)),
     );
-  }, [appointments, appointmentsSearch]);
+
+    return [...matchingAppointments].sort((left, right) => {
+      if (appointmentsSort === 'created_desc') {
+        const leftCreated = new Date(left.createdAt ?? 0).getTime();
+        const rightCreated = new Date(right.createdAt ?? 0).getTime();
+        return rightCreated - leftCreated || new Date(left.startDateTime).getTime() - new Date(right.startDateTime).getTime();
+      }
+
+      const leftStart = new Date(left.startDateTime).getTime();
+      const rightStart = new Date(right.startDateTime).getTime();
+      return leftStart - rightStart || new Date(right.createdAt ?? 0).getTime() - new Date(left.createdAt ?? 0).getTime();
+    });
+  }, [appointments, appointmentsSearch, appointmentsSort]);
   const appointmentsPageCount = Math.max(1, Math.ceil(filteredAppointments.length / tablePageSize));
   const visibleAppointments = filteredAppointments.slice(
     (Math.min(appointmentsPage, appointmentsPageCount) - 1) * tablePageSize,
@@ -649,7 +689,7 @@ export function TenantDetailPage() {
 
   useEffect(() => {
     setAppointmentsPage(1);
-  }, [appointmentsSearch]);
+  }, [appointmentsSearch, appointmentsSort]);
 
   useEffect(() => {
     setCustomersPage(1);
@@ -724,6 +764,7 @@ export function TenantDetailPage() {
       })),
     );
     setAppointments(appointmentsData as AppointmentRecord[]);
+    setAppointmentsLastUpdatedAt(new Date());
     setCustomers(customersData as CustomerRecord[]);
     setAvailabilityRules(rulesData as AvailabilityRuleRecord[]);
     setScheduleBlocks(blocksData as ScheduleBlockRecord[]);
@@ -734,6 +775,28 @@ export function TenantDetailPage() {
       setSections(sectionsData as SectionRecord[]);
     } else {
       setSections([]);
+    }
+  }
+
+  async function refreshAppointments(options?: { silent?: boolean }) {
+    if (!token || !tenantId) return;
+
+    if (!options?.silent) {
+      setAppointmentsRefreshing(true);
+    }
+
+    try {
+      const appointmentsData = await getAppointments(token, tenantId);
+      setAppointments(appointmentsData as AppointmentRecord[]);
+      setAppointmentsLastUpdatedAt(new Date());
+    } catch (err) {
+      if (!options?.silent) {
+        notify((err as Error).message, 'error');
+      }
+    } finally {
+      if (!options?.silent) {
+        setAppointmentsRefreshing(false);
+      }
     }
   }
 
@@ -758,6 +821,22 @@ export function TenantDetailPage() {
       .then((data) => setSections(data as SectionRecord[]))
       .catch((err: Error) => notify(err.message, 'error'));
   }, [selectedPage?.id, tenantId, token]);
+
+  useEffect(() => {
+    if (activeTab !== 'appointments' || !token || !tenantId) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+
+      refreshAppointments({ silent: true }).catch(() => undefined);
+    }, 45_000);
+
+    return () => window.clearInterval(intervalId);
+  }, [activeTab, tenantId, token]);
 
   async function wrapAction(
     key: string,
@@ -1343,6 +1422,7 @@ export function TenantDetailPage() {
                     contactEmail: String(form.get('contactEmail') ?? ''),
                     contactPhone: String(form.get('contactPhone') ?? ''),
                     whatsappNumber: String(form.get('whatsappNumber') ?? ''),
+                    contactAddress: String(form.get('contactAddress') ?? ''),
                     siteIndexingEnabled: form.get('siteIndexingEnabled') === 'on',
                   });
                   await loadData();
@@ -1890,6 +1970,28 @@ export function TenantDetailPage() {
                   searchValue={appointmentsSearch}
                   onSearchChange={setAppointmentsSearch}
                   searchPlaceholder="Buscar por cliente, servicio o estado..."
+                  actions={(
+                    <>
+                      <Select
+                        value={appointmentsSort}
+                        onChange={(event) => setAppointmentsSort(event.target.value as 'nearest' | 'created_desc')}
+                        className="min-w-[220px]"
+                      >
+                        <option value="nearest">Ordenar por cita más cercana</option>
+                        <option value="created_desc">Ordenar por creación más reciente</option>
+                      </Select>
+                      <span className="text-xs text-slate-500">{formatRelativeUpdate(appointmentsLastUpdatedAt)}</span>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        isLoading={appointmentsRefreshing}
+                        loadingLabel="Actualizando..."
+                        onClick={() => refreshAppointments()}
+                      >
+                        Actualizar
+                      </Button>
+                    </>
+                  )}
                 />
                 <DataTable>
                   <thead className="bg-slate-50 text-slate-500">

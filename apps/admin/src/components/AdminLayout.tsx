@@ -449,10 +449,7 @@ export function AdminLayout({
               <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/80 border-r-transparent" />
             </span>
             <div className="min-w-0">
-              <p className="text-sm font-semibold tracking-[0.08em] text-white">Actualizando</p>
-              <p className="text-xs text-white/70">
-                Procesando cambios y refrescando datos.
-              </p>
+              <p className="text-sm font-semibold tracking-[0.08em] text-white">Actualizando...</p>
             </div>
           </div>
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">

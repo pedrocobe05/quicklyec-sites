@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
+import { Idempotent } from 'src/core/decorators/idempotent.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/jwt-auth.guard';
 import { TenantModuleAccess } from 'src/modules/auth/tenant-module-access.decorator';
 import { TenantMembershipGuard } from 'src/modules/auth/tenant-membership.guard';
@@ -51,6 +52,7 @@ export class SiteController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @TenantModuleAccess('site')
   @Post('pages')
+  @Idempotent()
   createPage(@Body() input: CreatePageDto) {
     return this.siteService.createPage(input);
   }
@@ -59,6 +61,7 @@ export class SiteController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @TenantModuleAccess('site')
   @Patch('pages/:pageId')
+  @Idempotent()
   updatePage(@Param('pageId') pageId: string, @Query('tenantId') tenantId: string, @Body() input: UpdatePageDto) {
     return this.siteService.updatePage(pageId, tenantId, input);
   }
@@ -67,6 +70,7 @@ export class SiteController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @TenantModuleAccess('site')
   @Delete('pages/:pageId')
+  @Idempotent()
   removePage(@Param('pageId') pageId: string, @Query('tenantId') tenantId: string) {
     return this.siteService.removePage(pageId, tenantId);
   }
@@ -87,6 +91,7 @@ export class SiteController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @TenantModuleAccess('site')
   @Post('sections')
+  @Idempotent()
   createSection(@Body() input: CreateSectionDto) {
     return this.siteService.createSection(input);
   }
@@ -95,6 +100,7 @@ export class SiteController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @TenantModuleAccess('site')
   @Patch('sections/:sectionId')
+  @Idempotent()
   updateSection(
     @Param('sectionId') sectionId: string,
     @Query('tenantId') tenantId: string,
@@ -107,6 +113,7 @@ export class SiteController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @TenantModuleAccess('site')
   @Delete('sections/:sectionId')
+  @Idempotent()
   removeSection(@Param('sectionId') sectionId: string, @Query('tenantId') tenantId: string) {
     return this.siteService.removeSection(sectionId, tenantId);
   }

@@ -20,3 +20,4 @@ export * from './tenant-membership.entity';
 export * from './tenant-role.entity';
 export * from './refresh-token.entity';
 export * from './subscription-plan.entity';
+export * from '../../core/idempotency/entities/idempotency-key.entity';

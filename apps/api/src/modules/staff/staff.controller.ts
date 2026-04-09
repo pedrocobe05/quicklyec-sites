@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Idempotent } from 'src/core/decorators/idempotent.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/jwt-auth.guard';
 import { TenantModuleAccess } from 'src/modules/auth/tenant-module-access.decorator';
 import { TenantMembershipGuard } from 'src/modules/auth/tenant-membership.guard';
@@ -23,6 +24,7 @@ export class StaffController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @Post()
+  @Idempotent()
   create(@Body() input: CreateStaffDto) {
     return this.staffService.create(input);
   }
@@ -30,6 +32,7 @@ export class StaffController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @Patch(':staffId')
+  @Idempotent()
   update(
     @Param('staffId') staffId: string,
     @Query('tenantId') tenantId: string,
@@ -41,6 +44,7 @@ export class StaffController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @Delete(':staffId')
+  @Idempotent()
   remove(@Param('staffId') staffId: string, @Query('tenantId') tenantId: string) {
     return this.staffService.remove(staffId, tenantId);
   }

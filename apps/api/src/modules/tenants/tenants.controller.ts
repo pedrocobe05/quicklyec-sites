@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Idempotent } from 'src/core/decorators/idempotent.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/jwt-auth.guard';
 import { TenantModuleAccess } from 'src/modules/auth/tenant-module-access.decorator';
 import { TenantMembershipGuard } from 'src/modules/auth/tenant-membership.guard';
@@ -39,6 +40,7 @@ export class TenantsController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @TenantModuleAccess('branding')
   @Patch('branding')
+  @Idempotent()
   updateBranding(@Query('tenantId') tenantId: string, @Body() input: UpdateTenantBrandingDto) {
     return this.tenantsService.updateTenantBranding(tenantId, input);
   }
@@ -47,6 +49,7 @@ export class TenantsController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @TenantModuleAccess('settings')
   @Patch('settings')
+  @Idempotent()
   updateSettings(@Query('tenantId') tenantId: string, @Body() input: UpdateTenantSettingsDto) {
     return this.tenantsService.updateTenantSettings(tenantId, input);
   }
@@ -55,6 +58,7 @@ export class TenantsController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @TenantModuleAccess('settings')
   @Post('test-email')
+  @Idempotent()
   sendTestEmail(@Query('tenantId') tenantId: string, @Body() input: SendTestEmailDto) {
     return this.tenantsService.sendTestEmail(tenantId, input.to);
   }
@@ -63,6 +67,7 @@ export class TenantsController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @TenantModuleAccess('domains')
   @Post('domains')
+  @Idempotent()
   createDomain(@Body() input: CreateTenantDomainDto) {
     return this.tenantsService.createTenantDomain(input);
   }
@@ -71,6 +76,7 @@ export class TenantsController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @TenantModuleAccess('domains')
   @Patch('domains/:domainId')
+  @Idempotent()
   updateDomain(@Param('domainId') domainId: string, @Query('tenantId') tenantId: string, @Body() input: UpdateTenantDomainDto) {
     return this.tenantsService.updateTenantDomain(domainId, tenantId, input);
   }
@@ -79,6 +85,7 @@ export class TenantsController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @TenantModuleAccess('domains')
   @Delete('domains/:domainId')
+  @Idempotent()
   removeDomain(@Param('domainId') domainId: string, @Query('tenantId') tenantId: string) {
     return this.tenantsService.removeTenantDomain(domainId, tenantId);
   }
@@ -95,6 +102,7 @@ export class TenantsController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @TenantModuleAccess('users')
   @Post('memberships')
+  @Idempotent()
   createMembership(@Query('tenantId') tenantId: string, @Body() input: CreateTenantMembershipDto) {
     return this.tenantsService.createMembership(tenantId, input);
   }
@@ -103,6 +111,7 @@ export class TenantsController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @TenantModuleAccess('users')
   @Patch('memberships/:membershipId')
+  @Idempotent()
   updateMembership(
     @Param('membershipId') membershipId: string,
     @Query('tenantId') tenantId: string,
@@ -115,6 +124,7 @@ export class TenantsController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @TenantModuleAccess('users')
   @Post('memberships/:membershipId/reset-password')
+  @Idempotent()
   resetMembershipPassword(
     @Param('membershipId') membershipId: string,
     @Query('tenantId') tenantId: string,
@@ -134,6 +144,7 @@ export class TenantsController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @TenantModuleAccess('roles')
   @Post('roles')
+  @Idempotent()
   createRole(@Query('tenantId') tenantId: string, @Body() input: CreateTenantRoleDto) {
     return this.tenantsService.createRole(tenantId, input);
   }
@@ -142,6 +153,7 @@ export class TenantsController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @TenantModuleAccess('roles')
   @Patch('roles/:roleId')
+  @Idempotent()
   updateRole(@Param('roleId') roleId: string, @Query('tenantId') tenantId: string, @Body() input: UpdateTenantRoleDto) {
     return this.tenantsService.updateRole(roleId, tenantId, input);
   }

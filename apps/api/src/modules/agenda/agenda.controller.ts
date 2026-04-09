@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Idempotent } from 'src/core/decorators/idempotent.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/jwt-auth.guard';
 import { TenantModuleAccess } from 'src/modules/auth/tenant-module-access.decorator';
 import { TenantMembershipGuard } from 'src/modules/auth/tenant-membership.guard';
@@ -23,11 +24,13 @@ export class AgendaController {
   }
 
   @Post('availability-rules')
+  @Idempotent()
   createAvailabilityRule(@Body() input: CreateAvailabilityRuleDto) {
     return this.agendaService.createAvailabilityRule(input);
   }
 
   @Patch('availability-rules/:ruleId')
+  @Idempotent()
   updateAvailabilityRule(
     @Param('ruleId') ruleId: string,
     @Query('tenantId') tenantId: string,
@@ -37,6 +40,7 @@ export class AgendaController {
   }
 
   @Delete('availability-rules/:ruleId')
+  @Idempotent()
   removeAvailabilityRule(@Param('ruleId') ruleId: string, @Query('tenantId') tenantId: string) {
     return this.agendaService.removeAvailabilityRule(ruleId, tenantId);
   }
@@ -47,11 +51,13 @@ export class AgendaController {
   }
 
   @Post('schedule-blocks')
+  @Idempotent()
   createScheduleBlock(@Body() input: CreateScheduleBlockDto) {
     return this.agendaService.createScheduleBlock(input);
   }
 
   @Patch('schedule-blocks/:blockId')
+  @Idempotent()
   updateScheduleBlock(
     @Param('blockId') blockId: string,
     @Query('tenantId') tenantId: string,
@@ -61,6 +67,7 @@ export class AgendaController {
   }
 
   @Delete('schedule-blocks/:blockId')
+  @Idempotent()
   removeScheduleBlock(@Param('blockId') blockId: string, @Query('tenantId') tenantId: string) {
     return this.agendaService.removeScheduleBlock(blockId, tenantId);
   }

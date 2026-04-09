@@ -95,6 +95,10 @@ export class MailService {
     recipientName?: string | null;
     serviceName: string;
     startDateTime: string;
+    staffName?: string | null;
+    contactPhone?: string | null;
+    contactAddress?: string | null;
+    staffPhotoUrl?: string | null;
   }) {
     const transporter = await this.createTransporter(input.tenantId);
     if (!transporter) return;
@@ -104,12 +108,75 @@ export class MailService {
       from: `"${theme.fromName}" <${theme.fromEmail}>`,
       to: input.to,
       subject: 'Recordatorio de cita',
-      text: `Hola ${input.recipientName ?? ''}\n\nTe recordamos tu cita para ${input.serviceName} el ${input.startDateTime}.`,
+      text:
+        `Hola ${input.recipientName ?? ''}\n\n` +
+        `Te recordamos tu cita para ${input.serviceName} el ${input.startDateTime}.` +
+        `${input.staffName ? ` Profesional asignado: ${input.staffName}.` : ''}` +
+        `${input.contactPhone ? ` Teléfono de contacto: ${input.contactPhone}.` : ''}` +
+        `${input.contactAddress ? ` Dirección: ${input.contactAddress}.` : ''}`,
       html: this.renderEmailTemplate({
         theme,
         title: 'Recordatorio de cita',
         intro: `Hola ${input.recipientName ?? ''}, te recordamos tu próxima cita.`,
-        body: `<p style="margin:0 0 10px 0;"><strong>Servicio:</strong> ${input.serviceName}</p><p style="margin:0;"><strong>Fecha:</strong> ${input.startDateTime}</p>`,
+        body: `
+          ${input.staffPhotoUrl ? `<p style="margin:0 0 16px 0;"><img src="${input.staffPhotoUrl}" alt="${input.staffName ?? 'Profesional asignado'}" style="width:84px;height:84px;border-radius:18px;object-fit:cover;border:1px solid rgba(15,23,42,0.08);" /></p>` : ''}
+          <p style="margin:0 0 10px 0;"><strong>Servicio:</strong> ${input.serviceName}</p>
+          ${input.staffName ? `<p style="margin:0 0 10px 0;"><strong>Profesional:</strong> ${input.staffName}</p>` : ''}
+          <p style="margin:0;"><strong>Fecha:</strong> ${input.startDateTime}</p>
+          ${input.contactPhone ? `<p style="margin:10px 0 0 0;"><strong>Teléfono:</strong> ${input.contactPhone}</p>` : ''}
+          ${input.contactAddress ? `<p style="margin:10px 0 0 0;"><strong>Dirección:</strong> ${input.contactAddress}</p>` : ''}
+        `,
+      }),
+    });
+  }
+
+  async sendAppointmentConfirmationEmail(input: {
+    to: string;
+    tenantId: string;
+    recipientName?: string | null;
+    serviceName: string;
+    startDateTime: string;
+    staffName?: string | null;
+    statusLabel?: string;
+    contactPhone?: string | null;
+    contactAddress?: string | null;
+    staffPhotoUrl?: string | null;
+  }) {
+    const transporter = await this.createTransporter(input.tenantId);
+    if (!transporter) return;
+
+    const theme = await this.resolveTheme(input.tenantId);
+    const statusLabel = input.statusLabel ?? 'Pendiente de gestión';
+
+    await transporter.sendMail({
+      from: `"${theme.fromName}" <${theme.fromEmail}>`,
+      to: input.to,
+      subject: 'Gracias por tu reserva',
+      text:
+        `Hola ${input.recipientName ?? ''}\n\n` +
+        `Tu reserva fue registrada correctamente.\n` +
+        `Servicio: ${input.serviceName}\n` +
+        `${input.staffName ? `Profesional: ${input.staffName}\n` : ''}` +
+        `Fecha: ${input.startDateTime}\n` +
+        `Estado: ${statusLabel}\n` +
+        `${input.contactPhone ? `Teléfono: ${input.contactPhone}\n` : ''}` +
+        `${input.contactAddress ? `Dirección: ${input.contactAddress}\n` : ''}\n` +
+        `Si necesitas cambiarla, contáctanos directamente.`,
+      html: this.renderEmailTemplate({
+        theme,
+        title: 'Gracias por tu reserva',
+        intro: `Hola ${input.recipientName ?? ''}, tu reserva fue registrada correctamente.`,
+        body: `
+          <p style="margin:0 0 10px 0;">Hemos recibido tu solicitud y la dejamos registrada en agenda.</p>
+          ${input.staffPhotoUrl ? `<p style="margin:0 0 16px 0;"><img src="${input.staffPhotoUrl}" alt="${input.staffName ?? 'Profesional asignado'}" style="width:84px;height:84px;border-radius:18px;object-fit:cover;border:1px solid rgba(15,23,42,0.08);" /></p>` : ''}
+          <p style="margin:0 0 10px 0;"><strong>Servicio:</strong> ${input.serviceName}</p>
+          ${input.staffName ? `<p style="margin:0 0 10px 0;"><strong>Profesional:</strong> ${input.staffName}</p>` : ''}
+          <p style="margin:0 0 10px 0;"><strong>Fecha:</strong> ${input.startDateTime}</p>
+          <p style="margin:0 0 10px 0;"><strong>Estado:</strong> ${statusLabel}</p>
+          ${input.contactPhone ? `<p style="margin:0 0 10px 0;"><strong>Teléfono:</strong> ${input.contactPhone}</p>` : ''}
+          ${input.contactAddress ? `<p style="margin:0 0 10px 0;"><strong>Dirección:</strong> ${input.contactAddress}</p>` : ''}
+          <p style="margin:0;">Si necesitas reprogramarla o tienes dudas, puedes responder este correo o comunicarte con el negocio.</p>
+        `,
       }),
     });
   }

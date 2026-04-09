@@ -46,6 +46,12 @@ export class UpdateTenantSettingsDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  contactAddress?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsBoolean()
   siteIndexingEnabled?: boolean;
 

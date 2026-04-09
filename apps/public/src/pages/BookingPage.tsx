@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useMemo, useRef, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { PageErrorState } from '../components/PageErrorState';
 import { PageLoadingShell } from '../components/PageLoadingShell';
@@ -34,9 +34,22 @@ export function BookingPage() {
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [selectedStaffId, setSelectedStaffId] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
-  const [slots, setSlots] = useState<{ start: string; end: string; staffId?: string | null; staffName?: string | null }[]>([]);
+  const [slots, setSlots] = useState<{
+    start: string;
+    end: string;
+    staffId?: string | null;
+    staffName?: string | null;
+    available: boolean;
+    unavailableReason?: string | null;
+  }[]>([]);
   const [selectedSlot, setSelectedSlot] = useState('');
   const [availabilityMessage, setAvailabilityMessage] = useState<string | null>(null);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [submittingReservation, setSubmittingReservation] = useState(false);
+  const [formResetVersion, setFormResetVersion] = useState(0);
+  const availabilityLockRef = useRef(false);
+  const submitLockRef = useRef(false);
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   const selectedService = useMemo(
     () => data?.services.find((service) => service.id === selectedServiceId) ?? null,
@@ -54,6 +67,21 @@ export function BookingPage() {
     () => slots.find((slot) => slot.start === selectedSlot) ?? null,
     [selectedSlot, slots],
   );
+
+  function resetBookingFlow() {
+    formRef.current?.reset();
+    availabilityLockRef.current = false;
+    submitLockRef.current = false;
+    setSelectedServiceId('');
+    setSelectedStaffId('');
+    setSelectedDate('');
+    setSelectedSlot('');
+    setSlots([]);
+    setAvailabilityMessage(null);
+    setAvailabilityLoading(false);
+    setSubmittingReservation(false);
+    setFormResetVersion((current) => current + 1);
+  }
 
   if (loading) {
     return (
@@ -85,17 +113,23 @@ export function BookingPage() {
   }
 
   async function loadAvailability() {
+    if (availabilityLockRef.current) {
+      return;
+    }
+
     if (!selectedServiceId || !selectedStaffId || !selectedDate) {
       setAvailabilityMessage('Selecciona servicio, profesional y fecha para consultar horarios.');
       return;
     }
 
     try {
-      const availableSlots = await getAvailability(selectedServiceId, selectedDate, selectedStaffId);
-      setSlots(availableSlots);
+      availabilityLockRef.current = true;
+      setAvailabilityLoading(true);
+      const nextSlots = await getAvailability(selectedServiceId, selectedDate, selectedStaffId);
+      setSlots(nextSlots);
       setSelectedSlot('');
       setAvailabilityMessage(
-        availableSlots.length === 0
+        nextSlots.filter((slot) => slot.available).length === 0
           ? 'No existen horarios disponibles para la fecha seleccionada. Prueba con otro día o profesional.'
           : null,
       );
@@ -104,11 +138,18 @@ export function BookingPage() {
       setSelectedSlot('');
       setAvailabilityMessage(null);
       emitPublicNotification(err instanceof Error ? err.message : 'No se pudo consultar la disponibilidad.', 'error');
+    } finally {
+      availabilityLockRef.current = false;
+      setAvailabilityLoading(false);
     }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitLockRef.current) {
+      return;
+    }
+
     const form = new FormData(event.currentTarget);
 
     if (!selectedServiceId || !selectedStaffId || !selectedSlot) {
@@ -117,6 +158,8 @@ export function BookingPage() {
     }
 
     try {
+      submitLockRef.current = true;
+      setSubmittingReservation(true);
       await createAppointment({
         serviceId: selectedServiceId,
         staffId: selectedSlotData?.staffId ?? selectedStaffId,
@@ -129,14 +172,20 @@ export function BookingPage() {
         notes: String(form.get('notes') ?? ''),
       });
 
+      resetBookingFlow();
       emitPublicNotification('Reserva creada correctamente.', 'success');
-      event.currentTarget.reset();
-      setSelectedDate('');
-      setSelectedSlot('');
-      setSlots([]);
-      setAvailabilityMessage(null);
     } catch (err) {
-      emitPublicNotification(err instanceof Error ? err.message : 'No se pudo crear la reserva.', 'error');
+      const message = err instanceof Error ? err.message : 'No se pudo crear la reserva.';
+      if (message.toLowerCase().includes('ya no está disponible')) {
+        setSelectedSlot('');
+        emitPublicNotification('Ese horario acaba de ocuparse. Actualizamos la agenda para que elijas otro.', 'info');
+        await loadAvailability();
+      } else {
+        emitPublicNotification(message, 'error');
+      }
+    } finally {
+      submitLockRef.current = false;
+      setSubmittingReservation(false);
     }
   }
 
@@ -152,7 +201,7 @@ export function BookingPage() {
             </p>
           </div>
 
-          <form className="mt-8 grid gap-8" onSubmit={handleSubmit}>
+          <form key={formResetVersion} ref={formRef} className="mt-8 grid gap-8" onSubmit={handleSubmit}>
             <section className="grid gap-4">
               <div className="flex items-center gap-3">
                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">1</span>
@@ -262,6 +311,8 @@ export function BookingPage() {
               <div className="grid gap-3 md:grid-cols-[0.7fr_0.3fr]">
                 <input
                   type="date"
+                  name={`booking-date-${formResetVersion}`}
+                  autoComplete="off"
                   className="rounded-2xl border border-slate-200 px-4 py-3"
                   value={selectedDate}
                   onChange={(event) => {
@@ -273,10 +324,11 @@ export function BookingPage() {
                 />
                 <button
                   type="button"
-                  className="rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white"
+                  className={`rounded-full px-5 py-3 text-sm font-semibold text-white transition ${availabilityLoading || !selectedServiceId || !selectedStaffId || !selectedDate ? 'cursor-not-allowed bg-slate-300' : 'bg-slate-900 hover:bg-slate-800'}`}
                   onClick={loadAvailability}
+                  disabled={availabilityLoading || !selectedServiceId || !selectedStaffId || !selectedDate}
                 >
-                  Consultar horarios
+                  {availabilityLoading ? 'Consultando...' : 'Consultar horarios'}
                 </button>
               </div>
 
@@ -284,21 +336,36 @@ export function BookingPage() {
                 <div className="grid gap-3 md:grid-cols-2">
                   {slots.map((slot) => {
                     const isSelected = selectedSlot === slot.start;
+                    const isDisabled = !slot.available;
                     return (
                       <label
                         key={slot.start}
-                        className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-4 transition ${isSelected ? 'border-[var(--primary)] bg-[color-mix(in_srgb,var(--primary) 10%,white)]' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}`}
+                        className={`flex items-center gap-3 rounded-2xl border p-4 transition ${
+                          isDisabled
+                            ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+                            : isSelected
+                              ? 'cursor-pointer border-[var(--primary)] bg-[color-mix(in_srgb,var(--primary) 10%,white)]'
+                              : 'cursor-pointer border-slate-200 bg-slate-50 hover:border-slate-300'
+                        }`}
                       >
                         <input
                           type="radio"
                           name="slot"
                           value={slot.start}
                           checked={isSelected}
+                          disabled={isDisabled}
                           onChange={(event) => setSelectedSlot(event.target.value)}
                         />
                         <div>
-                          <p className="font-medium text-slate-900">{formatDateTime(slot.start)}</p>
-                          <p className="text-sm text-slate-500">{slot.staffName ?? selectedStaff?.name ?? 'Profesional seleccionado'}</p>
+                          <p className={`font-medium ${isDisabled ? 'text-slate-500' : 'text-slate-900'}`}>{formatDateTime(slot.start)}</p>
+                          <p className={`text-sm ${isDisabled ? 'text-slate-400' : 'text-slate-500'}`}>
+                            {slot.staffName ?? selectedStaff?.name ?? 'Profesional seleccionado'}
+                          </p>
+                          {isDisabled && slot.unavailableReason ? (
+                            <p className="mt-1 text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                              {slot.unavailableReason}
+                            </p>
+                          ) : null}
                         </div>
                       </label>
                     );
@@ -328,8 +395,12 @@ export function BookingPage() {
               <input name="email" className="rounded-2xl border border-slate-200 px-4 py-3" placeholder="Correo electrónico" />
               <textarea name="notes" className="min-h-28 rounded-2xl border border-slate-200 px-4 py-3" placeholder="Notas adicionales" />
 
-              <button type="submit" className="rounded-full bg-[var(--primary)] px-5 py-3 text-sm font-semibold text-white">
-                Confirmar reserva
+              <button
+                type="submit"
+                className={`rounded-full px-5 py-3 text-sm font-semibold text-white transition ${submittingReservation || !selectedServiceId || !selectedStaffId || !selectedSlot ? 'cursor-not-allowed bg-[color-mix(in_srgb,var(--primary) 45%,#cbd5e1)]' : 'bg-[var(--primary)] hover:opacity-90'}`}
+                disabled={submittingReservation || !selectedServiceId || !selectedStaffId || !selectedSlot}
+              >
+                {submittingReservation ? 'Registrando...' : 'Confirmar reserva'}
               </button>
             </section>
           </form>

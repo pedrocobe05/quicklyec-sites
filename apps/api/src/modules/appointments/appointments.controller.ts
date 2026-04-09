@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Idempotent } from 'src/core/decorators/idempotent.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/jwt-auth.guard';
 import { TenantModuleAccess } from 'src/modules/auth/tenant-module-access.decorator';
 import { TenantMembershipGuard } from 'src/modules/auth/tenant-membership.guard';
@@ -24,6 +25,7 @@ export class AppointmentsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @Patch(':appointmentId/status')
+  @Idempotent()
   updateStatus(
     @Param('appointmentId') appointmentId: string,
     @Query('tenantId') tenantId: string,
@@ -35,6 +37,7 @@ export class AppointmentsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @Patch(':appointmentId')
+  @Idempotent()
   updateAppointment(
     @Param('appointmentId') appointmentId: string,
     @Query('tenantId') tenantId: string,
@@ -59,6 +62,7 @@ export class AppointmentsController {
   }
 
   @Post('public')
+  @Idempotent()
   createPublicAppointment(
     @Query('tenantId') tenantId: string,
     @Body() input: CreatePublicAppointmentDto,

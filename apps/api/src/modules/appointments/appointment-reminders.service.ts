@@ -2,7 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, LessThanOrEqual, Not, Repository } from 'typeorm';
-import { AppointmentEntity } from 'src/common/entities';
+import { AppointmentEntity, TenantSettingEntity } from 'src/common/entities';
+import { FilesService } from 'src/modules/files/files.service';
 import { MailService } from 'src/modules/mail/mail.service';
 import { getPlanMetadata, normalizePlanCode } from 'src/modules/tenants/tenant-access.constants';
 
@@ -13,6 +14,9 @@ export class AppointmentRemindersService {
   constructor(
     @InjectRepository(AppointmentEntity)
     private readonly appointmentsRepository: Repository<AppointmentEntity>,
+    @InjectRepository(TenantSettingEntity)
+    private readonly tenantSettingsRepository: Repository<TenantSettingEntity>,
+    private readonly filesService: FilesService,
     private readonly mailService: MailService,
   ) {}
 
@@ -44,11 +48,20 @@ export class AppointmentRemindersService {
           continue;
         }
 
+        const settings = await this.tenantSettingsRepository.findOne({
+          where: { tenantId: appointment.tenantId },
+        });
+        const staffPhotoUrl = await this.filesService.resolveStoredReference(appointment.staff?.avatarUrl, appointment.tenantId);
+
         await this.mailService.sendAppointmentReminderEmail({
           to: appointment.customer.email,
           tenantId: appointment.tenantId,
           recipientName: appointment.customer.fullName,
           serviceName: appointment.service?.name ?? 'tu cita',
+          staffName: appointment.staff?.name ?? null,
+          staffPhotoUrl,
+          contactPhone: settings?.contactPhone ?? null,
+          contactAddress: settings?.contactAddress ?? null,
           startDateTime: appointment.startDateTime.toLocaleString('es-EC', {
             dateStyle: 'full',
             timeStyle: 'short',

@@ -21,6 +21,20 @@ function resolveApiUrl() {
 const API_URL = resolveApiUrl();
 const DEFAULT_HOST = import.meta.env.VITE_SITE_HOST ?? 'paolamendozanails.quicklyecsites.com';
 
+function createIdempotencyKey() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function buildIdempotencyHeaders() {
+  return {
+    'Idempotency-Key': createIdempotencyKey(),
+  };
+}
+
 function extractErrorMessage(errorText: string, status: number) {
   const trimmed = errorText.trim();
   if (!trimmed) {
@@ -42,10 +56,10 @@ function extractErrorMessage(errorText: string, status: number) {
   return trimmed;
 }
 
-async function request<T>(path: string) {
+async function request<T>(path: string, options?: RequestInit) {
   let response: Response;
   try {
-    response = await fetch(`${API_URL}${path}`);
+    response = await fetch(`${API_URL}${path}`, options);
   } catch {
     throw new Error('No se pudo establecer conexión con el servidor.');
   }
@@ -89,29 +103,26 @@ export function getSiteConfig(slug = '/') {
 export function getAvailability(serviceId: string, date: string, staffId?: string) {
   const host = resolveCurrentHost();
   const staffQuery = staffId ? `&staffId=${staffId}` : '';
-  return request<{ start: string; end: string; staffId?: string | null; staffName?: string | null }[]>(
+  return request<{
+    start: string;
+    end: string;
+    staffId?: string | null;
+    staffName?: string | null;
+    available: boolean;
+    unavailableReason?: string | null;
+  }[]>(
     `/public/availability?host=${host}&serviceId=${serviceId}&date=${date}${staffQuery}`,
   );
 }
 
 export function createAppointment(payload: unknown) {
   const host = resolveCurrentHost();
-  return fetch(`${API_URL}/public/appointments?host=${host}`, {
+  return request(`/public/appointments?host=${host}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...buildIdempotencyHeaders(),
     },
     body: JSON.stringify(payload),
-  }).then(async (response) => {
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      throw new Error(extractErrorMessage(errorText, response.status));
-    }
-    return response.json();
-  }).catch((error: unknown) => {
-    if (error instanceof Error) {
-      throw error;
-    }
-    throw new Error('No se pudo establecer conexión con el servidor.');
   });
 }

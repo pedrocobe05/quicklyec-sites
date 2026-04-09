@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
+import { Idempotent } from 'src/core/decorators/idempotent.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/jwt-auth.guard';
 import { TenantModuleAccess } from 'src/modules/auth/tenant-module-access.decorator';
 import { TenantMembershipGuard } from 'src/modules/auth/tenant-membership.guard';
@@ -16,6 +17,7 @@ export class FilesController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @TenantModuleAccess('branding')
   @Post('presign-upload')
+  @Idempotent()
   createPresignedUpload(@Query('tenantId') tenantId: string, @Body() input: CreatePresignedUploadDto) {
     return this.filesService.createPresignedUpload(tenantId, input);
   }

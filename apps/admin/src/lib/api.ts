@@ -18,6 +18,20 @@ function resolveApiUrl() {
 
 const API_URL = resolveApiUrl();
 
+function createIdempotencyKey() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function buildIdempotencyHeaders() {
+  return {
+    'Idempotency-Key': createIdempotencyKey(),
+  };
+}
+
 function emitHttpActivity(type: 'start' | 'end') {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(`qs:http:${type}`));
@@ -101,11 +115,20 @@ async function tryRefreshAccessToken(): Promise<string | null> {
 async function request<T>(path: string, options?: RequestInit, hasRetried = false): Promise<T> {
   emitHttpActivity('start');
   try {
-    const response = await fetch(`${API_URL}${path}`, options);
+    const method = (options?.method ?? 'GET').toUpperCase();
+    const headers = new Headers(options?.headers ?? {});
+    if (method !== 'GET' && method !== 'HEAD' && !headers.has('Idempotency-Key')) {
+      Object.entries(buildIdempotencyHeaders()).forEach(([key, value]) => headers.set(key, value));
+    }
+
+    const response = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers,
+    });
     if (response.status === 401 && !hasRetried && path !== '/auth/refresh') {
       const nextAccessToken = await tryRefreshAccessToken();
       if (nextAccessToken) {
-        const nextHeaders = new Headers(options?.headers ?? {});
+        const nextHeaders = new Headers(headers);
         if (nextHeaders.has('Authorization')) {
           nextHeaders.set('Authorization', `Bearer ${nextAccessToken}`);
         }

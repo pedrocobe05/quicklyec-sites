@@ -69,6 +69,7 @@ export interface PublicSiteConfig {
         contactEmail?: string | null;
         contactPhone?: string | null;
         whatsappNumber?: string | null;
+        contactAddress?: string | null;
     };
     domain: {
         host: string;
@@ -84,6 +85,8 @@ export interface AvailabilitySlot {
     end: string;
     staffId?: string | null;
     staffName?: string | null;
+    available: boolean;
+    unavailableReason?: string | null;
 }
 export interface CreatePublicAppointmentInput {
     serviceId: string;

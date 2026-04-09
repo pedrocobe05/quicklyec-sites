@@ -33,6 +33,9 @@ export class TenantSettingEntity {
   @Column({ type: 'varchar', nullable: true, length: 40 })
   whatsappNumber!: string | null;
 
+  @Column({ type: 'varchar', nullable: true, length: 255 })
+  contactAddress!: string | null;
+
   @Column({ default: true })
   siteIndexingEnabled!: boolean;
 

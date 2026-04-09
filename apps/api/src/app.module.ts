@@ -20,6 +20,8 @@ import { CustomersModule } from './modules/customers/customers.module';
 import { PlatformModule } from './modules/platform/platform.module';
 import { MailModule } from './modules/mail/mail.module';
 import { FilesModule } from './modules/files/files.module';
+import { IdempotencyModule } from './core/idempotency/idempotency.module';
+import { IdempotencyInterceptor } from './core/interceptors/idempotency.interceptor';
 import { RequestLoggingInterceptor } from './core/interceptors/request-logging.interceptor';
 import { HttpExceptionFilter } from './core/filters/http-exception.filter';
 
@@ -56,11 +58,16 @@ import { HttpExceptionFilter } from './core/filters/http-exception.filter';
     MailModule,
     FilesModule,
     PublicModule,
+    IdempotencyModule,
   ],
   providers: [
     {
       provide: APP_INTERCEPTOR,
       useClass: RequestLoggingInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: IdempotencyInterceptor,
     },
     {
       provide: APP_FILTER,

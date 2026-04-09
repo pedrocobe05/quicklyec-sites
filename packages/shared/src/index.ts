@@ -143,10 +143,11 @@ export interface PublicSiteConfig {
     locale: string;
     timezone: string;
     currency: string;
-    contactEmail?: string | null;
-    contactPhone?: string | null;
-    whatsappNumber?: string | null;
-  };
+        contactEmail?: string | null;
+        contactPhone?: string | null;
+        whatsappNumber?: string | null;
+        contactAddress?: string | null;
+    };
   capabilities: {
     publicSiteEnabled: boolean;
     bookingEnabled: boolean;
@@ -169,6 +170,8 @@ export interface AvailabilitySlot {
   end: string;
   staffId?: string | null;
   staffName?: string | null;
+  available: boolean;
+  unavailableReason?: string | null;
 }
 
 export interface CreatePublicAppointmentInput {

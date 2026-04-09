@@ -258,6 +258,7 @@ export class SiteService {
         contactEmail: resolved.setting?.contactEmail ?? null,
         contactPhone: resolved.setting?.contactPhone ?? null,
         whatsappNumber: resolved.setting?.whatsappNumber ?? null,
+        contactAddress: resolved.setting?.contactAddress ?? null,
       },
       capabilities: {
         publicSiteEnabled,

@@ -4,6 +4,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { AppointmentsService } from 'src/modules/appointments/appointments.service';
 import { CreatePublicAppointmentDto } from 'src/modules/appointments/dto/create-public-appointment.dto';
+import { Idempotent } from 'src/core/decorators/idempotent.decorator';
 import { ServicesService } from 'src/modules/services/services.service';
 import { SiteService } from 'src/modules/site/site.service';
 import { TenantsService } from 'src/modules/tenants/tenants.service';
@@ -58,6 +59,7 @@ export class PublicController {
   }
 
   @Post('appointments')
+  @Idempotent()
   async createAppointment(
     @Headers('host') headerHost: string,
     @Query('host') queryHost: string | undefined,

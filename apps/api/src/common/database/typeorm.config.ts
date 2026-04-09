@@ -25,6 +25,7 @@ import {
   TenantSettingEntity,
   SubscriptionPlanEntity,
 } from '../entities';
+import { IdempotencyKeyEntity } from '../../core/idempotency/entities/idempotency-key.entity';
 
 type BuildTypeOrmOptionsOptions = {
   includeMigrations?: boolean;
@@ -67,6 +68,7 @@ export function buildTypeOrmOptions(
       TenantRoleEntity,
       RefreshTokenEntity,
       SubscriptionPlanEntity,
+      IdempotencyKeyEntity,
     ],
     migrations: includeMigrations ? ['src/database/migrations/*.ts'] : [],
     synchronize: false,

@@ -1,6 +1,5 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { AvailabilitySlot } from '@quickly-sites/shared';
 import { In, IsNull, Repository } from 'typeorm';
 import {
   AppointmentEntity,
@@ -11,6 +10,8 @@ import {
   TenantSettingEntity,
 } from 'src/common/entities';
 import { getPlanMetadata, normalizePlanCode } from 'src/modules/tenants/tenant-access.constants';
+import { FilesService } from 'src/modules/files/files.service';
+import { MailService } from 'src/modules/mail/mail.service';
 import { ServicesService } from 'src/modules/services/services.service';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 
@@ -19,6 +20,15 @@ interface AvailabilityQuery {
   serviceId: string;
   date: string;
   staffId?: string;
+}
+
+export interface AvailabilitySlot {
+  start: string;
+  end: string;
+  staffId?: string | null;
+  staffName?: string | null;
+  available: boolean;
+  unavailableReason?: string | null;
 }
 
 @Injectable()
@@ -34,6 +44,7 @@ export class AppointmentsService {
     Fri: 5,
     Sat: 6,
   };
+  private readonly logger = new Logger(AppointmentsService.name);
 
   constructor(
     @InjectRepository(AppointmentEntity)
@@ -48,12 +59,29 @@ export class AppointmentsService {
     private readonly staffServicesRepository: Repository<StaffServiceEntity>,
     @InjectRepository(TenantSettingEntity)
     private readonly tenantSettingsRepository: Repository<TenantSettingEntity>,
+    private readonly filesService: FilesService,
+    private readonly mailService: MailService,
     private readonly servicesService: ServicesService,
   ) {}
 
   private computeReminderScheduledAt(startDateTime: Date) {
-    const reminderDate = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
-    return reminderDate > new Date() ? reminderDate : new Date();
+    const now = new Date();
+    const msUntilAppointment = startDateTime.getTime() - now.getTime();
+
+    if (msUntilAppointment <= 45 * 60 * 1000) {
+      return null;
+    }
+
+    const hoursUntilAppointment = msUntilAppointment / (60 * 60 * 1000);
+    if (hoursUntilAppointment > 26) {
+      return new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
+    }
+
+    if (hoursUntilAppointment > 3) {
+      return new Date(startDateTime.getTime() - 2 * 60 * 60 * 1000);
+    }
+
+    return new Date(startDateTime.getTime() - 30 * 60 * 1000);
   }
 
   private normalizeTimeValue(time: string) {
@@ -167,6 +195,51 @@ export class AppointmentsService {
     appointment.reminderSentAt = null;
     appointment.reminderError = null;
     return appointment;
+  }
+
+  private async sendPublicAppointmentNotifications(appointmentId: string) {
+    const appointment = await this.appointmentsRepository.findOne({
+      where: { id: appointmentId },
+      relations: ['tenant', 'customer', 'service', 'staff'],
+    });
+
+    if (!appointment?.tenant || !appointment.customer?.email) {
+      return;
+    }
+
+    const planMetadata = getPlanMetadata(normalizePlanCode(appointment.tenant.plan));
+    if (!planMetadata.features.includes('email_notifications')) {
+      return;
+    }
+
+    const settings = await this.tenantSettingsRepository.findOne({
+      where: { tenantId: appointment.tenantId },
+    });
+    const staffPhotoUrl = await this.filesService.resolveStoredReference(appointment.staff?.avatarUrl, appointment.tenantId);
+
+    try {
+      await this.mailService.sendAppointmentConfirmationEmail({
+        to: appointment.customer.email,
+        tenantId: appointment.tenantId,
+        recipientName: appointment.customer.fullName,
+        serviceName: appointment.service?.name ?? 'tu cita',
+        staffName: appointment.staff?.name ?? null,
+        staffPhotoUrl,
+        startDateTime: appointment.startDateTime.toLocaleString('es-EC', {
+          dateStyle: 'full',
+          timeStyle: 'short',
+        }),
+        statusLabel: appointment.status === 'pending' ? 'Pendiente de gestión' : 'Confirmada',
+        contactPhone: settings?.contactPhone ?? null,
+        contactAddress: settings?.contactAddress ?? null,
+      });
+    } catch (error) {
+      this.logger.error(
+        `No se pudo enviar correo de confirmación para la cita ${appointment.id}: ${
+          error instanceof Error ? error.stack ?? error.message : 'error desconocido'
+        }`,
+      );
+    }
   }
 
   private toDateWithTime(date: string, time: string, timeZone: string) {
@@ -351,20 +424,32 @@ export class AppointmentsService {
           && this.overlaps(current, slotEnd, block.startDateTime, block.endDateTime),
         );
 
-        if (!hasAppointment && !hasBlock) {
-          slots.push({
-            start: current.toISOString(),
-            end: slotEnd.toISOString(),
-            staffId: rule.staffId,
-            staffName: rule.staff?.name ?? null,
-          });
+        let unavailableReason: string | null = null;
+        if (hasAppointment) {
+          unavailableReason = 'Horario reservado';
+        } else if (hasBlock) {
+          unavailableReason = 'Horario bloqueado';
         }
+
+        slots.push({
+          start: current.toISOString(),
+          end: slotEnd.toISOString(),
+          staffId: rule.staffId,
+          staffName: rule.staff?.name ?? null,
+          available: unavailableReason == null,
+          unavailableReason,
+        });
 
         current = new Date(current.getTime() + interval * 60 * 1000);
       }
     }
 
-    return slots.sort((left, right) => left.start.localeCompare(right.start) || (left.staffName ?? '').localeCompare(right.staffName ?? ''));
+    return slots.sort(
+      (left, right) =>
+        left.start.localeCompare(right.start)
+        || Number(right.available) - Number(left.available)
+        || (left.staffName ?? '').localeCompare(right.staffName ?? ''),
+    );
   }
 
   async createPublicAppointment(tenantId: string, input: {
@@ -417,10 +502,21 @@ export class AppointmentsService {
       endDateTime,
       notes: input.notes ?? null,
       internalNotes: null,
-      reminderScheduledAt: this.computeReminderScheduledAt(startDateTime),
+      reminderScheduledAt: null,
       reminderSentAt: null,
       reminderError: null,
     });
+
+    const hydratedAppointment = await this.appointmentsRepository.findOne({
+      where: { id: appointment.id },
+      relations: ['tenant', 'customer', 'service', 'staff'],
+    });
+
+    if (hydratedAppointment) {
+      await this.applyReminderState(hydratedAppointment);
+      await this.appointmentsRepository.save(hydratedAppointment);
+      await this.sendPublicAppointmentNotifications(hydratedAppointment.id);
+    }
 
     return {
       id: appointment.id,

@@ -9,6 +9,7 @@ import {
   TenantSettingEntity,
 } from 'src/common/entities';
 import { MailModule } from 'src/modules/mail/mail.module';
+import { FilesModule } from 'src/modules/files/files.module';
 import { ServicesModule } from 'src/modules/services/services.module';
 import { AppointmentRemindersService } from './appointment-reminders.service';
 import { AppointmentsController } from './appointments.controller';
@@ -26,6 +27,7 @@ import { AppointmentsService } from './appointments.service';
     ]),
     ServicesModule,
     MailModule,
+    FilesModule,
   ],
   controllers: [AppointmentsController],
   providers: [AppointmentsService, AppointmentRemindersService],
