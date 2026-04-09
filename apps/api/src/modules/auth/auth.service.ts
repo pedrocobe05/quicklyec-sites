@@ -1,10 +1,12 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { randomBytes, createHash } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
 import { AdminUserEntity, RefreshTokenEntity, TenantMembershipEntity } from 'src/common/entities';
+import { MailService } from 'src/modules/mail/mail.service';
 import { LoginDto } from './dto/login.dto';
 
 @Injectable()
@@ -18,7 +20,14 @@ export class AuthService {
     private readonly refreshTokensRepository: Repository<RefreshTokenEntity>,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly mailService: MailService,
   ) {}
+
+  private static readonly PASSWORD_RESET_TTL_MINUTES = 30;
+
+  private hashResetToken(token: string) {
+    return createHash('sha256').update(token).digest('hex');
+  }
 
   async login(input: LoginDto) {
     const user = await this.usersRepository.findOne({
@@ -154,5 +163,67 @@ export class AuthService {
     );
 
     return { accessToken };
+  }
+
+  async forgotPassword(email: string) {
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await this.usersRepository.findOne({
+      where: { email: normalizedEmail },
+    });
+
+    if (!user || !user.isActive) {
+      return {
+        success: true,
+        message: 'Si el correo existe, te enviaremos un enlace para restablecer tu contraseña.',
+      };
+    }
+
+    const token = randomBytes(32).toString('hex');
+    const tokenHash = this.hashResetToken(token);
+    const expiresAt = new Date(Date.now() + AuthService.PASSWORD_RESET_TTL_MINUTES * 60 * 1000);
+
+    user.passwordResetTokenHash = tokenHash;
+    user.passwordResetRequestedAt = new Date();
+    user.passwordResetExpiresAt = expiresAt;
+    await this.usersRepository.save(user);
+
+    const adminUrl = this.configService.get<string>('app.adminUrl') ?? 'http://localhost:5175';
+    const resetUrl = `${adminUrl.replace(/\/$/, '')}/login?resetToken=${encodeURIComponent(token)}`;
+
+    await this.mailService.sendAdminPasswordRecoveryEmail({
+      to: user.email,
+      recipientName: user.fullName,
+      resetUrl,
+      expiresInMinutes: AuthService.PASSWORD_RESET_TTL_MINUTES,
+    });
+
+    return {
+      success: true,
+      message: 'Si el correo existe, te enviaremos un enlace para restablecer tu contraseña.',
+    };
+  }
+
+  async resetPassword(token: string, password: string) {
+    const tokenHash = this.hashResetToken(token);
+    const user = await this.usersRepository.findOne({
+      where: { passwordResetTokenHash: tokenHash },
+    });
+
+    if (!user || !user.passwordResetExpiresAt || user.passwordResetExpiresAt < new Date()) {
+      throw new BadRequestException('El enlace de recuperación ya no es válido.');
+    }
+
+    user.passwordHash = await bcrypt.hash(password, 10);
+    user.passwordResetTokenHash = null;
+    user.passwordResetRequestedAt = null;
+    user.passwordResetExpiresAt = null;
+    await this.usersRepository.save(user);
+
+    await this.refreshTokensRepository.delete({ userId: user.id });
+
+    return {
+      success: true,
+      message: 'Tu contraseña fue actualizada correctamente. Ya puedes iniciar sesión.',
+    };
   }
 }

@@ -15,6 +15,15 @@ type ResolvedMailConfig = {
   fromName: string;
 };
 
+type MailTheme = {
+  tenantName: string;
+  primaryColor: string;
+  accentColor: string;
+  secondaryColor: string;
+  fromName: string;
+  fromEmail: string;
+};
+
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
@@ -85,6 +94,50 @@ export class MailService {
         title: 'Restablece tu acceso',
         intro: `Hola ${input.recipientName ?? ''}, generamos una nueva contraseña temporal para tu usuario.`,
         body: `<p style="margin:0;"><strong>Nueva contraseña temporal:</strong> ${input.temporaryPassword}</p>`,
+      }),
+    });
+  }
+
+  async sendAdminPasswordRecoveryEmail(input: {
+    to: string;
+    recipientName?: string | null;
+    resetUrl: string;
+    expiresInMinutes: number;
+  }) {
+    const transporter = await this.createFallbackTransporter();
+    if (!transporter) return;
+
+    const theme = await this.resolvePlatformTheme();
+
+    await transporter.sendMail({
+      from: `"Soporte QuicklyEC" <${theme.fromEmail}>`,
+      to: input.to,
+      subject: 'Recupera el acceso a tu cuenta',
+      text:
+        `Hola ${input.recipientName ?? ''}\n\n` +
+        `Recibimos una solicitud para restablecer tu contraseña.\n` +
+        `Usa este enlace para crear una nueva contraseña:\n${input.resetUrl}\n\n` +
+        `Este enlace expira en ${input.expiresInMinutes} minutos.\n` +
+        `Si no solicitaste este cambio, puedes ignorar este correo.\n\n` +
+        `Soporte QuicklyEC`,
+      html: this.renderEmailTemplate({
+        theme: {
+          ...theme,
+          fromName: 'Soporte QuicklyEC',
+        },
+        title: 'Recupera el acceso a tu cuenta',
+        intro: `Hola ${input.recipientName ?? ''}, recibimos una solicitud para restablecer tu contraseña.`,
+        body: `
+          <p style="margin:0 0 14px 0;">Haz clic en el siguiente botón para definir una nueva contraseña de forma segura.</p>
+          <p style="margin:0 0 18px 0;">
+            <a href="${input.resetUrl}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:${theme.accentColor};color:#fff;text-decoration:none;font-weight:600;">
+              Restablecer contraseña
+            </a>
+          </p>
+          <p style="margin:0 0 12px 0;"><strong>Enlace directo:</strong><br /><a href="${input.resetUrl}" style="color:${theme.accentColor};word-break:break-all;">${input.resetUrl}</a></p>
+          <p style="margin:0 0 12px 0;"><strong>Vigencia:</strong> ${input.expiresInMinutes} minutos</p>
+          <p style="margin:0;">Si no solicitaste este cambio, puedes ignorar este correo con tranquilidad.</p>
+        `,
       }),
     });
   }
@@ -229,6 +282,25 @@ export class MailService {
     });
   }
 
+  private async createFallbackTransporter() {
+    const [platformSetting] = await Promise.all([
+      this.platformSettingsRepository.findOne({ where: {}, order: { createdAt: 'ASC' } }),
+    ]);
+    const config = this.resolveFallbackMailConfig(platformSetting);
+    if (!config?.host || !config.fromEmail) {
+      this.logger.warn('Correo omitido porque no hay SMTP fallback configurado');
+      return null;
+    }
+
+    const nodemailer = await import('nodemailer');
+    return nodemailer.createTransport({
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      auth: config.user ? { user: config.user, pass: config.pass } : undefined,
+    });
+  }
+
   private async resolveMailConfig(tenantId: string): Promise<ResolvedMailConfig | null> {
     const [tenantSetting, platformSetting] = await Promise.all([
       this.tenantSettingsRepository.findOne({ where: { tenantId } }),
@@ -248,6 +320,16 @@ export class MailService {
       };
     }
 
+    const fallbackConfig = this.resolveFallbackMailConfig(platformSetting);
+
+    if (!fallbackConfig) {
+      return null;
+    }
+
+    return fallbackConfig;
+  }
+
+  private resolveFallbackMailConfig(platformSetting?: PlatformSettingEntity | null) {
     const fallback = this.configService.get<{
       host: string;
       port: number;
@@ -262,10 +344,18 @@ export class MailService {
       return null;
     }
 
-    return fallback;
+    return {
+      host: fallback.host,
+      port: Number(fallback.port ?? 587),
+      secure: Boolean(fallback.secure ?? false),
+      user: fallback.user,
+      pass: fallback.pass,
+      fromEmail: platformSetting?.defaultSenderEmail ?? fallback.fromEmail,
+      fromName: platformSetting?.defaultSenderName ?? fallback.fromName ?? 'QuicklyEC',
+    };
   }
 
-  private async resolveTheme(tenantId: string) {
+  private async resolveTheme(tenantId: string): Promise<MailTheme> {
     const [tenant, branding, platformSetting] = await Promise.all([
       this.tenantsRepository.findOne({ where: { id: tenantId } }),
       this.brandingRepository.findOne({ where: { tenantId } }),
@@ -285,15 +375,22 @@ export class MailService {
     };
   }
 
-  private renderEmailTemplate(input: {
-    theme: {
-      tenantName: string;
-      primaryColor: string;
-      accentColor: string;
-      secondaryColor: string;
-      fromName: string;
-      fromEmail: string;
+  private async resolvePlatformTheme(): Promise<MailTheme> {
+    const platformSetting = await this.platformSettingsRepository.findOne({ where: {}, order: { createdAt: 'ASC' } });
+    const fallback = this.resolveFallbackMailConfig(platformSetting);
+
+    return {
+      tenantName: platformSetting?.platformName ?? 'QuicklyEC',
+      primaryColor: '#0f1238',
+      accentColor: '#004091',
+      secondaryColor: '#f8fafc',
+      fromName: 'Soporte QuicklyEC',
+      fromEmail: fallback?.fromEmail ?? platformSetting?.defaultSenderEmail ?? 'soporte@quicklyec.com',
     };
+  }
+
+  private renderEmailTemplate(input: {
+    theme: MailTheme;
     title: string;
     intro: string;
     body: string;

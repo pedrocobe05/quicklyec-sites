@@ -75,6 +75,18 @@ function clearSessionAndRedirect() {
   }
 }
 
+function redirectToHomeWithPermissionNotice(message: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.sessionStorage.setItem('qs_permission_notice', message);
+
+  if (window.location.pathname !== '/') {
+    window.location.href = '/';
+  }
+}
+
 async function tryRefreshAccessToken(): Promise<string | null> {
   if (typeof window === 'undefined') {
     return null;
@@ -144,8 +156,8 @@ async function request<T>(path: string, options?: RequestInit, hasRetried = fals
         response.status === 403 &&
         errorMessage.toLowerCase().includes('platform admin access required')
       ) {
-        clearSessionAndRedirect();
-        throw new Error('Session expired');
+        redirectToHomeWithPermissionNotice('No tienes permisos para acceder a esa sección.');
+        throw new Error('No tienes permisos para acceder a esa sección.');
       }
 
       throw new Error(errorMessage);
@@ -168,6 +180,22 @@ export async function login(email: string, password: string) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function forgotPassword(email: string) {
+  return request('/auth/forgot-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function resetPassword(token: string, password: string) {
+  return request('/auth/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, password }),
   });
 }
 

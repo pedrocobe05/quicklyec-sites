@@ -5,6 +5,7 @@ import { PlatformSettingsPage } from './pages/PlatformSettingsPage';
 import { PlatformTenantsPage } from './pages/PlatformTenantsPage';
 import { PlatformUsersPage } from './pages/PlatformUsersPage';
 import { TenantDetailPage } from './pages/TenantDetailPage';
+import { WelcomePage } from './pages/WelcomePage';
 
 type StoredUser = {
   isPlatformAdmin?: boolean;
@@ -17,17 +18,6 @@ function readStoredUser(): StoredUser | null {
   } catch {
     return null;
   }
-}
-
-function HomeRedirect() {
-  const token = localStorage.getItem('qs_access_token');
-  const user = readStoredUser();
-
-  if (!token) return <Navigate to="/login" replace />;
-  if (user?.isPlatformAdmin) return <Navigate to="/platform/tenants" replace />;
-
-  const tenantId = user?.memberships?.[0]?.tenant?.id;
-  return tenantId ? <Navigate to={`/platform/tenants/${tenantId}`} replace /> : <Navigate to="/login" replace />;
 }
 
 function TenantTabRedirect({ tab }: { tab: string }) {
@@ -45,7 +35,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/" element={<HomeRedirect />} />
+      <Route path="/" element={<WelcomePage />} />
       <Route path="/platform" element={<Navigate to="/platform/tenants" replace />} />
       <Route path="/platform/users" element={<PlatformUsersPage />} />
       <Route path="/platform/roles" element={<PlatformRolesPage />} />

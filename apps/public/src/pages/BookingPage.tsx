@@ -29,6 +29,13 @@ function formatDateTime(value: string) {
   });
 }
 
+function getSlotSelectionValue(slot: {
+  start: string;
+  staffId?: string | null;
+}) {
+  return `${slot.start}::${slot.staffId ?? 'unassigned'}`;
+}
+
 export function BookingPage() {
   const { data, loading, error } = useSiteConfig('/');
   const [selectedServiceId, setSelectedServiceId] = useState('');
@@ -64,7 +71,7 @@ export function BookingPage() {
     [compatibleStaff, selectedStaffId],
   );
   const selectedSlotData = useMemo(
-    () => slots.find((slot) => slot.start === selectedSlot) ?? null,
+    () => slots.find((slot) => getSlotSelectionValue(slot) === selectedSlot) ?? null,
     [selectedSlot, slots],
   );
 
@@ -163,7 +170,7 @@ export function BookingPage() {
       await createAppointment({
         serviceId: selectedServiceId,
         staffId: selectedSlotData?.staffId ?? selectedStaffId,
-        startDateTime: selectedSlot,
+        startDateTime: selectedSlotData?.start ?? selectedSlot,
         customer: {
           fullName: String(form.get('fullName') ?? ''),
           email: String(form.get('email') ?? ''),
@@ -335,11 +342,12 @@ export function BookingPage() {
               {slots.length > 0 ? (
                 <div className="grid gap-3 md:grid-cols-2">
                   {slots.map((slot) => {
-                    const isSelected = selectedSlot === slot.start;
+                    const slotValue = getSlotSelectionValue(slot);
+                    const isSelected = selectedSlot === slotValue;
                     const isDisabled = !slot.available;
                     return (
                       <label
-                        key={slot.start}
+                        key={slotValue}
                         className={`flex items-center gap-3 rounded-2xl border p-4 transition ${
                           isDisabled
                             ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
@@ -351,7 +359,7 @@ export function BookingPage() {
                         <input
                           type="radio"
                           name="slot"
-                          value={slot.start}
+                          value={slotValue}
                           checked={isSelected}
                           disabled={isDisabled}
                           onChange={(event) => setSelectedSlot(event.target.value)}

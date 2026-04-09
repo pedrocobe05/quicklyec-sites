@@ -16,6 +16,15 @@ export class AdminUserEntity {
   @Column({ length: 255 })
   passwordHash!: string;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  passwordResetTokenHash!: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  passwordResetRequestedAt!: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  passwordResetExpiresAt!: Date | null;
+
   @Column({ default: true })
   isActive!: boolean;
 

@@ -19,6 +19,7 @@ type NavItem = {
   to: string;
   label: string;
   module?: string;
+  matchPath?: string;
 };
 
 type NavGroup = {
@@ -34,10 +35,6 @@ const baseNavItems: NavItem[] = [
   { to: '/appointments', label: 'Reservas', module: 'appointments' },
   { to: '/customers', label: 'Clientes', module: 'customers' },
   { to: '/agenda', label: 'Agenda', module: 'agenda' },
-  { to: '/site', label: 'Sitio web', module: 'site' },
-  { to: '/branding', label: 'Marca', module: 'branding' },
-  { to: '/domains', label: 'Dominios', module: 'domains' },
-  { to: '/settings', label: 'Configuración', module: 'settings' },
 ];
 
 const platformNavItems: NavItem[] = [
@@ -188,14 +185,14 @@ export function AdminLayout({
   );
   const resolvePath = (path: string) => {
     if (path.startsWith('/platform')) {
-      return '/platform';
+      return path;
     }
 
     if (!tenantRoutePrefix) {
       return path;
     }
 
-    return path === '/' ? tenantRoutePrefix : `${tenantRoutePrefix}${path}`;
+    return path === '/' ? '/' : `${tenantRoutePrefix}?tab=${path.slice(1)}`;
   };
 
   const navigationGroups: NavGroup[] = useMemo(
@@ -205,7 +202,7 @@ export function AdminLayout({
           {
             id: 'platform',
             title: 'Plataforma',
-            items: filteredItems.map((item) => ({ ...item, to: item.to })),
+            items: filteredItems.map((item) => ({ ...item, to: item.to, matchPath: item.to })),
           },
         ];
       }
@@ -216,7 +213,7 @@ export function AdminLayout({
           title: 'General',
           items: filteredItems
             .filter((item) => item.to === '/')
-            .map((item) => ({ ...item, to: resolvePath(item.to) })),
+            .map((item) => ({ ...item, to: resolvePath(item.to), matchPath: item.to })),
         },
         {
           id: 'operations',
@@ -225,16 +222,7 @@ export function AdminLayout({
             .filter((item) =>
               ['/services', '/staff', '/appointments', '/customers', '/agenda'].includes(item.to),
             )
-            .map((item) => ({ ...item, to: resolvePath(item.to) })),
-        },
-        {
-          id: 'site',
-          title: 'Sitio',
-          items: filteredItems
-            .filter((item) =>
-              ['/site', '/branding', '/domains', '/settings'].includes(item.to),
-            )
-            .map((item) => ({ ...item, to: resolvePath(item.to) })),
+            .map((item) => ({ ...item, to: resolvePath(item.to), matchPath: item.to })),
         },
       ].filter((group) => group.items.length > 0);
     },
@@ -310,7 +298,9 @@ export function AdminLayout({
     const activeGroupIds = navigationGroups
       .filter((group) =>
         group.items.some((item) =>
-          item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to),
+          (item.matchPath ?? item.to) === '/'
+            ? normalizedResolvedPath === '/'
+            : normalizedResolvedPath.startsWith(item.matchPath ?? item.to),
         ),
       )
       .map((group) => group.id);
@@ -330,7 +320,7 @@ export function AdminLayout({
       });
       return changed ? next : current;
     });
-  }, [location.pathname, navigationGroups]);
+  }, [navigationGroups, normalizedResolvedPath]);
 
   const sidebar = useMemo(
     () => (
@@ -374,30 +364,42 @@ export function AdminLayout({
                       key={item.to}
                       to={item.to}
                       onClick={() => setMobileSidebarOpen(false)}
-                      className={({ isActive }) =>
-                        cn(
+                      className={() => {
+                        const matchPath = item.matchPath ?? item.to;
+                        const isActive = matchPath === '/'
+                          ? normalizedResolvedPath === '/'
+                          : normalizedResolvedPath.startsWith(matchPath);
+
+                        return cn(
                           'group block rounded-lg px-3 py-2 text-[0.9rem] transition-all duration-200',
                           isActive
                             ? 'bg-[rgba(0,64,145,0.06)] text-[var(--brand-navy)] shadow-[0_6px_14px_rgba(0,64,145,0.06)]'
                             : 'bg-transparent text-slate-600 hover:bg-white/75 hover:text-[var(--brand-navy)]',
-                        )
-                      }
+                        );
+                      }}
                     >
-                      {({ isActive }) => (
-                        <div className="flex items-center gap-2.5">
-                          <span
-                            className={cn(
-                              'h-1.5 w-1.5 rounded-full transition',
-                              isActive ? 'bg-[rgba(0,64,145,0.72)]' : 'bg-[rgba(148,163,184,0.8)] group-hover:bg-[rgba(0,64,145,0.36)]',
-                            )}
-                          />
-                          <div className="min-w-0 flex-1">
-                            <span className={cn('block truncate leading-5', isActive ? 'font-medium' : 'font-normal')}>
-                              {item.label}
-                            </span>
+                      {(() => {
+                        const matchPath = item.matchPath ?? item.to;
+                        const isActive = matchPath === '/'
+                          ? normalizedResolvedPath === '/'
+                          : normalizedResolvedPath.startsWith(matchPath);
+
+                        return (
+                          <div className="flex items-center gap-2.5">
+                            <span
+                              className={cn(
+                                'h-1.5 w-1.5 rounded-full transition',
+                                isActive ? 'bg-[rgba(0,64,145,0.72)]' : 'bg-[rgba(148,163,184,0.8)] group-hover:bg-[rgba(0,64,145,0.36)]',
+                              )}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <span className={cn('block truncate leading-5', isActive ? 'font-medium' : 'font-normal')}>
+                                {item.label}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
                     </NavLink>
                   ))}
                 </div>
@@ -431,7 +433,7 @@ export function AdminLayout({
         </div>
       </>
     ),
-    [navigationGroups, openGroups, parsedUser?.email, parsedUser?.fullName, tenantLabel],
+    [navigationGroups, normalizedResolvedPath, openGroups, parsedUser?.email, parsedUser?.fullName, tenantLabel],
   );
 
   return (
@@ -479,7 +481,7 @@ export function AdminLayout({
             <div className="flex min-w-0 items-start justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-xs uppercase tracking-[0.3em] text-[var(--brand-gold-deep)]">
-                  plataforma QuicklyEC
+                  plataforma QuicklyEC Sites
                 </p>
                 <h1 className="mt-2 text-2xl font-semibold text-[var(--brand-navy)]">{currentPage.title}</h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{currentPage.description}</p>

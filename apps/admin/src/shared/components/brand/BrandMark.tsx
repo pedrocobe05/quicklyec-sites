@@ -34,7 +34,7 @@ export function BrandMark({
               tone === 'light' ? 'text-white' : 'text-[var(--brand-navy)]',
             )}
           >
-            QuicklyEC
+            QuicklyEC Sites
           </h1>
         </div>
       ) : null}

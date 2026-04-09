@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminUserEntity, RefreshTokenEntity, TenantMembershipEntity } from 'src/common/entities';
+import { MailModule } from 'src/modules/mail/mail.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
@@ -14,6 +15,7 @@ import { TenantMembershipGuard } from './tenant-membership.guard';
 @Module({
   imports: [
     TypeOrmModule.forFeature([AdminUserEntity, TenantMembershipEntity, RefreshTokenEntity]),
+    MailModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

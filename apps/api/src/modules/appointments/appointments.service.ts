@@ -145,7 +145,7 @@ export class AppointmentsService {
 
   private getLocalTimeString(date: Date, timeZone: string) {
     const zoned = this.getZonedParts(date, timeZone);
-    return `${zoned.hour}:${zoned.minute}`;
+    return `${zoned.hour}:${zoned.minute}:${zoned.second}`;
   }
 
   private getLocalDayOfWeek(date: Date, timeZone: string) {
@@ -255,9 +255,11 @@ export class AppointmentsService {
   }
 
   private isRuleCompatible(rule: AvailabilityRuleEntity, startDateTime: Date, endDateTime: Date, timeZone: string) {
-    const startTime = this.getLocalTimeString(startDateTime, timeZone);
-    const endTime = this.getLocalTimeString(endDateTime, timeZone);
-    return rule.startTime <= startTime && rule.endTime >= endTime;
+    const ruleStart = this.normalizeTimeValue(rule.startTime);
+    const ruleEnd = this.normalizeTimeValue(rule.endTime);
+    const startTime = this.normalizeTimeValue(this.getLocalTimeString(startDateTime, timeZone));
+    const endTime = this.normalizeTimeValue(this.getLocalTimeString(endDateTime, timeZone));
+    return ruleStart <= startTime && ruleEnd >= endTime;
   }
 
   private async getEligibleStaffIds(serviceId: string, requestedStaffId?: string) {

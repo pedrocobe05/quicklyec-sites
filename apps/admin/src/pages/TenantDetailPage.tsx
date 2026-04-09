@@ -493,23 +493,25 @@ export function TenantDetailPage() {
   const can = (permission: string) => Boolean(user?.isPlatformAdmin) || effectivePermissions.includes(permission);
   const canAccessServices = can('services.view');
   const canAccessStaff = can('staff.view');
+  const canAccessRestrictedConfiguration = Boolean(user?.isPlatformAdmin);
 
   const visibleTabs = useMemo(() => {
     return [
-      { id: 'general', label: 'General', visible: true },
+      { id: 'general', label: 'General', visible: canAccessRestrictedConfiguration },
       { id: 'users', label: 'Usuarios', visible: can('users.view') },
       { id: 'roles', label: 'Roles', visible: can('roles.view') },
       { id: 'branding', label: 'Marca', visible: can('branding.view') || can('seo.view') || can('settings.view') },
-      { id: 'email', label: 'Correo', visible: can('settings.update') || can('branding.update') },
-      { id: 'domains', label: 'Dominios', visible: can('domains.view') },
-      { id: 'site', label: 'Sitio', visible: can('site.view') },
+      { id: 'email', label: 'Correo', visible: canAccessRestrictedConfiguration && (can('settings.update') || can('branding.update')) },
+      { id: 'domains', label: 'Dominios', visible: canAccessRestrictedConfiguration && can('domains.view') },
+      { id: 'site', label: 'Sitio', visible: canAccessRestrictedConfiguration && can('site.view') },
       { id: 'services', label: 'Servicios', visible: can('services.view') },
       { id: 'staff', label: 'Staff', visible: can('staff.view') },
       { id: 'agenda', label: 'Agenda', visible: can('agenda.view') },
       { id: 'appointments', label: 'Reservas', visible: can('appointments.view') },
       { id: 'customers', label: 'Clientes', visible: can('customers.view') },
     ].filter((tab) => tab.visible) as Array<{ id: TenantTab; label: string; visible: boolean }>;
-  }, [effectivePermissions, user?.isPlatformAdmin]);
+  }, [canAccessRestrictedConfiguration, effectivePermissions, user?.isPlatformAdmin]);
+  const showInternalTabSwitcher = Boolean(user?.isPlatformAdmin);
 
   const tenantRoutePrefix = tenantId ? `/platform/tenants/${tenantId}` : '';
 
@@ -706,7 +708,6 @@ export function TenantDetailPage() {
     if (!token || !tenantId) return;
     const tenantData = (await getTenantProfile(token, tenantId)) as TenantProfileResponse;
     const [
-      plansData,
       membershipsData,
       rolesData,
       pagesData,
@@ -718,7 +719,6 @@ export function TenantDetailPage() {
       rulesData,
       blocksData,
     ] = await Promise.all([
-      getPlatformPlans(token),
       getTenantMemberships(token, tenantId),
       getTenantRoles(token, tenantId),
       getPages(token, tenantId),
@@ -730,6 +730,7 @@ export function TenantDetailPage() {
       getAvailabilityRules(token, tenantId),
       getScheduleBlocks(token, tenantId),
     ]);
+    const plansData = user?.isPlatformAdmin ? await getPlatformPlans(token) : [];
 
     const typedPages = pagesData as PageRecord[];
     const nextPageId = selectedPageId || typedPages[0]?.id;
@@ -810,8 +811,15 @@ export function TenantDetailPage() {
   }, [token, tenantId]);
 
   useEffect(() => {
+    if (visibleTabs.length === 0) {
+      return;
+    }
+
     if (!visibleTabs.some((tab) => tab.id === activeTab)) {
-      changeTab('general');
+      const fallbackTab = visibleTabs[0]?.id ?? 'services';
+      if (fallbackTab !== activeTab) {
+        changeTab(fallbackTab);
+      }
     }
   }, [activeTab, visibleTabs]);
 
@@ -1148,31 +1156,33 @@ export function TenantDetailPage() {
         </section>
       ) : (
         <section className="space-y-6">
-          <Card>
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-900">{tenantProfile?.tenant.name}</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Configuración integral de la empresa seleccionada.
-                </p>
+          {showInternalTabSwitcher ? (
+            <Card>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">{tenantProfile?.tenant.name}</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Configuración integral de la empresa seleccionada.
+                  </p>
+                </div>
+                <div className="inline-flex rounded-full bg-[rgba(255,203,48,0.12)] px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-[var(--brand-gold-deep)]">
+                  {tenantProfile?.tenant.status}
+                </div>
               </div>
-              <div className="inline-flex rounded-full bg-[rgba(255,203,48,0.12)] px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-[var(--brand-gold-deep)]">
-                {tenantProfile?.tenant.status}
-              </div>
-            </div>
 
-            <div className="mt-6 flex flex-wrap gap-3">
-              {visibleTabs.map(({ id, label }) => (
-                <Button
-                  key={id}
-                  variant={activeTab === id ? 'primary' : 'secondary'}
-                  onClick={() => changeTab(id)}
-                >
-                  {label}
-                </Button>
-              ))}
-            </div>
-          </Card>
+              <div className="mt-6 flex flex-wrap gap-3">
+                {visibleTabs.map(({ id, label }) => (
+                  <Button
+                    key={id}
+                    variant={activeTab === id ? 'primary' : 'secondary'}
+                    onClick={() => changeTab(id)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            </Card>
+          ) : null}
 
           {activeTab === 'general' ? (
             <Card>
