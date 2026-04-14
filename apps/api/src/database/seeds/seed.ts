@@ -2194,7 +2194,7 @@ async function main() {
   let adminUser = await userRepository.findOne({ where: { email: adminEmail } });
   if (!adminUser) {
     adminUser = await userRepository.save({
-      fullName: 'Quickly Sites Admin',
+      fullName: 'QuicklyEC Sites Admin',
       email: adminEmail,
       passwordHash: await bcrypt.hash('Admin123*', 10),
       isActive: true,

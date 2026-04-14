@@ -110,6 +110,7 @@ export interface SiteSection {
 export interface SiteSectionAsset {
   name: string;
   url: string;
+  fileId?: string | null;
   alt?: string | null;
   label?: string | null;
   kind?: 'image';

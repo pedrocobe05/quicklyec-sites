@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
@@ -99,6 +99,37 @@ export class FilesService {
       file,
       url: await this.buildSignedAccessUrl(file),
     };
+  }
+
+  async deleteStoredFile(fileId: string, tenantId?: string) {
+    const file = await this.filesRepository.findOne({
+      where: tenantId ? { id: fileId, tenantId } : { id: fileId },
+    });
+
+    if (!file) {
+      throw new NotFoundException('Archivo no encontrado');
+    }
+
+    const config = this.getStorageConfig();
+
+    try {
+      await this.getStorageClient().send(
+        new DeleteObjectCommand({
+          Bucket: config.bucket,
+          Key: file.storageKey,
+        }),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo eliminar el objeto ${file.storageKey} en almacenamiento: ${
+          error instanceof Error ? error.message : 'error desconocido'
+        }`,
+      );
+    }
+
+    await this.filesRepository.remove(file);
+
+    return { success: true };
   }
 
   async buildSignedAccessUrl(file: FileObjectEntity) {

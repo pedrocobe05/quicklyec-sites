@@ -1,0 +1,150 @@
+<section class="chef-manifesto">
+  <div class="chef-manifesto__media-wrap">
+    <div class="chef-manifesto__media">
+      <img src="{{asset:hero-table-detail}}" alt="Mesa elegante para experiencia gastronómica privada" />
+    </div>
+    <div class="chef-manifesto__media-grid">
+      <img src="{{asset:concept-product-detail}}" alt="Producto fresco seleccionado para el menú" />
+      <img src="{{asset:trajectory-kitchen-detail}}" alt="Detalle de cocina y técnica profesional" />
+    </div>
+  </div>
+  <article class="chef-manifesto__copy">
+    <span class="chef-eyebrow">Concepto</span>
+    <h2>En Cholo, no seguimos cartas. Creamos.</h2>
+    <p>
+      Un menú privado que se construye en el momento para contar una historia. Cada
+      plato nace desde cero, respondiendo al producto, al instante y a quien se sienta en la mesa.
+    </p>
+    <p>
+      Nuestra cocina se inspira en el Perú: acidez que despierta, fuego preciso,
+      profundidad de fondos y el pulso del mar.
+    </p>
+    <div class="chef-manifesto__highlights">
+      <p><strong>Promesa de cocina:</strong> producto fresco, sin concesiones. Seleccionamos insumos del día y construimos un menú vivo, íntimo y en constante evolución.</p>
+      <p><strong>Trayectoria:</strong> base técnica en cocinas referentes como Bitute junto al chef César Cavero, y en Piedra de Sebastián Vega, bajo la guía de Andrés Murgueytio.</p>
+      <p><strong>Formato:</strong> menús por tiempos donde cada plato marca el ritmo, construye emoción y despliega una narrativa culinaria durante toda la velada.</p>
+    </div>
+    <ol class="chef-manifesto__menu">
+      <li><span>01</span>Sin carta fija: cada experiencia nace en el momento.</li>
+      <li><span>02</span>Producto fresco y técnica precisa en cada tiempo.</li>
+      <li><span>03</span>Una mesa, un momento y una historia distinta cada noche.</li>
+      <li><span>04</span>Una experiencia íntima, elegante y diseñada para quedarse en la memoria.</li>
+    </ol>
+  </article>
+</section>
+
+& .chef-manifesto {
+  display: grid;
+  gap: 1.1rem;
+}
+@media (min-width: 920px) {
+  & .chef-manifesto {
+    grid-template-columns: 0.92fr 1.08fr;
+    align-items: stretch;
+  }
+}
+& .chef-manifesto__media-wrap {
+  display: grid;
+  gap: 0.8rem;
+}
+& .chef-manifesto__media,
+& .chef-manifesto__copy {
+  border-radius: 2rem;
+  overflow: hidden;
+  border: 1px solid rgba(24,21,18,0.08);
+  background: rgba(255,255,255,0.95);
+  box-shadow: 0 24px 80px rgba(24,21,18,0.07);
+}
+& .chef-manifesto__media img {
+  width: 100%;
+  height: 100%;
+  min-height: 16.5rem;
+  object-fit: cover;
+  display: block;
+}
+& .chef-manifesto__media-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+& .chef-manifesto__media-grid img {
+  width: 100%;
+  height: 8.8rem;
+  object-fit: cover;
+  display: block;
+  border-radius: 1.3rem;
+  border: 1px solid rgba(24,21,18,0.08);
+  box-shadow: 0 20px 45px rgba(24,21,18,0.06);
+}
+& .chef-manifesto__copy {
+  padding: clamp(1.35rem, 2.6vw, 2.4rem);
+}
+& .chef-eyebrow {
+  display: inline-block;
+  margin-bottom: 0.95rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.34em;
+  color: #8a5d3b;
+}
+& h2 {
+  margin: 0;
+  color: #181512;
+  font-size: clamp(1.8rem, 3.1vw, 3.1rem);
+  line-height: 1;
+}
+& p {
+  margin: 1rem 0 0;
+  color: #4d463f;
+  font-size: 0.98rem;
+  line-height: 1.82;
+  max-width: 56ch;
+}
+& .chef-manifesto__highlights {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.65rem;
+}
+& .chef-manifesto__highlights p {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 0.93rem;
+  line-height: 1.72;
+  color: #5a4e45;
+}
+& .chef-manifesto__highlights strong {
+  color: #181512;
+}
+& .chef-manifesto__menu {
+  margin: 1.15rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.55rem;
+}
+& .chef-manifesto__menu li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid rgba(24,21,18,0.08);
+  border-radius: 999px;
+  padding: 0.5rem 0.95rem 0.5rem 0.45rem;
+  background: rgba(255,255,255,0.72);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: #3f3833;
+}
+& .chef-manifesto__menu li span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 999px;
+  background: rgba(138, 93, 59, 0.14);
+  color: #6f4d35;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}

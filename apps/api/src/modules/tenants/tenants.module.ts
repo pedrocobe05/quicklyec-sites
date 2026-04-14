@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   AdminUserEntity,
+  SitePageEntity,
   TenantBrandingEntity,
   TenantDomainEntity,
   TenantEntity,
@@ -23,6 +24,7 @@ import { FilesModule } from '../files/files.module';
       TenantEntity,
       TenantDomainEntity,
       TenantSettingEntity,
+      SitePageEntity,
       TenantBrandingEntity,
       TenantMembershipEntity,
       TenantRoleEntity,

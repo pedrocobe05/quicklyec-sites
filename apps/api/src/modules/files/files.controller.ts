@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { Idempotent } from 'src/core/decorators/idempotent.decorator';
@@ -28,6 +28,15 @@ export class FilesController {
   @Get(':fileId/access')
   getSignedAccessUrl(@Param('fileId') fileId: string, @Query('tenantId') tenantId: string) {
     return this.filesService.createSignedAccessUrl(fileId, tenantId);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, TenantMembershipGuard)
+  @TenantModuleAccess('site')
+  @Delete(':fileId')
+  @Idempotent()
+  removeFile(@Param('fileId') fileId: string, @Query('tenantId') tenantId: string) {
+    return this.filesService.deleteStoredFile(fileId, tenantId);
   }
 
   @Get('public/:fileId')

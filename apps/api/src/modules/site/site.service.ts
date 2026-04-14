@@ -113,6 +113,8 @@ export class SiteService {
       const raw = asset as Record<string, unknown>;
       const name = this.sanitizeAssetName(String(raw.name ?? raw.label ?? ''));
       const url = String(raw.url ?? '').trim();
+      const fileId = String(raw.fileId ?? '').trim();
+      const urlMatch = url.match(/^file:([0-9a-f-]+)$/i);
 
       if (!name || !url) {
         continue;
@@ -121,6 +123,7 @@ export class SiteService {
       assets.push({
         name,
         url,
+        fileId: fileId || urlMatch?.[1] || null,
         alt: String(raw.alt ?? '').trim() || null,
         label: String(raw.label ?? '').trim() || null,
         kind: 'image',
@@ -459,10 +462,30 @@ export class SiteService {
         order: { position: 'ASC' },
       });
       return Promise.all(
-        sections.map(async (section) => ({
-          ...section,
-          content: await this.filesService.resolveContentAssets(section.content, tenantId),
-        })),
+        sections.map(async (section) => {
+          const content = { ...(section.content ?? {}) } as Record<string, unknown>;
+          if (section.type === 'custom_html' && Array.isArray(content.assets)) {
+            content.assets = (content.assets as Array<Record<string, unknown>>).map((asset) => {
+              if (!asset || typeof asset !== 'object') {
+                return asset;
+              }
+              const rawUrl = String(asset.url ?? '').trim();
+              const match = rawUrl.match(/^file:([0-9a-f-]+)$/i);
+              if (asset.fileId || !match) {
+                return asset;
+              }
+              return {
+                ...asset,
+                fileId: match[1],
+              };
+            });
+          }
+
+          return {
+            ...section,
+            content: await this.filesService.resolveContentAssets(content, tenantId),
+          };
+        }),
       );
     }
 
@@ -479,10 +502,30 @@ export class SiteService {
       order: { position: 'ASC' },
     });
     return Promise.all(
-      sections.map(async (section) => ({
-        ...section,
-        content: await this.filesService.resolveContentAssets(section.content, tenantId),
-      })),
+      sections.map(async (section) => {
+        const content = { ...(section.content ?? {}) } as Record<string, unknown>;
+        if (section.type === 'custom_html' && Array.isArray(content.assets)) {
+          content.assets = (content.assets as Array<Record<string, unknown>>).map((asset) => {
+            if (!asset || typeof asset !== 'object') {
+              return asset;
+            }
+            const rawUrl = String(asset.url ?? '').trim();
+            const match = rawUrl.match(/^file:([0-9a-f-]+)$/i);
+            if (asset.fileId || !match) {
+              return asset;
+            }
+            return {
+              ...asset,
+              fileId: match[1],
+            };
+          });
+        }
+
+        return {
+          ...section,
+          content: await this.filesService.resolveContentAssets(content, tenantId),
+        };
+      }),
     );
   }
 

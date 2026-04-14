@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
   AdminUserEntity,
+  SitePageEntity,
   TenantBrandingEntity,
   TenantDomainEntity,
   TenantEntity,
@@ -40,6 +41,8 @@ export class TenantsService {
     private readonly domainsRepository: Repository<TenantDomainEntity>,
     @InjectRepository(TenantSettingEntity)
     private readonly settingsRepository: Repository<TenantSettingEntity>,
+    @InjectRepository(SitePageEntity)
+    private readonly pagesRepository: Repository<SitePageEntity>,
     @InjectRepository(TenantBrandingEntity)
     private readonly brandingRepository: Repository<TenantBrandingEntity>,
     @InjectRepository(TenantMembershipEntity)
@@ -221,8 +224,54 @@ export class TenantsService {
       settings = this.settingsRepository.create({ tenantId });
     }
 
-    Object.assign(settings, input);
-    return this.settingsRepository.save(settings);
+    const nextInput: Record<string, unknown> = { ...input };
+    if (typeof nextInput.defaultSeoTitle === 'string') {
+      const normalized = nextInput.defaultSeoTitle.trim();
+      nextInput.defaultSeoTitle = normalized || null;
+    }
+    if (typeof nextInput.defaultSeoDescription === 'string') {
+      const normalized = nextInput.defaultSeoDescription.trim();
+      nextInput.defaultSeoDescription = normalized || null;
+    }
+    if (typeof nextInput.defaultOgImageUrl === 'string') {
+      const normalized = nextInput.defaultOgImageUrl.trim();
+      nextInput.defaultOgImageUrl = normalized || null;
+    }
+    if (typeof nextInput.canonicalDomain === 'string') {
+      const normalized = this.normalizeHost(nextInput.canonicalDomain);
+      nextInput.canonicalDomain = normalized || null;
+    }
+
+    Object.assign(settings, nextInput);
+    const savedSettings = await this.settingsRepository.save(settings);
+
+    const homeSeoUpdate: Record<string, string | boolean | null> = {};
+    if (Object.prototype.hasOwnProperty.call(nextInput, 'defaultSeoTitle')) {
+      homeSeoUpdate.seoTitle = (nextInput.defaultSeoTitle as string | null) ?? null;
+      homeSeoUpdate.ogTitle = (nextInput.defaultSeoTitle as string | null) ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(nextInput, 'defaultSeoDescription')) {
+      homeSeoUpdate.seoDescription = (nextInput.defaultSeoDescription as string | null) ?? null;
+      homeSeoUpdate.ogDescription = (nextInput.defaultSeoDescription as string | null) ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(nextInput, 'defaultOgImageUrl')) {
+      homeSeoUpdate.ogImageUrl = (nextInput.defaultOgImageUrl as string | null) ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(nextInput, 'canonicalDomain')) {
+      const canonicalDomain = (nextInput.canonicalDomain as string | null) ?? null;
+      homeSeoUpdate.canonicalUrl = canonicalDomain ? `https://${canonicalDomain}/` : null;
+    }
+    if (Object.prototype.hasOwnProperty.call(nextInput, 'siteIndexingEnabled')) {
+      const shouldIndex = Boolean(nextInput.siteIndexingEnabled);
+      homeSeoUpdate.isIndexable = shouldIndex;
+      homeSeoUpdate.metaRobots = shouldIndex ? 'index,follow' : 'noindex,nofollow';
+    }
+
+    if (Object.keys(homeSeoUpdate).length > 0) {
+      await this.pagesRepository.update({ tenantId, isHome: true }, homeSeoUpdate);
+    }
+
+    return savedSettings;
   }
 
   async sendTestEmail(tenantId: string, to: string) {

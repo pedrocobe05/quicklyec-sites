@@ -256,6 +256,13 @@ export async function uploadTenantFile(
   };
 }
 
+export async function deleteTenantFile(accessToken: string, tenantId: string, fileId: string) {
+  return request(`/files/${fileId}?tenantId=${tenantId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
 export async function updateTenantSettings(accessToken: string, tenantId: string, payload: Record<string, unknown>) {
   return request(`/tenants/settings?tenantId=${tenantId}`, {
     method: 'PATCH',

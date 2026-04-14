@@ -62,6 +62,11 @@ export function useSiteConfig(slug = '/') {
       element.content = data.page.seo.metaRobots ?? 'index,follow';
     });
 
+    ensureMeta('meta[name="theme-color"]', (element) => {
+      element.name = 'theme-color';
+      element.content = data.theme.primaryColor;
+    });
+
     let canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
     if (!canonical) {
       canonical = document.createElement('link');
@@ -71,6 +76,21 @@ export function useSiteConfig(slug = '/') {
     canonical.href =
       data.page.seo.canonicalUrl ??
       `https://${data.domain.canonicalHost}${data.page.isHome ? '' : `/${data.page.slug}`}`;
+
+    const faviconHref = data.theme.faviconUrl?.trim() || '/favicon.ico';
+
+    const ensureLink = (selector: string, rel: string) => {
+      const existing = document.querySelector<HTMLLinkElement>(selector) ?? document.createElement('link');
+      existing.rel = rel;
+      existing.href = faviconHref;
+      if (!existing.parentNode) {
+        document.head.appendChild(existing);
+      }
+    };
+
+    ensureLink('link[rel="icon"]', 'icon');
+    ensureLink('link[rel="shortcut icon"]', 'shortcut icon');
+    ensureLink('link[rel="apple-touch-icon"]', 'apple-touch-icon');
   }, [data]);
 
   return { data, loading, error };

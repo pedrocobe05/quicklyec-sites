@@ -22,6 +22,7 @@ import {
   deleteService,
   deleteScheduleBlock,
   deleteStaff,
+  deleteTenantFile,
   deleteTenantDomain,
   getAppointments,
   getAvailabilityRules,
@@ -186,6 +187,7 @@ interface SectionRecord {
 interface SectionAssetRecord {
   name: string;
   url: string;
+  fileId?: string | null;
   alt?: string | null;
   label?: string | null;
   kind?: 'image';
@@ -392,6 +394,7 @@ function parseSectionAssetsJson(rawValue: FormDataEntryValue | null, fallback: u
     assets.push({
       name,
       url,
+      fileId: String(rawAsset.fileId ?? '').trim() || null,
       alt: String(rawAsset.alt ?? '').trim() || null,
       label: String(rawAsset.label ?? '').trim() || null,
       kind: 'image',
@@ -930,7 +933,36 @@ export function TenantDetailPage() {
             ogImageUrl: String(form.get('ogImageUrl') ?? editModal.item.ogImageUrl ?? ''),
           });
           break;
-        case 'section':
+        case 'section': {
+          const nextAssets = parseSectionAssetsJson(form.get('assetsJson'), editModal.item.content.assets);
+          const previousAssets = Array.isArray(editModal.item.content.assets)
+            ? (editModal.item.content.assets as SectionAssetRecord[])
+            : [];
+
+          const nextFileIds = new Set(
+            nextAssets
+              .map((asset) => String(asset.fileId ?? '').trim())
+              .filter((value) => Boolean(value)),
+          );
+          const removedFileIds = Array.from(
+            new Set(
+              previousAssets
+                .map((asset) => String(asset.fileId ?? '').trim())
+                .filter((value) => Boolean(value) && !nextFileIds.has(value)),
+            ),
+          );
+
+          for (const fileId of removedFileIds) {
+            try {
+              await deleteTenantFile(token, tenantId, fileId);
+            } catch (error) {
+              const message = error instanceof Error ? error.message : '';
+              if (!message.toLowerCase().includes('archivo no encontrado')) {
+                throw error;
+              }
+            }
+          }
+
           await updateSection(token, tenantId, editModal.item.id, {
             type: String(form.get('type') ?? editModal.item.type),
             variant: String(form.get('variant') ?? editModal.item.variant),
@@ -952,10 +984,11 @@ export function TenantDetailPage() {
               imageUrl: String(form.get('imageUrl') ?? String(editModal.item.content.imageUrl ?? '')),
               html: String(form.get('html') ?? String(editModal.item.content.html ?? '')),
               css: String(form.get('css') ?? String(editModal.item.content.css ?? '')),
-              assets: parseSectionAssetsJson(form.get('assetsJson'), editModal.item.content.assets),
+              assets: nextAssets,
             },
           });
           break;
+        }
         case 'rule':
           await updateAvailabilityRule(token, tenantId, editModal.item.id, {
             staffId: String(form.get('staffId') ?? '').trim() || undefined,
@@ -1102,6 +1135,7 @@ export function TenantDetailPage() {
             ...nextAssets[existingIndex],
             name: baseName,
             url: uploaded.reference,
+            fileId: uploaded.fileId,
             alt: file.name.replace(/\.[^.]+$/, ''),
             label: file.name.replace(/\.[^.]+$/, ''),
             kind: 'image',
@@ -1112,6 +1146,7 @@ export function TenantDetailPage() {
         nextAssets.push({
           name: baseName,
           url: uploaded.reference,
+          fileId: uploaded.fileId,
           alt: file.name.replace(/\.[^.]+$/, ''),
           label: file.name.replace(/\.[^.]+$/, ''),
           kind: 'image',

@@ -1,0 +1,123 @@
+<section class="chef-signature-services">
+  
+    <span class="chef-eyebrow">Experiencia</span>
+    <h2>Una mesa. Un momento. Una historia distinta cada noche.</h2>
+  
+  <div class="chef-signature-services__grid">
+    <article>
+      <img src="{{asset:service-intimate-dinner}}" alt="Menú privado de autor" />
+      <strong>Reserva tu experiencia</strong>
+      <p>Cada servicio es limitado. Trabajamos bajo reserva previa para garantizar una experiencia personalizada.</p>
+    </article>
+    <article>
+      <img src="{{asset:service-tasting-menu}}" alt="Menú degustación privado" />
+      <strong>Sin carta. Con intención.</strong>
+      <p>Menús por tiempos que construyen emoción y ritmo para una velada completa, íntima y memorable.</p>
+    </article>
+    <article>
+      <img src="{{asset:service-chef-table}}" alt="Chef's table privado" />
+      <strong>Cocina viva</strong>
+      <p>Producto fresco, técnica y sensibilidad para crear una propuesta irrepetible en cada noche.</p>
+    </article>
+  </div>
+  <div class="chef-signature-services__reservation-visual">
+    <img src="{{asset:reservation-mood}}" alt="Ambiente de mesa lista para una reserva privada" />
+  </div>
+  <div class="chef-signature-services__actions">
+    <a href="/reservar" class="chef-btn chef-btn--primary">Lleva a reservas</a>
+  </div>
+</section>
+
+& .chef-signature-services {
+  border: 1px solid rgba(24,21,18,0.08);
+  border-radius: 2rem;
+  padding: clamp(1.35rem, 2.6vw, 2.4rem);
+  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(245,241,234,0.95));
+  box-shadow: 0 24px 80px rgba(24,21,18,0.07);
+}
+& .chef-eyebrow {
+  display: inline-block;
+  margin-bottom: 0.95rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.34em;
+  color: #8a5d3b;
+}
+& .chef-signature-services h2 {
+  margin: 0;
+  max-width: 18ch;
+  color: #181512;
+  font-size: clamp(1.8rem, 3.1vw, 3rem);
+  line-height: 1;
+}
+& .chef-signature-services__grid {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1.35rem;
+}
+@media (min-width: 920px) {
+  & .chef-signature-services__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+& .chef-signature-services article {
+  overflow: hidden;
+  border-radius: 1.5rem;
+  background: #f8f4ee;
+}
+& .chef-signature-services article img {
+  width: 100%;
+  height: 12.5rem;
+  object-fit: cover;
+  display: block;
+}
+& .chef-signature-services article strong,
+& .chef-signature-services article p {
+  display: block;
+  padding-left: 1.35rem;
+  padding-right: 1.35rem;
+}
+& .chef-signature-services article strong {
+  padding-top: 1.05rem;
+  color: #181512;
+  font-size: 1.08rem;
+}
+& .chef-signature-services article p {
+  padding-bottom: 1.1rem;
+  margin: 0.55rem 0 0;
+  color: #4d463f;
+  font-size: 0.95rem;
+  line-height: 1.72;
+}
+& .chef-signature-services__reservation-visual {
+  margin-top: 1rem;
+  border-radius: 1.5rem;
+  overflow: hidden;
+  border: 1px solid rgba(24,21,18,0.08);
+}
+& .chef-signature-services__reservation-visual img {
+  width: 100%;
+  height: 11rem;
+  object-fit: cover;
+  display: block;
+}
+& .chef-signature-services__actions {
+  margin-top: 1.2rem;
+  display: flex;
+  justify-content: center;
+}
+& .chef-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3rem;
+  padding: 0 1.35rem;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+& .chef-btn--primary {
+  background: #181512;
+  color: #ffffff;
+}
