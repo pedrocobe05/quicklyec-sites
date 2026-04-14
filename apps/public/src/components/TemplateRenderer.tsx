@@ -43,9 +43,11 @@ function HeroSection({ section }: { section: SiteSection }) {
     <section className="overflow-hidden rounded-[calc(var(--radius)+0.5rem)] border border-black/5 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(245,239,233,0.92))] p-10 shadow-[0_24px_80px_rgba(15,23,42,0.08)] md:p-14">
       <div className="grid gap-8 md:grid-cols-[1.4fr,0.8fr] md:items-end">
         <div>
-          <p className="text-xs uppercase tracking-[0.4em] text-[var(--accent)]">{String(section.content.kicker ?? 'Nails & Spa')}</p>
+          {String(section.content.kicker ?? '').trim() ? (
+            <p className="text-xs uppercase tracking-[0.4em] text-[var(--accent)]">{String(section.content.kicker ?? '').trim()}</p>
+          ) : null}
           <h1 className="mt-4 font-serif text-5xl leading-[0.95] text-slate-900 md:text-7xl">
-            {String(section.content.title ?? 'Un espacio delicado para manos impecables')}
+            {String(section.content.title ?? 'Una presencia digital diseñada para destacar tu marca')}
           </h1>
           <p className="mt-6 max-w-2xl text-base leading-7 text-slate-600 md:text-lg">
             {String(section.content.subtitle ?? '')}
@@ -53,9 +55,9 @@ function HeroSection({ section }: { section: SiteSection }) {
         </div>
         <div className="rounded-[var(--radius)] border border-[rgba(15,23,42,0.08)] bg-white/70 p-6 backdrop-blur">
           <p className="text-[0.7rem] uppercase tracking-[0.35em] text-slate-400">Experiencia</p>
-          <p className="mt-3 font-serif text-3xl text-slate-900">Minimalista, serena y precisa.</p>
+          <p className="mt-3 font-serif text-3xl text-slate-900">Diseño editorial y experiencia premium.</p>
           <p className="mt-4 text-sm leading-6 text-slate-600">
-            Diseño pensado para marcas de nails, spa y beauty que quieren verse elegantes y actuales desde el primer contacto.
+            Presentación visual pensada para marcas que quieren verse cuidadas, coherentes y memorables desde el primer contacto.
           </p>
         </div>
       </div>
@@ -152,7 +154,7 @@ function BookingCTASection() {
       </p>
       <a
         href="/reservar"
-        className="mt-6 inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-900"
+        className="mt-6 inline-flex rounded-full border border-white/20 bg-[color-mix(in_srgb,var(--secondary)_78%,white)] px-5 py-3 text-sm font-semibold text-[color-mix(in_srgb,var(--primary)_80%,#0f172a)]"
       >
         Reservar ahora
       </a>

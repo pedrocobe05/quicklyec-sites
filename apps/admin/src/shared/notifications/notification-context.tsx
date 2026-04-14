@@ -10,6 +10,17 @@ export interface NotificationContextValue {
   notify: (title: string, variant?: NotificationItem['variant']) => void;
 }
 
+function normalizeNotificationTitle(title: unknown) {
+  if (typeof title === 'string') {
+    const normalized = title.trim();
+    if (normalized && normalized.toLowerCase() !== 'null' && normalized.toLowerCase() !== 'undefined') {
+      return normalized;
+    }
+  }
+
+  return 'No se pudo completar la acción.';
+}
+
 export const NotificationContext = createContext<NotificationContextValue | undefined>(undefined);
 
 export function NotificationProvider({ children }: PropsWithChildren) {
@@ -19,7 +30,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
     () => ({
       notify: (title: string, variant: NotificationItem['variant'] = 'info') => {
         const id = Date.now() + Math.floor(Math.random() * 1000);
-        setItems((current) => [...current, { id, title, variant }]);
+        setItems((current) => [...current, { id, title: normalizeNotificationTitle(title), variant }]);
         window.setTimeout(() => {
           setItems((current) => current.filter((item) => item.id !== id));
         }, 3500);

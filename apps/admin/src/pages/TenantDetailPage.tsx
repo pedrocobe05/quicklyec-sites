@@ -120,6 +120,7 @@ interface TenantProfileResponse {
     fontFamily?: string | null;
     borderRadius?: string | null;
     buttonStyle?: string | null;
+    customCss?: string | null;
     logoUrl?: string | null;
     faviconUrl?: string | null;
   } | null;
@@ -858,7 +859,9 @@ export function TenantDetailPage() {
         notify(options?.successMessage ?? 'Cambios guardados.', 'success');
       }
     } catch (err) {
-      const message = (err as Error).message;
+      const message = err instanceof Error && err.message && err.message.trim()
+        ? err.message
+        : 'No se pudo completar la acción.';
       notify(message, 'error');
     } finally {
       setSaving(null);
@@ -1417,6 +1420,7 @@ export function TenantDetailPage() {
                     fontFamily: String(form.get('fontFamily') ?? ''),
                     borderRadius: String(form.get('borderRadius') ?? ''),
                     buttonStyle: String(form.get('buttonStyle') ?? ''),
+                    customCss: String(form.get('customCss') ?? ''),
                   });
                   await loadData();
                 });
@@ -1533,7 +1537,8 @@ export function TenantDetailPage() {
               domains={tenantProfile?.domains ?? []}
               onSubmit={(event) => {
                 event.preventDefault();
-                const form = new FormData(event.currentTarget);
+                const formElement = event.currentTarget as HTMLFormElement | null;
+                const form = new FormData(formElement ?? undefined);
                 wrapAction('domain', async () => {
                   await createTenantDomain(token, {
                     tenantId,
@@ -1542,11 +1547,20 @@ export function TenantDetailPage() {
                     isPrimary: form.get('isPrimary') === 'on',
                     verificationStatus: String(form.get('verificationStatus') ?? 'pending'),
                   });
-                  event.currentTarget.reset();
+                  formElement?.reset?.();
                   await loadData();
                 });
               }}
               onEdit={(domain) => setEditModal({ type: 'domain', item: domain })}
+              onDelete={(domain) => {
+                void wrapAction(`delete-domain-${domain.id}`, async () => {
+                  await deleteTenantDomain(token, tenantId, domain.id);
+                  if (editModal?.type === 'domain' && editModal.item.id === domain.id) {
+                    setEditModal(null);
+                  }
+                  await loadData();
+                }, { successMessage: 'Dominio eliminado.' });
+              }}
               itemRow={(props) => <ItemRow {...props} />}
             />
           ) : null}
@@ -1577,6 +1591,7 @@ export function TenantDetailPage() {
               }}
               onCreateSection={(event) => {
                 event.preventDefault();
+                const formElement = event.currentTarget;
                 const form = new FormData(event.currentTarget);
                 const scope = String(form.get('scope') ?? 'page');
                 if (scope === 'page' && !selectedPage) return;
@@ -1598,7 +1613,7 @@ export function TenantDetailPage() {
                     },
                     settings: {},
                   });
-                  event.currentTarget.reset();
+                  formElement.reset();
                   if (scope === 'global') {
                     const refreshedGlobal = await getSections(token, tenantId, undefined, 'global');
                     setGlobalSections(refreshedGlobal as SectionRecord[]);
@@ -1628,7 +1643,8 @@ export function TenantDetailPage() {
               staff={staff}
               onCreateService={(event) => {
                 event.preventDefault();
-                const form = new FormData(event.currentTarget);
+                const formElement = event.currentTarget as HTMLFormElement | null;
+                const form = new FormData(formElement ?? undefined);
                 wrapAction('service', async () => {
                   await createService(token, {
                     tenantId,
@@ -1638,13 +1654,14 @@ export function TenantDetailPage() {
                     price: form.get('price') ? Number(form.get('price')) : undefined,
                     category: String(form.get('category') ?? ''),
                   });
-                  event.currentTarget.reset();
+                  formElement?.reset?.();
                   await loadData();
                 });
               }}
               onCreateStaff={(event) => {
                 event.preventDefault();
-                const form = new FormData(event.currentTarget);
+                const formElement = event.currentTarget as HTMLFormElement | null;
+                const form = new FormData(formElement ?? undefined);
                 wrapAction('staff', async () => {
                   await createStaff(token, {
                     tenantId,
@@ -1654,7 +1671,7 @@ export function TenantDetailPage() {
                     phone: String(form.get('phone') ?? ''),
                     serviceIds: form.getAll('serviceIds').map(String),
                   });
-                  event.currentTarget.reset();
+                  formElement?.reset?.();
                   await loadData();
                 });
               }}
@@ -1689,7 +1706,8 @@ export function TenantDetailPage() {
               staff={staff}
               onCreateService={(event) => {
                 event.preventDefault();
-                const form = new FormData(event.currentTarget);
+                const formElement = event.currentTarget as HTMLFormElement | null;
+                const form = new FormData(formElement ?? undefined);
                 wrapAction('service', async () => {
                   await createService(token, {
                     tenantId,
@@ -1699,13 +1717,14 @@ export function TenantDetailPage() {
                     price: form.get('price') ? Number(form.get('price')) : undefined,
                     category: String(form.get('category') ?? ''),
                   });
-                  event.currentTarget.reset();
+                  formElement?.reset?.();
                   await loadData();
                 });
               }}
               onCreateStaff={(event) => {
                 event.preventDefault();
-                const form = new FormData(event.currentTarget);
+                const formElement = event.currentTarget as HTMLFormElement | null;
+                const form = new FormData(formElement ?? undefined);
                 wrapAction('staff', async () => {
                   await createStaff(token, {
                     tenantId,
@@ -1715,7 +1734,7 @@ export function TenantDetailPage() {
                     phone: String(form.get('phone') ?? ''),
                     serviceIds: form.getAll('serviceIds').map(String),
                   });
-                  event.currentTarget.reset();
+                  formElement?.reset?.();
                   await loadData();
                 });
               }}
@@ -2134,6 +2153,17 @@ export function TenantDetailPage() {
         generatedPassword={generatedPassword}
         onClose={() => setEditModal(null)}
         onSubmit={handleEditSubmit}
+        onDelete={
+          editModal?.type === 'domain'
+            ? () => {
+                void wrapAction(`delete-domain-${editModal.item.id}`, async () => {
+                  await deleteTenantDomain(token, tenantId, editModal.item.id);
+                  setEditModal(null);
+                  await loadData();
+                }, { successMessage: 'Dominio eliminado.' });
+              }
+            : undefined
+        }
         onCloseGeneratedPassword={() => setGeneratedPassword(null)}
         days={days}
         tenantRoles={tenantRoles}

@@ -18,12 +18,16 @@ interface DomainsSectionProps {
   domains: DomainRecord[];
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onEdit: (domain: DomainRecord) => void;
+  onDelete: (domain: DomainRecord) => void;
   itemRow: (props: {
     title: string;
     subtitle: string;
     meta?: string;
     actionLabel: string;
     onAction: () => void;
+    secondaryActionLabel?: string;
+    onSecondaryAction?: () => void;
+    secondaryActionVariant?: 'secondary' | 'danger';
     disabled?: boolean;
   }) => JSX.Element;
 }
@@ -33,6 +37,7 @@ export function DomainsSection({
   domains,
   onSubmit,
   onEdit,
+  onDelete,
   itemRow,
 }: DomainsSectionProps) {
   return (
@@ -73,8 +78,11 @@ export function DomainsSection({
             title: domain.domain,
             subtitle: `${domain.type} · ${domain.verificationStatus}`,
             meta: domain.isPrimary ? 'Dominio primario' : 'Dominio secundario',
-            actionLabel: saving === `delete-domain-${domain.id}` ? 'Eliminando...' : 'Eliminar',
+            actionLabel: 'Editar',
             onAction: () => onEdit(domain),
+            secondaryActionLabel: saving === `delete-domain-${domain.id}` ? 'Eliminando...' : 'Eliminar',
+            onSecondaryAction: () => onDelete(domain),
+            secondaryActionVariant: 'danger',
           }),
         )}
       </div>

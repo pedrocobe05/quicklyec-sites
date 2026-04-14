@@ -105,6 +105,7 @@ interface EditEntityModalProps {
   generatedPassword: string | null;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onDelete?: () => void;
   onCloseGeneratedPassword: () => void;
   days: string[];
   tenantRoles?: TenantRoleRecord[];
@@ -125,6 +126,7 @@ export function EditEntityModal({
   generatedPassword,
   onClose,
   onSubmit,
+  onDelete,
   onCloseGeneratedPassword,
   days,
   tenantRoles = [],
@@ -135,6 +137,7 @@ export function EditEntityModal({
   staffOptions = [],
 }: EditEntityModalProps) {
   const [sectionAssets, setSectionAssets] = useState<SectionAssetRecord[]>([]);
+  const [customHtmlSource, setCustomHtmlSource] = useState('');
 
   useEffect(() => {
     if (editModal?.type === 'section' && editModal.item.type === 'custom_html') {
@@ -143,11 +146,18 @@ export function EditEntityModal({
           ? (editModal.item.content.assets as SectionAssetRecord[])
           : [],
       );
+      setCustomHtmlSource(String(editModal.item.content.html ?? ''));
       return;
     }
 
     setSectionAssets([]);
+    setCustomHtmlSource('');
   }, [editModal]);
+
+  const requiredAssetAliases = Array.from(
+    customHtmlSource.matchAll(/\{\{\s*asset:([a-zA-Z0-9._-]+)\s*\}\}/g),
+    (match) => match[1],
+  ).filter((value, index, values) => values.indexOf(value) === index);
 
   return (
     <>
@@ -516,7 +526,8 @@ export function EditEntityModal({
                     <FormField label="HTML personalizado">
                       <Textarea
                         name="html"
-                        defaultValue={String(editModal.item.content.html ?? '')}
+                        value={customHtmlSource}
+                        onChange={(event) => setCustomHtmlSource(event.target.value)}
                         className="min-h-40 font-mono text-xs"
                       />
                     </FormField>
@@ -531,6 +542,58 @@ export function EditEntityModal({
                     <Alert variant="info">
                       Usa placeholders dentro del HTML como <span className="font-mono">{'{{asset:hero-main}}'}</span>. Los aliases se normalizan automáticamente para evitar errores.
                     </Alert>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">Recursos requeridos por esta sección</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Detectados automáticamente desde los placeholders <span className="font-mono">{'{{asset:...}}'}</span> del HTML.
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600">
+                          {requiredAssetAliases.length} requeridos
+                        </span>
+                      </div>
+                      {requiredAssetAliases.length > 0 ? (
+                        <div className="mt-4 grid gap-2">
+                          {requiredAssetAliases.map((alias) => {
+                            const matchedAsset = sectionAssets.find(
+                              (asset) => normalizeAssetAlias(asset.name) === normalizeAssetAlias(alias),
+                            );
+
+                            return (
+                              <div
+                                key={alias}
+                                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                              >
+                                <div className="min-w-0">
+                                  <p className="font-mono text-sm text-slate-900">{`{{asset:${alias}}}`}</p>
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    {matchedAsset
+                                      ? `Asignado a: ${matchedAsset.label?.trim() || matchedAsset.name}`
+                                      : 'Aún no existe un recurso cargado con este alias'}
+                                  </p>
+                                </div>
+                                <span
+                                  className={[
+                                    'rounded-full px-3 py-1 text-xs font-semibold',
+                                    matchedAsset
+                                      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                                      : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
+                                  ].join(' ')}
+                                >
+                                  {matchedAsset ? 'Listo' : 'Falta recurso'}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-500">
+                          Este HTML todavía no usa placeholders de assets. Si agregas referencias como <span className="font-mono">{'{{asset:hero-main}}'}</span>, aparecerán aquí.
+                        </div>
+                      )}
+                    </div>
                     {sectionAssets.length > 0 ? (
                       <div className="grid gap-3">
                         {sectionAssets.map((asset, index) => (
@@ -747,6 +810,17 @@ export function EditEntityModal({
             ) : null}
 
             <div className="flex justify-end gap-3">
+              {editModal.type === 'domain' ? (
+                <Button
+                  type="button"
+                  variant="danger"
+                  isLoading={savingKey === `delete-domain-${editModal.item.id}`}
+                  loadingLabel="Eliminando..."
+                  onClick={onDelete}
+                >
+                  Eliminar
+                </Button>
+              ) : null}
               <Button type="button" variant="secondary" onClick={onClose}>
                 Cancelar
               </Button>

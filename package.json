@@ -10,7 +10,7 @@
     "dev:api": "npm run dev -w @quickly-sites/api",
     "dev:admin": "npm run dev -w @quickly-sites/admin",
     "dev:public": "npm run dev -w @quickly-sites/public",
-    "build": "npm run build --workspaces",
+    "build": "npm run build -w @quickly-sites/shared && npm run build -w @quickly-sites/api && npm run build -w @quickly-sites/admin && npm run build -w @quickly-sites/public",
     "lint": "npm run lint --workspaces",
     "format": "prettier --write .",
     "typeorm": "npm run typeorm -w @quickly-sites/api",

@@ -202,7 +202,7 @@ export function SiteSection({
                       <ImagePreview src={page.ogImageUrl} alt={`OG ${page.title}`} label="OG" className="h-20 w-20 shrink-0" />
                       <div>
                         <p className="font-medium text-slate-900">{page.isHome ? 'Inicio' : page.title}</p>
-                        <p className="mt-1 text-sm text-slate-600">/{page.isHome ? '' : page.slug} · {page.template?.name ?? '-'}</p>
+                        <p className="mt-1 text-sm text-slate-600">/{page.isHome ? '' : page.slug}</p>
                         <p className="mt-1 text-xs text-slate-500">{page.isPublished ? 'Publicada' : 'Borrador'}</p>
                       </div>
                     </div>

@@ -277,6 +277,7 @@ export class SiteService {
         fontFamily: resolved.branding?.fontFamily ?? 'Playfair Display',
         borderRadius: resolved.branding?.borderRadius ?? '1rem',
         buttonStyle: resolved.branding?.buttonStyle ?? 'rounded',
+        customCss: this.sanitizeCustomCss(String(resolved.branding?.customCss ?? '')) || null,
         logoUrl,
         faviconUrl,
       },

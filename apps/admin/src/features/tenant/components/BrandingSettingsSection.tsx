@@ -1,5 +1,5 @@
 import { SITE_FONT_OPTIONS } from '@quickly-sites/shared';
-import { FormEvent } from 'react';
+import { CSSProperties, FormEvent, useEffect, useMemo, useState } from 'react';
 import { Button } from '../../../shared/components/ui/Button';
 import { Input } from '../../../shared/components/ui/Input';
 import { Select } from '../../../shared/components/ui/Select';
@@ -18,6 +18,7 @@ interface BrandingSettingsSectionProps {
     fontFamily?: string | null;
     borderRadius?: string | null;
     buttonStyle?: string | null;
+    customCss?: string | null;
     logoUrl?: string | null;
     faviconUrl?: string | null;
   } | null;
@@ -36,6 +37,37 @@ interface BrandingSettingsSectionProps {
   onSubmitSettings: (event: FormEvent<HTMLFormElement>) => void;
 }
 
+const BUTTON_STYLE_OPTIONS = [
+  {
+    value: 'pill',
+    label: 'Pill',
+    description: 'Botones redondeados y suaves, ideales para una marca editorial o premium.',
+    radius: '999px',
+  },
+  {
+    value: 'rounded',
+    label: 'Rounded',
+    description: 'Botones con borde redondeado moderado, más versátiles y sobrios.',
+    radius: '1rem',
+  },
+  {
+    value: 'soft-square',
+    label: 'Soft square',
+    description: 'Botones más rectos y modernos, con una presencia visual más firme.',
+    radius: '0.7rem',
+  },
+] as const;
+
+const HEX_COLOR_PATTERN = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+function normalizeHexColor(value: string | null | undefined, fallback: string) {
+  const normalized = String(value ?? '').trim();
+  if (HEX_COLOR_PATTERN.test(normalized)) {
+    return normalized;
+  }
+  return fallback;
+}
+
 export function BrandingSettingsSection({
   saving,
   uploadingAsset,
@@ -45,6 +77,50 @@ export function BrandingSettingsSection({
   onSubmitBranding,
   onSubmitSettings,
 }: BrandingSettingsSectionProps) {
+  const [preview, setPreview] = useState({
+    primaryColor: normalizeHexColor(branding?.primaryColor, '#C16A7B'),
+    secondaryColor: normalizeHexColor(branding?.secondaryColor, '#F8E6EA'),
+    accentColor: normalizeHexColor(branding?.accentColor, '#7C3A46'),
+    fontFamily: branding?.fontFamily ?? 'Cormorant Garamond',
+    borderRadius: branding?.borderRadius ?? '1.5rem',
+    buttonStyle: branding?.buttonStyle ?? 'pill',
+  });
+
+  useEffect(() => {
+    setPreview({
+      primaryColor: normalizeHexColor(branding?.primaryColor, '#C16A7B'),
+      secondaryColor: normalizeHexColor(branding?.secondaryColor, '#F8E6EA'),
+      accentColor: normalizeHexColor(branding?.accentColor, '#7C3A46'),
+      fontFamily: branding?.fontFamily ?? 'Cormorant Garamond',
+      borderRadius: branding?.borderRadius ?? '1.5rem',
+      buttonStyle: branding?.buttonStyle ?? 'pill',
+    });
+  }, [
+    branding?.primaryColor,
+    branding?.secondaryColor,
+    branding?.accentColor,
+    branding?.fontFamily,
+    branding?.borderRadius,
+    branding?.buttonStyle,
+  ]);
+
+  const previewFontFamily = useMemo(
+    () => SITE_FONT_OPTIONS.find((font) => font.value === preview.fontFamily)?.cssFamily ?? `"${preview.fontFamily}", serif`,
+    [preview.fontFamily],
+  );
+  const previewButtonRadius = useMemo(
+    () => BUTTON_STYLE_OPTIONS.find((option) => option.value === preview.buttonStyle)?.radius ?? '999px',
+    [preview.buttonStyle],
+  );
+  const previewStyle = {
+    '--preview-primary': preview.primaryColor,
+    '--preview-secondary': preview.secondaryColor,
+    '--preview-accent': preview.accentColor,
+    '--preview-radius': preview.borderRadius,
+    '--preview-font-family': previewFontFamily,
+    '--preview-button-radius': previewButtonRadius,
+  } as CSSProperties;
+
   return (
     <div className="grid gap-6 xl:grid-cols-2">
       <article id="branding" className="rounded-[2rem] bg-white p-6 shadow-sm scroll-mt-6">
@@ -94,18 +170,64 @@ export function BrandingSettingsSection({
           </FormField>
           <div className="grid gap-3 md:grid-cols-3">
             <FormField label="Color primario">
-              <Input name="primaryColor" defaultValue={branding?.primaryColor ?? '#C16A7B'} placeholder="#C16A7B" />
+              <div className="grid grid-cols-[auto_1fr] gap-3">
+                <input
+                  type="color"
+                  name="primaryColorPicker"
+                  value={normalizeHexColor(preview.primaryColor, '#C16A7B')}
+                  onChange={(event) => setPreview((current) => ({ ...current, primaryColor: event.target.value }))}
+                  className="h-12 w-14 cursor-pointer rounded-2xl border border-slate-200 bg-white p-1 shadow-[0_14px_34px_rgba(15,23,42,0.06)]"
+                />
+                <Input
+                  name="primaryColor"
+                  value={preview.primaryColor}
+                  onChange={(event) => setPreview((current) => ({ ...current, primaryColor: event.target.value }))}
+                  placeholder="#C16A7B"
+                />
+              </div>
             </FormField>
             <FormField label="Color secundario">
-              <Input name="secondaryColor" defaultValue={branding?.secondaryColor ?? '#F8E6EA'} placeholder="#F8E6EA" />
+              <div className="grid grid-cols-[auto_1fr] gap-3">
+                <input
+                  type="color"
+                  name="secondaryColorPicker"
+                  value={normalizeHexColor(preview.secondaryColor, '#F8E6EA')}
+                  onChange={(event) => setPreview((current) => ({ ...current, secondaryColor: event.target.value }))}
+                  className="h-12 w-14 cursor-pointer rounded-2xl border border-slate-200 bg-white p-1 shadow-[0_14px_34px_rgba(15,23,42,0.06)]"
+                />
+                <Input
+                  name="secondaryColor"
+                  value={preview.secondaryColor}
+                  onChange={(event) => setPreview((current) => ({ ...current, secondaryColor: event.target.value }))}
+                  placeholder="#F8E6EA"
+                />
+              </div>
             </FormField>
             <FormField label="Color acento">
-              <Input name="accentColor" defaultValue={branding?.accentColor ?? '#7C3A46'} placeholder="#7C3A46" />
+              <div className="grid grid-cols-[auto_1fr] gap-3">
+                <input
+                  type="color"
+                  name="accentColorPicker"
+                  value={normalizeHexColor(preview.accentColor, '#7C3A46')}
+                  onChange={(event) => setPreview((current) => ({ ...current, accentColor: event.target.value }))}
+                  className="h-12 w-14 cursor-pointer rounded-2xl border border-slate-200 bg-white p-1 shadow-[0_14px_34px_rgba(15,23,42,0.06)]"
+                />
+                <Input
+                  name="accentColor"
+                  value={preview.accentColor}
+                  onChange={(event) => setPreview((current) => ({ ...current, accentColor: event.target.value }))}
+                  placeholder="#7C3A46"
+                />
+              </div>
             </FormField>
           </div>
           <div className="grid gap-3 md:grid-cols-3">
             <FormField label="Tipografía">
-              <Select name="fontFamily" defaultValue={branding?.fontFamily ?? 'Cormorant Garamond'}>
+              <Select
+                name="fontFamily"
+                value={preview.fontFamily}
+                onChange={(event) => setPreview((current) => ({ ...current, fontFamily: event.target.value }))}
+              >
                 {SITE_FONT_OPTIONS.map((font) => (
                   <option key={font.value} value={font.value}>
                     {font.label}
@@ -114,12 +236,41 @@ export function BrandingSettingsSection({
               </Select>
             </FormField>
             <FormField label="Radio de borde">
-              <Input name="borderRadius" defaultValue={branding?.borderRadius ?? '1.5rem'} placeholder="1.5rem" />
+              <Input
+                name="borderRadius"
+                value={preview.borderRadius}
+                onChange={(event) => setPreview((current) => ({ ...current, borderRadius: event.target.value }))}
+                placeholder="1.5rem"
+              />
             </FormField>
             <FormField label="Estilo de botón">
-              <Input name="buttonStyle" defaultValue={branding?.buttonStyle ?? 'pill'} placeholder="pill" />
+              <Select
+                name="buttonStyle"
+                value={preview.buttonStyle}
+                onChange={(event) => setPreview((current) => ({ ...current, buttonStyle: event.target.value }))}
+              >
+                {BUTTON_STYLE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
             </FormField>
           </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-600">
+            <p className="font-medium text-slate-900">Estilo de botón seleccionado</p>
+            <p className="mt-1">
+              {BUTTON_STYLE_OPTIONS.find((option) => option.value === preview.buttonStyle)?.description ?? 'Define la personalidad visual de los botones del sitio.'}
+            </p>
+          </div>
+          <FormField label="CSS personalizado del tenant">
+            <Textarea
+              name="customCss"
+              defaultValue={branding?.customCss ?? ''}
+              placeholder="Ejemplo: .public-theme .hero-title { letter-spacing: .02em; }"
+              className="min-h-32"
+            />
+          </FormField>
           <Button type="submit" className="rounded-full px-5 py-3 text-sm font-semibold">
             {saving === 'branding' ? 'Guardando...' : 'Guardar marca'}
           </Button>
@@ -160,6 +311,132 @@ export function BrandingSettingsSection({
             {saving === 'settings' ? 'Guardando...' : 'Guardar SEO y configuración'}
           </Button>
         </form>
+      </article>
+
+      <article className="rounded-[2rem] bg-white p-6 shadow-sm xl:col-span-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-serif text-2xl text-slate-900">Vista previa de marca</h3>
+            <p className="mt-1 text-sm text-slate-500">Esta mini vista previa te muestra cómo se sentirían la fuente, colores, radios y botones antes de guardar.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">Fuente: {preview.fontFamily}</span>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">Botón: {preview.buttonStyle}</span>
+          </div>
+        </div>
+
+        <div
+          className="mt-6 overflow-hidden rounded-[2rem] border border-slate-200"
+          style={previewStyle}
+        >
+          <div
+            className="border-b border-black/5 px-5 py-4"
+            style={{
+              fontFamily: 'var(--preview-font-family)',
+              background:
+                'linear-gradient(180deg, rgba(255,255,255,0.92), color-mix(in srgb, var(--preview-secondary) 72%, white))',
+            }}
+          >
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-4">
+                <div
+                  className="flex h-12 w-12 items-center justify-center border border-black/5 text-xs font-semibold uppercase tracking-[0.28em]"
+                  style={{
+                    backgroundColor: 'var(--preview-secondary)',
+                    color: 'var(--preview-accent)',
+                    borderRadius: 'calc(var(--preview-radius) - 0.25rem)',
+                  }}
+                >
+                  QS
+                </div>
+                <div>
+                  <p className="text-[0.68rem] uppercase tracking-[0.34em]" style={{ color: 'var(--preview-accent)' }}>
+                    Experiencia privada
+                  </p>
+                  <p className="text-3xl font-semibold text-slate-900">Atelier Privé</p>
+                  <p className="text-sm text-slate-500">Cocina de autor a domicilio para veladas memorables.</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2 text-sm text-slate-700">
+                <span className="rounded-full px-4 py-2" style={{ backgroundColor: 'color-mix(in srgb, var(--preview-secondary) 78%, white)', borderRadius: 'var(--preview-button-radius)' }}>Inicio</span>
+                <span className="rounded-full px-4 py-2" style={{ backgroundColor: 'white', border: '1px solid rgba(15,23,42,0.08)', borderRadius: 'var(--preview-button-radius)' }}>Servicios</span>
+                <span className="rounded-full px-4 py-2" style={{ backgroundColor: 'white', border: '1px solid rgba(15,23,42,0.08)', borderRadius: 'var(--preview-button-radius)' }}>Contacto</span>
+              </div>
+            </div>
+          </div>
+
+          <div
+            className="grid gap-5 p-5 lg:grid-cols-[1.05fr_0.95fr]"
+            style={{
+              fontFamily: 'var(--preview-font-family)',
+              background:
+                'radial-gradient(circle at top left, color-mix(in srgb, var(--preview-secondary) 68%, white), transparent 28%), linear-gradient(180deg, #f8f7f4 0%, white 52%, color-mix(in srgb, var(--preview-secondary) 42%, white) 100%)',
+            }}
+          >
+            <div
+              className="border border-black/5 bg-white/95 p-6 shadow-[0_18px_50px_rgba(15,23,42,0.06)]"
+              style={{ borderRadius: 'var(--preview-radius)' }}
+            >
+              <p className="text-[0.72rem] uppercase tracking-[0.35em]" style={{ color: 'var(--preview-accent)' }}>
+                Vista previa
+              </p>
+              <h4 className="mt-3 text-5xl leading-[0.95] text-slate-900">Una marca que se ve tan cuidada como la experiencia que vende.</h4>
+              <p className="mt-5 max-w-xl text-sm leading-7 text-slate-600">
+                Aquí puedes evaluar si la tipografía se siente correcta, si los fondos tienen el nivel de calidez adecuado y si los botones transmiten la personalidad visual que buscas.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  className="px-5 py-3 text-sm font-semibold text-white shadow-[0_14px_32px_rgba(15,23,42,0.12)]"
+                  style={{ backgroundColor: 'var(--preview-primary)', borderRadius: 'var(--preview-button-radius)' }}
+                >
+                  Botón principal
+                </button>
+                <button
+                  type="button"
+                  className="border border-black/10 bg-white px-5 py-3 text-sm font-semibold text-slate-800"
+                  style={{ borderRadius: 'var(--preview-button-radius)' }}
+                >
+                  Botón secundario
+                </button>
+              </div>
+            </div>
+
+            <div className="grid gap-4">
+              <div
+                className="border border-black/5 p-5"
+                style={{
+                  borderRadius: 'calc(var(--preview-radius) - 0.1rem)',
+                  background:
+                    'linear-gradient(180deg, color-mix(in srgb, var(--preview-secondary) 82%, white), white)',
+                  fontFamily: 'var(--preview-font-family)',
+                }}
+              >
+                <p className="text-xs uppercase tracking-[0.3em]" style={{ color: 'var(--preview-accent)' }}>
+                  Fondo secundario
+                </p>
+                <p className="mt-3 text-lg text-slate-900">Así se siente una tarjeta, panel o bloque de apoyo.</p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-black/5 p-4 text-center text-sm text-slate-700">
+                  <div className="mx-auto h-8 w-8 rounded-full" style={{ backgroundColor: 'var(--preview-primary)' }} />
+                  <p className="mt-3">Primario</p>
+                  <p className="mt-1 font-mono text-xs text-slate-500">{preview.primaryColor}</p>
+                </div>
+                <div className="rounded-2xl border border-black/5 p-4 text-center text-sm text-slate-700">
+                  <div className="mx-auto h-8 w-8 rounded-full border border-black/5" style={{ backgroundColor: 'var(--preview-secondary)' }} />
+                  <p className="mt-3">Secundario</p>
+                  <p className="mt-1 font-mono text-xs text-slate-500">{preview.secondaryColor}</p>
+                </div>
+                <div className="rounded-2xl border border-black/5 p-4 text-center text-sm text-slate-700">
+                  <div className="mx-auto h-8 w-8 rounded-full" style={{ backgroundColor: 'var(--preview-accent)' }} />
+                  <p className="mt-3">Acento</p>
+                  <p className="mt-1 font-mono text-xs text-slate-500">{preview.accentColor}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </article>
     </div>
   );

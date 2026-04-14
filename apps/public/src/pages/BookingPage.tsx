@@ -211,7 +211,7 @@ export function BookingPage() {
           <form key={formResetVersion} ref={formRef} className="mt-8 grid gap-8" onSubmit={handleSubmit}>
             <section className="grid gap-4">
               <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">1</span>
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--primary)] text-sm font-semibold text-white">1</span>
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Selecciona un servicio</h2>
                   <p className="text-sm text-slate-500">Este catálogo es general para el tenant.</p>
@@ -224,7 +224,7 @@ export function BookingPage() {
                     <button
                       key={service.id}
                       type="button"
-                      className={`rounded-[1.5rem] border p-5 text-left transition ${isSelected ? 'border-slate-900 bg-slate-900 text-white shadow-lg' : 'border-slate-200 bg-slate-50 text-slate-900 hover:border-slate-300 hover:bg-white'}`}
+                      className={`rounded-[1.5rem] border p-5 text-left transition ${isSelected ? 'border-[var(--primary)] bg-[var(--primary)] text-white shadow-lg' : 'border-[color-mix(in_srgb,var(--primary)_18%,white)] bg-[color-mix(in_srgb,var(--secondary)_64%,white)] text-[color-mix(in_srgb,var(--primary)_78%,#0f172a)] hover:border-[var(--primary)] hover:bg-white'}`}
                       onClick={() => {
                         setSelectedServiceId(service.id);
                         setSelectedStaffId('');
@@ -239,7 +239,7 @@ export function BookingPage() {
                           <p className="font-semibold">{service.name}</p>
                           <p className={`mt-2 text-sm ${isSelected ? 'text-white/80' : 'text-slate-600'}`}>{service.description}</p>
                         </div>
-                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isSelected ? 'bg-white/15 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isSelected ? 'bg-white/15 text-white' : 'bg-[color-mix(in_srgb,var(--secondary)_75%,white)] text-[color-mix(in_srgb,var(--primary)_70%,#334155)]'}`}>
                           {service.durationMinutes} min
                         </span>
                       </div>
@@ -254,7 +254,7 @@ export function BookingPage() {
 
             <section className="grid gap-4">
               <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">2</span>
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--primary)] text-sm font-semibold text-white">2</span>
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Elige un profesional</h2>
                   <p className="text-sm text-slate-500">Solo se muestran profesionales que pueden realizar el servicio elegido.</p>
@@ -276,7 +276,7 @@ export function BookingPage() {
                       <button
                         key={member.id}
                         type="button"
-                        className={`flex items-start gap-4 rounded-[1.5rem] border p-4 text-left transition ${isSelected ? 'border-slate-900 bg-slate-900 text-white shadow-lg' : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50'}`}
+                        className={`flex items-start gap-4 rounded-[1.5rem] border p-4 text-left transition ${isSelected ? 'border-[var(--primary)] bg-[var(--primary)] text-white shadow-lg' : 'border-[color-mix(in_srgb,var(--primary)_18%,white)] bg-white text-[color-mix(in_srgb,var(--primary)_78%,#0f172a)] hover:border-[var(--primary)] hover:bg-[color-mix(in_srgb,var(--secondary)_64%,white)]'}`}
                         onClick={() => {
                           setSelectedStaffId(member.id);
                           setSelectedDate('');
@@ -309,7 +309,7 @@ export function BookingPage() {
 
             <section className="grid gap-4">
               <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">3</span>
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--primary)] text-sm font-semibold text-white">3</span>
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Escoge fecha y hora</h2>
                   <p className="text-sm text-slate-500">Consulta la agenda disponible del profesional seleccionado.</p>
@@ -331,7 +331,7 @@ export function BookingPage() {
                 />
                 <button
                   type="button"
-                  className={`rounded-full px-5 py-3 text-sm font-semibold text-white transition ${availabilityLoading || !selectedServiceId || !selectedStaffId || !selectedDate ? 'cursor-not-allowed bg-slate-300' : 'bg-slate-900 hover:bg-slate-800'}`}
+                  className={`rounded-full px-5 py-3 text-sm font-semibold text-white transition ${availabilityLoading || !selectedServiceId || !selectedStaffId || !selectedDate ? 'cursor-not-allowed bg-[color-mix(in_srgb,var(--primary) 45%,#cbd5e1)]' : 'bg-[var(--primary)] hover:opacity-90'}`}
                   onClick={loadAvailability}
                   disabled={availabilityLoading || !selectedServiceId || !selectedStaffId || !selectedDate}
                 >
@@ -390,7 +390,7 @@ export function BookingPage() {
 
             <section className="grid gap-4">
               <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">4</span>
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--primary)] text-sm font-semibold text-white">4</span>
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Confirma tus datos</h2>
                   <p className="text-sm text-slate-500">Estos datos se usarán para crear y dar seguimiento a tu reserva.</p>
@@ -416,7 +416,7 @@ export function BookingPage() {
             </section>
 
         <aside className="space-y-6 md:sticky md:top-24">
-          <section className="rounded-[2rem] bg-slate-900 p-8 text-white shadow-sm">
+          <section className="rounded-[2rem] bg-[linear-gradient(135deg,var(--primary),var(--accent))] p-8 text-white shadow-sm">
             <h2 className="font-serif text-3xl">Resumen de tu reserva</h2>
             <div className="mt-6 grid gap-4 text-sm text-white/80">
               <div>

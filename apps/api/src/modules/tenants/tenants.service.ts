@@ -58,6 +58,25 @@ export class TenantsService {
     return host.toLowerCase().trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   }
 
+  private sanitizeCustomCss(css: string) {
+    return css
+      .replace(/<\/?style[^>]*>/gi, '')
+      .replace(/@import/gi, '')
+      .replace(/expression\s*\(/gi, '')
+      .replace(/javascript:/gi, '')
+      .trim()
+      .slice(0, 12000);
+  }
+
+  private normalizeHexColor(value: string | null | undefined, fallback: string) {
+    const normalized = String(value ?? '').trim();
+    const hexColorPattern = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+    if (hexColorPattern.test(normalized)) {
+      return normalized;
+    }
+    return fallback;
+  }
+
   async resolveTenantByHost(host: string) {
     const normalizedHost = this.normalizeHost(host);
 
@@ -178,7 +197,21 @@ export class TenantsService {
       branding = this.brandingRepository.create({ tenantId });
     }
 
-    Object.assign(branding, input);
+    const nextInput = { ...input };
+    if (typeof nextInput.customCss === 'string') {
+      nextInput.customCss = this.sanitizeCustomCss(nextInput.customCss);
+    }
+    if (typeof nextInput.primaryColor === 'string') {
+      nextInput.primaryColor = this.normalizeHexColor(nextInput.primaryColor, branding.primaryColor ?? '#D89AA5');
+    }
+    if (typeof nextInput.secondaryColor === 'string') {
+      nextInput.secondaryColor = this.normalizeHexColor(nextInput.secondaryColor, branding.secondaryColor ?? '#F5E8EA');
+    }
+    if (typeof nextInput.accentColor === 'string') {
+      nextInput.accentColor = this.normalizeHexColor(nextInput.accentColor, branding.accentColor ?? '#A86172');
+    }
+
+    Object.assign(branding, nextInput);
     return this.brandingRepository.save(branding);
   }
 
@@ -208,13 +241,26 @@ export class TenantsService {
   }
 
   async createTenantDomain(input: CreateTenantDomainDto) {
+    const normalizedDomain = this.normalizeHost(input.domain);
+    const existingDomain = await this.domainsRepository.findOne({
+      where: { domain: normalizedDomain },
+    });
+
+    if (existingDomain) {
+      if (existingDomain.tenantId === input.tenantId) {
+        throw new BadRequestException('Ese dominio ya está registrado en este tenant');
+      }
+
+      throw new BadRequestException('Ese dominio ya está registrado en otro tenant');
+    }
+
     if (input.isPrimary) {
       await this.domainsRepository.update({ tenantId: input.tenantId, isPrimary: true }, { isPrimary: false });
     }
 
     return this.domainsRepository.save({
       tenantId: input.tenantId,
-      domain: this.normalizeHost(input.domain),
+      domain: normalizedDomain,
       type: input.type,
       isPrimary: input.isPrimary ?? false,
       verificationStatus: input.verificationStatus ?? 'pending',
@@ -229,12 +275,25 @@ export class TenantsService {
       throw new NotFoundException('Domain not found');
     }
 
+    const nextDomain = input.domain ? this.normalizeHost(input.domain) : domain.domain;
+    const duplicateDomain = await this.domainsRepository.findOne({
+      where: { domain: nextDomain },
+    });
+
+    if (duplicateDomain && duplicateDomain.id !== domainId) {
+      if (duplicateDomain.tenantId === tenantId) {
+        throw new BadRequestException('Ese dominio ya está registrado en este tenant');
+      }
+
+      throw new BadRequestException('Ese dominio ya está registrado en otro tenant');
+    }
+
     if (input.isPrimary) {
       await this.domainsRepository.update({ tenantId, isPrimary: true }, { isPrimary: false });
     }
 
     Object.assign(domain, {
-      domain: input.domain ? this.normalizeHost(input.domain) : domain.domain,
+      domain: nextDomain,
       type: input.type ?? domain.type,
       isPrimary: input.isPrimary ?? domain.isPrimary,
       verificationStatus: input.verificationStatus ?? domain.verificationStatus,

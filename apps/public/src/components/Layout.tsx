@@ -1,6 +1,23 @@
 import { CSSProperties, PropsWithChildren, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { PublicSiteConfig } from '@quickly-sites/shared';
+import { PublicSiteConfig, SITE_FONT_OPTIONS } from '@quickly-sites/shared';
+
+function resolveTenantCustomCss(customCss?: string | null) {
+  const normalized = String(customCss ?? '').trim();
+  if (!normalized) {
+    return '';
+  }
+
+  if (normalized.includes('&')) {
+    return normalized.replace(/&/g, '.public-theme');
+  }
+
+  if (!normalized.includes('{') && normalized.includes(':')) {
+    return `.public-theme { ${normalized} }`;
+  }
+
+  return normalized;
+}
 
 export function Layout({
   site,
@@ -8,6 +25,14 @@ export function Layout({
 }: PropsWithChildren<{ site: PublicSiteConfig }>) {
   const location = useLocation();
   const theme = site.theme;
+  const resolvedFontFamily =
+    SITE_FONT_OPTIONS.find((font) => font.value === theme.fontFamily)?.cssFamily
+    ?? `"${theme.fontFamily}", serif`;
+  const resolvedButtonRadius = theme.buttonStyle === 'soft-square'
+    ? '0.7rem'
+    : theme.buttonStyle === 'rounded'
+      ? '1rem'
+      : '999px';
   const showBooking = site.capabilities.bookingEnabled;
   const globalSections = useMemo(() => {
     const currentGlobals = Array.isArray(site.globalSections) ? site.globalSections : [];
@@ -22,7 +47,7 @@ export function Layout({
   const globalFooter = globalSections.find((section) => section.type === 'footer' && section.isVisible);
   const globalHtmlSections = globalSections.filter((section) => section.type === 'custom_html' && section.isVisible);
   const headerTitle = String(globalHeader?.content.title ?? site.tenant.name);
-  const headerKicker = String(globalHeader?.content.kicker ?? 'Studio');
+  const headerKicker = String(globalHeader?.content.kicker ?? '').trim();
   const headerSubtitle = String(
     globalHeader?.content.subtitle ??
       globalHeader?.content.body ??
@@ -34,6 +59,7 @@ export function Layout({
   const footerInstagram = String(globalFooter?.content.instagram ?? '');
   const footerWhatsapp = String(globalFooter?.content.footerWhatsapp ?? site.tenant.whatsappNumber ?? '');
   const logoUrl = site.theme.logoUrl ?? null;
+  const tenantCustomCss = resolveTenantCustomCss(theme.customCss);
   const navItems = [
     { to: '/', label: 'Inicio' },
     { to: '/servicios', label: 'Servicios' },
@@ -43,14 +69,16 @@ export function Layout({
 
   return (
     <div
-      className="min-h-screen text-slate-800"
+      className="public-theme min-h-screen text-slate-800"
       style={
         {
           '--primary': theme.primaryColor,
           '--secondary': theme.secondaryColor,
           '--accent': theme.accentColor,
           '--radius': theme.borderRadius,
-          '--font-family': theme.fontFamily,
+          '--font-family': resolvedFontFamily,
+          '--button-radius': resolvedButtonRadius,
+          fontFamily: resolvedFontFamily,
         } as CSSProperties
       }
     >
@@ -67,7 +95,9 @@ export function Layout({
               </div>
             )}
             <div>
-              <p className="text-[0.68rem] uppercase tracking-[0.34em] text-[var(--accent)]">{headerKicker}</p>
+              {headerKicker ? (
+                <p className="text-[0.68rem] uppercase tracking-[0.34em] text-[var(--accent)]">{headerKicker}</p>
+              ) : null}
               <p className="font-serif text-3xl font-semibold text-slate-900">{headerTitle}</p>
               <p className="text-sm text-slate-500">{headerSubtitle}</p>
             </div>
@@ -138,6 +168,7 @@ export function Layout({
           </div>
         </div>
       </footer>
+      {tenantCustomCss ? <style>{tenantCustomCss}</style> : null}
     </div>
   );
 }

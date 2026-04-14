@@ -61,6 +61,7 @@ export interface TenantTheme {
   fontFamily: string;
   borderRadius: string;
   buttonStyle: string;
+  customCss?: string | null;
   logoUrl?: string | null;
   faviconUrl?: string | null;
 }
@@ -73,9 +74,16 @@ export const SITE_FONT_OPTIONS: Array<{
   { value: 'Cormorant Garamond', label: 'Cormorant Garamond', cssFamily: '"Cormorant Garamond", serif' },
   { value: 'Playfair Display', label: 'Playfair Display', cssFamily: '"Playfair Display", serif' },
   { value: 'Lora', label: 'Lora', cssFamily: '"Lora", serif' },
+  { value: 'Bodoni Moda', label: 'Bodoni Moda', cssFamily: '"Bodoni Moda", serif' },
+  { value: 'Prata', label: 'Prata', cssFamily: '"Prata", serif' },
+  { value: 'Cormorant Infant', label: 'Cormorant Infant', cssFamily: '"Cormorant Infant", serif' },
   { value: 'DM Sans', label: 'DM Sans', cssFamily: '"DM Sans", sans-serif' },
   { value: 'Manrope', label: 'Manrope', cssFamily: '"Manrope", sans-serif' },
   { value: 'Libre Baskerville', label: 'Libre Baskerville', cssFamily: '"Libre Baskerville", serif' },
+  { value: 'Space Grotesk', label: 'Space Grotesk', cssFamily: '"Space Grotesk", sans-serif' },
+  { value: 'Plus Jakarta Sans', label: 'Plus Jakarta Sans', cssFamily: '"Plus Jakarta Sans", sans-serif' },
+  { value: 'Instrument Sans', label: 'Instrument Sans', cssFamily: '"Instrument Sans", sans-serif' },
+  { value: 'Fraunces', label: 'Fraunces', cssFamily: '"Fraunces", serif' },
 ];
 
 export interface SeoConfig {
