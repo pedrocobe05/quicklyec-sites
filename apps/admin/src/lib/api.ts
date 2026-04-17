@@ -439,6 +439,18 @@ export async function updateAppointment(
   });
 }
 
+export async function reversePayphoneAppointmentPayment(
+  accessToken: string,
+  tenantId: string,
+  appointmentId: string,
+) {
+  return request(`/appointments/${appointmentId}/reverse-payphone?tenantId=${tenantId}`, {
+    method: 'POST',
+    headers: authHeaders(accessToken),
+    body: JSON.stringify({ tenantId }),
+  });
+}
+
 export async function getTemplates(accessToken: string) {
   return request('/site/templates', {
     headers: { Authorization: `Bearer ${accessToken}` },

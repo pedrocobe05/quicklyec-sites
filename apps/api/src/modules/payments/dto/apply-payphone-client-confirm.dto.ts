@@ -1,12 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsObject, IsString, Min } from 'class-validator';
+import { IsObject, IsString } from 'class-validator';
 
 /** Respuesta JSON de `V2/Confirm` obtenida en el navegador (doc Payphone). */
 export class ApplyPayphoneClientConfirmDto {
   @ApiProperty()
-  @IsInt()
-  @Min(1)
-  id!: number;
+  @IsString()
+  id!: string;
 
   @ApiProperty()
   @IsString()

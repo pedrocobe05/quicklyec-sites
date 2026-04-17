@@ -30,6 +30,7 @@ import {
   getPlanMetadata,
   intersectTenantModules,
   normalizePlanCode,
+  resolveTenantMembershipAccess,
 } from './tenant-access.constants';
 
 @Injectable()
@@ -468,6 +469,11 @@ export class TenantsService {
   }
 
   async createMembership(tenantId: string, input: CreateTenantMembershipDto) {
+    const tenant = await this.tenantsRepository.findOne({ where: { id: tenantId } });
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+
     const role = await this.getTenantRoleOrThrow(tenantId, input.roleId);
     const plan = await this.resolveTenantPlanAccess(tenantId);
 
@@ -516,12 +522,10 @@ export class TenantsService {
       roleId: role.id,
       role: role.code,
       isActive: input.isActive ?? true,
-      allowedModules: null,
-      permissions: null,
+      ...resolveTenantMembershipAccess(tenant.plan, role.permissions),
     });
 
     if (generatedPassword) {
-      const tenant = await this.tenantsRepository.findOne({ where: { id: tenantId } });
       await this.mailService.sendWelcomeEmail({
         to: user.email,
         tenantId,
@@ -568,15 +572,26 @@ export class TenantsService {
       membership.user.fullName = input.fullName;
     }
 
-    if (input.roleId) {
-      const role = await this.getTenantRoleOrThrow(tenantId, input.roleId);
-      membership.roleId = role.id;
-      membership.role = role.code;
+    const resolvedRole = input.roleId
+      ? await this.getTenantRoleOrThrow(tenantId, input.roleId)
+      : membership.roleDefinition;
+
+    if (resolvedRole) {
+      membership.roleId = resolvedRole.id;
+      membership.role = resolvedRole.code;
     }
 
     Object.assign(membership, {
       isActive: input.isActive ?? membership.isActive,
     });
+
+    const tenant = await this.tenantsRepository.findOne({ where: { id: tenantId } });
+    if (tenant && resolvedRole) {
+      const rolePermissions = resolvedRole.permissions ?? [];
+      const access = resolveTenantMembershipAccess(tenant.plan, rolePermissions);
+      membership.allowedModules = access.allowedModules.length > 0 ? access.allowedModules : null;
+      membership.permissions = access.permissions.length > 0 ? access.permissions : null;
+    }
 
     await this.usersRepository.save(membership.user);
     return this.membershipsRepository.save(membership);

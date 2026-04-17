@@ -164,6 +164,21 @@ export function intersectTenantModules(planModules: string[], rolePermissions: s
   return planModules.filter((moduleCode) => roleModules.includes(moduleCode as TenantModuleCode));
 }
 
+export function resolveTenantMembershipAccess(planCode?: string | null, rolePermissions: string[] = []) {
+  const planModules = getPlanAccessDefinition(planCode).modules;
+  const allowedModules = rolePermissions.length > 0
+    ? intersectTenantModules(planModules, rolePermissions)
+    : planModules;
+  const permissions = rolePermissions.filter((permission) =>
+    allowedModules.includes(permission.split('.')[0]),
+  );
+
+  return {
+    allowedModules,
+    permissions,
+  };
+}
+
 export function getPlanMetadata(planCode?: string | null) {
   const definition = getPlanAccessDefinition(planCode);
   return {

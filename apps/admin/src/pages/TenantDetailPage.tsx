@@ -54,6 +54,7 @@ import {
   updateTenantMembership,
   updateTenantRole,
   updateTenantSettings,
+  reversePayphoneAppointmentPayment,
   uploadTenantFile,
 } from '../lib/api';
 import { Modal } from '../shared/components/modal/Modal';
@@ -2358,6 +2359,22 @@ export function TenantDetailPage() {
                           <td className="px-4 py-3 whitespace-nowrap">{new Date(appointment.startDateTime).toLocaleString()}</td>
                           <td className="w-px whitespace-nowrap px-4 py-3">
                             <div className="flex justify-end gap-2">
+                              {appointment.paymentMethod === 'payphone' && appointment.status === 'cancelled' ? (
+                                <Button
+                                  variant="danger"
+                                  className="h-8 px-3 text-xs font-semibold"
+                                  isLoading={saving === `reverse-payphone-${appointment.id}`}
+                                  loadingLabel="Reversando..."
+                                  onClick={() => {
+                                    void wrapAction(`reverse-payphone-${appointment.id}`, async () => {
+                                      await reversePayphoneAppointmentPayment(token!, tenantId, appointment.id);
+                                      await loadData();
+                                    }, { successMessage: 'Pago de PayPhone reversado.' });
+                                  }}
+                                >
+                                  Reversar pago
+                                </Button>
+                              ) : null}
                               <Button
                                 variant="primary"
                                 className="h-8 px-3 text-xs font-semibold"

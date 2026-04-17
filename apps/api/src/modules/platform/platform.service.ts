@@ -33,6 +33,7 @@ import {
   getPlanAccessDefinition,
   getPlanMetadata,
   normalizePlanCode,
+  resolveTenantMembershipAccess,
 } from '../tenants/tenant-access.constants';
 
 @Injectable()
@@ -73,6 +74,40 @@ export class PlatformService {
 
   private createTemporaryPassword() {
     return `Quickly${Math.random().toString(36).slice(2, 10)}!`;
+  }
+
+  private arraysAreEqual(left: string[] | null | undefined, right: string[]) {
+    const normalizedLeft = left ?? [];
+    if (normalizedLeft.length !== right.length) {
+      return false;
+    }
+
+    return normalizedLeft.every((value, index) => value === right[index]);
+  }
+
+  private async syncTenantMembershipAccess(tenantId: string, planCode: string) {
+    const memberships = await this.membershipsRepository.find({
+      where: { tenantId, isActive: true },
+      relations: ['roleDefinition'],
+    });
+
+    for (const membership of memberships) {
+      const rolePermissions = membership.roleDefinition?.permissions ?? [];
+      const { allowedModules, permissions } = resolveTenantMembershipAccess(planCode, rolePermissions);
+      const nextAllowedModules = allowedModules.length > 0 ? allowedModules : null;
+      const nextPermissions = permissions.length > 0 ? permissions : null;
+
+      if (
+        this.arraysAreEqual(membership.allowedModules, allowedModules) &&
+        this.arraysAreEqual(membership.permissions, permissions)
+      ) {
+        continue;
+      }
+
+      membership.allowedModules = nextAllowedModules;
+      membership.permissions = nextPermissions;
+      await this.membershipsRepository.save(membership);
+    }
   }
 
   private async syncTenantPlanCapabilities(tenantId: string, planCode: string) {
@@ -211,6 +246,8 @@ export class PlatformService {
         await this.sectionsRepository.save(section);
       }
     }
+
+    await this.syncTenantMembershipAccess(tenantId, normalizedPlan);
   }
 
   listPlans() {
@@ -645,8 +682,7 @@ export class PlatformService {
       roleId: resolvedRole.id,
       role: resolvedRole.code,
       isActive: input.isActive ?? true,
-      allowedModules: null,
-      permissions: null,
+      ...resolveTenantMembershipAccess(tenant.plan, resolvedRole.permissions),
     });
 
     if (generatedPassword) {

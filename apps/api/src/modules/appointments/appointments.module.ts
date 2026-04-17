@@ -5,6 +5,7 @@ import {
   AvailabilityRuleEntity,
   CustomerEntity,
   ScheduleBlockEntity,
+  PayphoneTransactionEntity,
   StaffServiceEntity,
   TenantSettingEntity,
 } from 'src/common/entities';
@@ -22,6 +23,7 @@ import { AppointmentsService } from './appointments.service';
       AvailabilityRuleEntity,
       ScheduleBlockEntity,
       CustomerEntity,
+      PayphoneTransactionEntity,
       StaffServiceEntity,
       TenantSettingEntity,
     ]),

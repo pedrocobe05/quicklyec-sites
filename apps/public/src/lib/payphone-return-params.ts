@@ -21,16 +21,5 @@ export function readPayphoneReturnQuery(searchParams: URLSearchParams) {
   const idRaw = read(['id', 'transactionId', 'paymentId', 'transaction_id']);
   const clientTxRaw = read(['clientTransactionId', 'clientTxId', 'client_transaction_id']);
 
-  let id = 0;
-  if (idRaw) {
-    const digits = idRaw.replace(/\D/g, '');
-    if (digits) {
-      const n = Number(digits);
-      if (Number.isFinite(n) && n > 0 && n <= Number.MAX_SAFE_INTEGER) {
-        id = Math.floor(n);
-      }
-    }
-  }
-
-  return { id, clientTransactionId: clientTxRaw };
+  return { id: idRaw, clientTransactionId: clientTxRaw };
 }

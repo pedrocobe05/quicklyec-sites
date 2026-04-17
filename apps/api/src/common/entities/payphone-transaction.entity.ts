@@ -15,8 +15,8 @@ export class PayphoneTransactionEntity {
   @Column({ type: 'varchar', length: 64 })
   clientTransactionId!: string;
 
-  @Column({ type: 'integer', nullable: true })
-  payphoneTransactionId!: number | null;
+  @Column({ type: 'text', nullable: true })
+  payphoneTransactionId!: string | null;
 
   @Column({ type: 'varchar', length: 24, default: 'pending' })
   status!: PayphoneTransactionStatus;

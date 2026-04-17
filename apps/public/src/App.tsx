@@ -4,6 +4,7 @@ import { HomePage } from './pages/HomePage';
 import { ServicesPage } from './pages/ServicesPage';
 import { ContactPage } from './pages/ContactPage';
 import { PayphoneReturnPage } from './pages/PayphoneReturnPage';
+import { BookingPaymentPendingPage } from './pages/BookingPaymentPendingPage';
 
 export default function App() {
   return (
@@ -11,9 +12,11 @@ export default function App() {
       <Route path="/" element={<HomePage />} />
       <Route path="/services" element={<ServicesPage />} />
       <Route path="/book" element={<BookingPage />} />
+      <Route path="/book/thanks" element={<BookingPaymentPendingPage />} />
       <Route path="/payphone/return" element={<PayphoneReturnPage />} />
       <Route path="/contact" element={<ContactPage />} />
       <Route path="/reservar" element={<BookingPage />} />
+      <Route path="/reservar/gracias" element={<BookingPaymentPendingPage />} />
       <Route path="/servicios" element={<ServicesPage />} />
       <Route path="/contacto" element={<ContactPage />} />
     </Routes>

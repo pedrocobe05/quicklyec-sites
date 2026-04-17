@@ -616,8 +616,8 @@ export class PaymentsService {
     }
 
     const payload = input.confirmPayload;
-    const payphoneTid = Number(payload.transactionId);
-    if (Number.isNaN(payphoneTid) || payphoneTid !== input.id) {
+    const payphoneTid = String(payload.transactionId ?? '').trim();
+    if (!payphoneTid || payphoneTid !== input.id) {
       throw new BadRequestException('La respuesta de Payphone no coincide con el id de la transacción');
     }
     const clientFromPayphone = String(payload.clientTransactionId ?? '');
@@ -643,7 +643,7 @@ export class PaymentsService {
   private async finalizePayphoneAfterConfirmJson(
     tenantId: string,
     transaction: PayphoneTransactionEntity,
-    payphoneNumericId: number,
+    payphoneTransactionId: string,
     confirmResponse: Record<string, unknown>,
     payphoneConfirmRaw: string | null,
   ): Promise<{
@@ -655,7 +655,7 @@ export class PaymentsService {
   }> {
     const rawPayload = transaction.bookingPayload as Record<string, unknown>;
 
-    transaction.payphoneTransactionId = payphoneNumericId;
+    transaction.payphoneTransactionId = payphoneTransactionId;
     transaction.confirmResponse = confirmResponse;
 
     const statusCode = Number(confirmResponse.statusCode ?? 0);
@@ -825,7 +825,7 @@ export class PaymentsService {
    * @see https://docs.payphone.app/cajita-de-pagos-payphone#sect4
    */
   private async requestPayphoneConfirm(
-    payload: { token: string; id: number; clientTxId: string },
+    payload: { token: string; id: string; clientTxId: string },
     logMeta: {
       payphoneMode: string | null | undefined;
       token: string;

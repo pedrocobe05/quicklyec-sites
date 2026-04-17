@@ -48,6 +48,17 @@ export class AppointmentsController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
+  @Post(':appointmentId/reverse-payphone')
+  @Idempotent()
+  reversePayphone(
+    @Param('appointmentId') appointmentId: string,
+    @Query('tenantId') tenantId: string,
+  ) {
+    return this.appointmentsService.reversePayphonePayment(appointmentId, tenantId);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @Patch(':appointmentId')
   @Idempotent()
   updateAppointment(

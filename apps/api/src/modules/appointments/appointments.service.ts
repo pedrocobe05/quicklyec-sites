@@ -5,6 +5,7 @@ import {
   AppointmentEntity,
   AvailabilityRuleEntity,
   CustomerEntity,
+  PayphoneTransactionEntity,
   ScheduleBlockEntity,
   StaffServiceEntity,
   TenantSettingEntity,
@@ -58,6 +59,8 @@ export class AppointmentsService {
     private readonly scheduleBlocksRepository: Repository<ScheduleBlockEntity>,
     @InjectRepository(CustomerEntity)
     private readonly customersRepository: Repository<CustomerEntity>,
+    @InjectRepository(PayphoneTransactionEntity)
+    private readonly payphoneTransactionsRepository: Repository<PayphoneTransactionEntity>,
     @InjectRepository(StaffServiceEntity)
     private readonly staffServicesRepository: Repository<StaffServiceEntity>,
     @InjectRepository(TenantSettingEntity)
@@ -212,6 +215,95 @@ export class AppointmentsService {
     });
 
     return settings?.timezone ?? AppointmentsService.DEFAULT_TIMEZONE;
+  }
+
+  private isSameZonedDay(left: Date, right: Date, timeZone: string) {
+    const leftParts = this.getZonedParts(left, timeZone);
+    const rightParts = this.getZonedParts(right, timeZone);
+    return `${leftParts.year}-${leftParts.month}-${leftParts.day}` === `${rightParts.year}-${rightParts.month}-${rightParts.day}`;
+  }
+
+  private isPayphoneReverseWindowOpen(transactionDate: Date, now: Date, timeZone: string) {
+    if (!this.isSameZonedDay(transactionDate, now, timeZone)) {
+      return false;
+    }
+
+    const nowParts = this.getZonedParts(now, timeZone);
+    const nowMinutes =
+      Number(nowParts.hour) * 60
+      + Number(nowParts.minute)
+      + Number(nowParts.second) / 60;
+
+    return nowMinutes <= 20 * 60;
+  }
+
+  private async reversePayphoneTransaction(input: {
+    tenantId: string;
+    transaction: PayphoneTransactionEntity;
+  }) {
+    const settings = await this.tenantSettingsRepository.findOne({
+      where: { tenantId: input.tenantId },
+    });
+    const token = String(settings?.payphoneToken ?? '').trim();
+    if (!token) {
+      throw new BadRequestException('No se pudo reversar el pago: falta configurar el token de Payphone para este tenant');
+    }
+
+    if (!input.transaction.payphoneTransactionId) {
+      throw new BadRequestException('No se pudo reversar el pago: la transacción de Payphone no está confirmada');
+    }
+
+    const timezone = settings?.timezone ?? AppointmentsService.DEFAULT_TIMEZONE;
+    const transactionDate = input.transaction.confirmedAt ?? input.transaction.createdAt;
+    if (!this.isPayphoneReverseWindowOpen(transactionDate, new Date(), timezone)) {
+      throw new BadRequestException('No se pudo reversar el pago: Payphone solo permite reversos el mismo día hasta las 20:00');
+    }
+
+    const response = await fetch('https://pay.payphonetodoesposible.com/api/Reverse', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ id: input.transaction.payphoneTransactionId }),
+    });
+    const raw = await response.text();
+    let parsed: unknown = null;
+    if (raw.trim()) {
+      try {
+        parsed = JSON.parse(raw) as unknown;
+      } catch {
+        parsed = raw;
+      }
+    }
+
+    const parsedRecord = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+    const responseError =
+      parsedRecord && typeof parsedRecord.error === 'object' && parsedRecord.error !== null
+        ? parsedRecord.error as { message?: unknown }
+        : null;
+    const responseMessage =
+      typeof parsedRecord?.message === 'string' && parsedRecord.message.trim()
+        ? parsedRecord.message.trim()
+        : typeof responseError?.message === 'string' && responseError.message.trim()
+          ? responseError.message.trim()
+          : null;
+
+    if (!response.ok || (parsedRecord && parsedRecord.success === false)) {
+      throw new BadRequestException(
+        responseMessage
+          ? `No se pudo reversar el pago: ${responseMessage}`
+          : `No se pudo reversar el pago con Payphone (HTTP ${response.status})`,
+      );
+    }
+
+    if (parsedRecord && parsedRecord.success !== true && responseMessage) {
+      throw new BadRequestException(`No se pudo reversar el pago: ${responseMessage}`);
+    }
+
+    input.transaction.status = 'cancelled';
+    input.transaction.errorMessage = null;
+    await this.payphoneTransactionsRepository.save(input.transaction);
   }
 
   private async applyReminderState(appointment: AppointmentEntity) {
@@ -805,7 +897,12 @@ export class AppointmentsService {
       throw new NotFoundException('Appointment not found');
     }
 
+    if (appointment.status === 'completed' && status !== 'completed') {
+      throw new BadRequestException('No se puede modificar una reserva completada');
+    }
+
     const previousStatus = appointment.status;
+
     appointment.status = status;
     await this.applyReminderState(appointment);
     const saved = await this.appointmentsRepository.save(appointment);
@@ -825,6 +922,10 @@ export class AppointmentsService {
 
     if (!appointment) {
       throw new NotFoundException('Appointment not found');
+    }
+
+    if (appointment.status === 'completed' && input.status && input.status !== 'completed') {
+      throw new BadRequestException('No se puede modificar una reserva completada');
     }
 
     let durationMinutes = appointment.service.durationMinutes;
@@ -868,6 +969,9 @@ export class AppointmentsService {
     }
 
     if (input.status) {
+      if (appointment.status === 'completed' && input.status !== 'completed') {
+        throw new BadRequestException('No se puede modificar una reserva completada');
+      }
       appointment.status = input.status;
     }
 
@@ -901,5 +1005,51 @@ export class AppointmentsService {
     }
 
     return saved;
+  }
+
+  async reversePayphonePayment(appointmentId: string, tenantId: string) {
+    const appointment = await this.appointmentsRepository.findOne({
+      where: { id: appointmentId, tenantId },
+      relations: ['customer', 'service', 'staff', 'tenant'],
+    });
+
+    if (!appointment) {
+      throw new NotFoundException('Appointment not found');
+    }
+
+    if (appointment.status === 'completed') {
+      throw new BadRequestException('No se puede reversar una reserva completada');
+    }
+
+    if (appointment.paymentMethod !== 'payphone') {
+      throw new BadRequestException('La reserva no fue pagada con Payphone');
+    }
+
+    if (appointment.status !== 'cancelled') {
+      throw new BadRequestException('Primero debes cancelar la reserva antes de reversar el pago');
+    }
+
+    const payphoneTransaction = await this.payphoneTransactionsRepository.findOne({
+      where: {
+        tenantId,
+        appointmentId: appointment.id,
+      },
+    });
+
+    if (!payphoneTransaction?.payphoneTransactionId || payphoneTransaction.status !== 'approved') {
+      throw new BadRequestException('No hay un pago aprobado de Payphone para reversar');
+    }
+
+    await this.reversePayphoneTransaction({
+      tenantId,
+      transaction: payphoneTransaction,
+    });
+
+    return {
+      success: true,
+      appointmentId: appointment.id,
+      payphoneTransactionId: payphoneTransaction.payphoneTransactionId,
+      status: payphoneTransaction.status,
+    };
   }
 }

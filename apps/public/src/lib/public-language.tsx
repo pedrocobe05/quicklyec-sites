@@ -187,6 +187,17 @@ export type PublicCopy = {
     backToBooking: string;
     goHome: string;
   };
+  bookingPending: {
+    eyebrow: string;
+    title: string;
+    description: string;
+    pendingLabel: string;
+    cashHint: string;
+    transferHint: string;
+    bookingReferenceLabel: string;
+    backToBooking: string;
+    goHome: string;
+  };
 };
 
 const LANGUAGE_STORAGE_KEY = 'quickly-sites.public-language';
@@ -448,6 +459,17 @@ const COPY: Record<PublicLanguage, PublicCopy> = {
       backToBooking: 'Volver a reservar',
       goHome: 'Ir al inicio',
     },
+    bookingPending: {
+      eyebrow: 'Reserva',
+      title: 'Gracias por tu reserva',
+      description: 'Tu reserva fue registrada. Quedará pendiente hasta que el pago sea verificado.',
+      pendingLabel: 'Pendiente de verificación de pago',
+      cashHint: 'Si elegiste efectivo, completa el pago directamente con el negocio.',
+      transferHint: 'Si elegiste transferencia, envía el comprobante para que pueda verificarse.',
+      bookingReferenceLabel: 'Referencia de la reserva',
+      backToBooking: 'Volver a reservar',
+      goHome: 'Ir al inicio',
+    },
   },
   en: {
     languageSelector: {
@@ -635,13 +657,25 @@ const COPY: Record<PublicLanguage, PublicCopy> = {
       backToBooking: 'Back to booking',
       goHome: 'Go to home',
     },
+    bookingPending: {
+      eyebrow: 'Booking',
+      title: 'Thanks for your booking',
+      description: 'Your reservation has been registered. It will remain pending until the payment is verified.',
+      pendingLabel: 'Pending payment verification',
+      cashHint: 'If you selected cash, please complete the payment directly with the business.',
+      transferHint: 'If you selected bank transfer, send the transfer receipt so it can be verified.',
+      bookingReferenceLabel: 'Booking reference',
+      backToBooking: 'Back to booking',
+      goHome: 'Go to home',
+    },
   },
 };
 
-const ROUTES: Record<'home' | 'services' | 'booking' | 'contact', Record<PublicLanguage, string>> = {
+const ROUTES: Record<'home' | 'services' | 'booking' | 'bookingConfirmation' | 'contact', Record<PublicLanguage, string>> = {
   home: { es: '/', en: '/' },
   services: { es: '/servicios', en: '/services' },
   booking: { es: '/reservar', en: '/book' },
+  bookingConfirmation: { es: '/reservar/gracias', en: '/book/thanks' },
   contact: { es: '/contacto', en: '/contact' },
 };
 
@@ -679,6 +713,10 @@ export function resolveRouteKey(pathname: string) {
 
   if (normalized === '/reservar' || normalized === '/book') {
     return 'booking' as const;
+  }
+
+  if (normalized === '/reservar/gracias' || normalized === '/book/thanks') {
+    return 'bookingConfirmation' as const;
   }
 
   if (normalized === '/contacto' || normalized === '/contact') {

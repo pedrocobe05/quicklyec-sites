@@ -1,11 +1,12 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { PageErrorState } from '../components/PageErrorState';
 import { PageLoadingShell } from '../components/PageLoadingShell';
 import { createAppointment, getAvailability, preparePayphonePayment, resolvePublicAppOrigin } from '../lib/api';
 import { isPlausiblePayphoneE164, mountPayphonePaymentBox, normalizePayphonePhoneNumber } from '../lib/payphone-box-sdk';
 import { useSiteConfig } from '../lib/useSiteConfig';
-import { usePublicCopy, usePublicLanguage } from '../lib/public-language';
+import { getLocalizedPath, usePublicCopy, usePublicLanguage } from '../lib/public-language';
 import { emitPublicNotification } from '../shared/notifications/notifications';
 
 const PAYPHONE_BOOKING_BOX_ID = 'pp-booking-payphone-box';
@@ -54,6 +55,7 @@ export function BookingPage() {
   const { data, loading, error } = useSiteConfig('/');
   const copy = usePublicCopy();
   const { language } = usePublicLanguage();
+  const navigate = useNavigate();
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [selectedStaffId, setSelectedStaffId] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
@@ -70,7 +72,6 @@ export function BookingPage() {
   const [availabilityMessage, setAvailabilityMessage] = useState<string | null>(null);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [submittingReservation, setSubmittingReservation] = useState(false);
-  const [formResetVersion, setFormResetVersion] = useState(0);
   const [payphoneBoxSession, setPayphoneBoxSession] = useState<{
     clientTransactionId: string;
     token: string;
@@ -83,7 +84,6 @@ export function BookingPage() {
   } | null>(null);
   const availabilityLockRef = useRef(false);
   const submitLockRef = useRef(false);
-  const formRef = useRef<HTMLFormElement | null>(null);
   const payphoneBoxAnchorRef = useRef<HTMLDivElement | null>(null);
 
   const selectedService = useMemo(
@@ -190,23 +190,6 @@ export function BookingPage() {
       }
     };
   }, [payphoneBoxSession, language, copy.booking.payphoneBoxLoadError]);
-
-  function resetBookingFlow() {
-    formRef.current?.reset();
-    availabilityLockRef.current = false;
-    submitLockRef.current = false;
-    setPayphoneBoxSession(null);
-    setSelectedServiceId('');
-    setSelectedStaffId('');
-    setSelectedDate('');
-    setSelectedSlot('');
-    setSelectedPaymentMethod('cash');
-    setSlots([]);
-    setAvailabilityMessage(null);
-    setAvailabilityLoading(false);
-    setSubmittingReservation(false);
-    setFormResetVersion((current) => current + 1);
-  }
 
   if (loading) {
     return (
@@ -360,7 +343,7 @@ export function BookingPage() {
         return;
       }
 
-      await createAppointment({
+      const createdAppointment = await createAppointment({
         serviceId: selectedServiceId,
         staffId: selectedSlotData?.staffId ?? selectedStaffId,
         startDateTime: selectedSlotData?.start ?? selectedSlot,
@@ -373,8 +356,12 @@ export function BookingPage() {
         notes: String(form.get('notes') ?? ''),
       });
 
-      resetBookingFlow();
-      emitPublicNotification(copy.booking.createdSuccess, 'success');
+      const pendingPath = getLocalizedPath('bookingConfirmation', language);
+      navigate(
+        `${pendingPath}?method=${encodeURIComponent(selectedPaymentMethod)}&appointmentId=${encodeURIComponent(createdAppointment.id)}`,
+        { replace: true },
+      );
+      return;
     } catch (err) {
       const message = err instanceof Error ? err.message : copy.booking.createError;
       if (message.toLowerCase().includes('ya no está disponible')) {
@@ -400,7 +387,7 @@ export function BookingPage() {
             <p className="mt-3 text-slate-600">{copy.booking.heroDescription}</p>
           </div>
 
-          <form key={formResetVersion} ref={formRef} className="mt-8 grid gap-8" onSubmit={handleSubmit}>
+          <form className="mt-8 grid gap-8" onSubmit={handleSubmit}>
             <section className="grid gap-4">
               <div className="flex items-center gap-3">
                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--primary)] text-sm font-semibold text-white">1</span>
@@ -510,7 +497,7 @@ export function BookingPage() {
               <div className="grid gap-3 md:grid-cols-[0.7fr_0.3fr]">
                 <input
                   type="date"
-                  name={`booking-date-${formResetVersion}`}
+                  name="booking-date"
                   autoComplete="off"
                   className="rounded-2xl border border-slate-200 px-4 py-3"
                   value={selectedDate}

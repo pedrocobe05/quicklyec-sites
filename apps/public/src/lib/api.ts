@@ -150,7 +150,12 @@ export function getAvailability(serviceId: string, date: string, staffId?: strin
 
 export function createAppointment(payload: unknown) {
   const host = resolveCurrentHost();
-  return request(`/public/appointments?host=${host}`, {
+  return request<{
+    id: string;
+    status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show';
+    startDateTime: string;
+    endDateTime: string;
+  }>(`/public/appointments?host=${host}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -184,7 +189,7 @@ export function preparePayphonePayment(payload: unknown) {
 }
 
 /** `clientTxId` = mismo valor que `clientTransactionId` en la query de retorno de Payphone (doc cajita, consultar respuesta). */
-export function confirmPayphonePayment(payload: { id: number; clientTxId: string }) {
+export function confirmPayphonePayment(payload: { id: string; clientTxId: string }) {
   const host = resolveCurrentHost();
   return request<{
     status: 'pending' | 'approved' | 'cancelled' | 'failed';
@@ -203,7 +208,7 @@ export function confirmPayphonePayment(payload: { id: number; clientTxId: string
 }
 
 /** Persiste el JSON de `V2/Confirm` obtenido en el navegador (sin que el API vuelva a llamar a Payphone). */
-export function applyPayphoneClientConfirm(payload: { id: number; clientTxId: string; confirmPayload: Record<string, unknown> }) {
+export function applyPayphoneClientConfirm(payload: { id: string; clientTxId: string; confirmPayload: Record<string, unknown> }) {
   const host = resolveCurrentHost();
   return request<{
     status: 'pending' | 'approved' | 'cancelled' | 'failed';

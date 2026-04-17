@@ -770,13 +770,18 @@ export function EditEntityModal({
                     <Input name="startDateTime" type="datetime-local" defaultValue={toDateTimeLocal(editModal.item.startDateTime)} />
                   </FormField>
                   <FormField label="Estado" required>
-                    <Select name="status" defaultValue={editModal.item.status}>
+                    <Select name="status" defaultValue={editModal.item.status} disabled={editModal.item.status === 'completed'}>
                       <option value="pending">Pendiente</option>
                       <option value="confirmed">Confirmada</option>
                       <option value="completed">Completada</option>
                       <option value="cancelled">Cancelada</option>
                       <option value="no_show">No asistió</option>
                     </Select>
+                    {editModal.item.status === 'completed' ? (
+                      <p className="mt-1 text-xs text-amber-700">
+                        Esta reserva ya está completada y su estado no puede cambiarse.
+                      </p>
+                    ) : null}
                   </FormField>
                 </div>
                 <FormField label="Método de pago" required>

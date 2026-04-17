@@ -10,7 +10,7 @@ import { usePublicCopy } from '../lib/public-language';
 
 const PAYPHONE_CONFIRM_URL = 'https://pay.payphonetodoesposible.com/api/button/V2/Confirm';
 
-async function confirmPayphoneInBrowser(params: { id: number; clientTxId: string; token: string }) {
+async function confirmPayphoneInBrowser(params: { id: string; clientTxId: string; token: string }) {
   const res = await fetch(PAYPHONE_CONFIRM_URL, {
     method: 'POST',
     headers: {
