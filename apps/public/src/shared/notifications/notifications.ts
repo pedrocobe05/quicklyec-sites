@@ -1,3 +1,5 @@
+import { getPublicCopy, resolvePreferredPublicLanguage } from '../../lib/public-language';
+
 export type PublicNotificationVariant = 'success' | 'error' | 'info';
 
 export interface PublicNotificationDetail {
@@ -8,7 +10,7 @@ export interface PublicNotificationDetail {
 function normalizeNotificationTitle(title: string) {
   const normalized = title.trim();
   if (!normalized || normalized.toLowerCase() === 'null' || normalized.toLowerCase() === 'undefined') {
-    return 'No se pudo completar la acción.';
+    return getPublicCopy(resolvePreferredPublicLanguage()).api.notificationFallback;
   }
 
   return normalized;

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { PublicSiteConfig } from '@quickly-sites/shared';
 import { getSiteConfig } from './api';
+import { normalizePublicLanguage, setPublicLanguage } from './public-language';
 import { emitPublicNotification } from '../shared/notifications/notifications';
 
 export function useSiteConfig(slug = '/') {
@@ -26,6 +27,11 @@ export function useSiteConfig(slug = '/') {
     if (!data) {
       return;
     }
+
+    const tenantLanguage = normalizePublicLanguage(data.tenant.locale);
+    setPublicLanguage(tenantLanguage);
+    document.documentElement.lang = tenantLanguage;
+    document.documentElement.dir = 'ltr';
 
     document.title = data.page.seo.title;
 

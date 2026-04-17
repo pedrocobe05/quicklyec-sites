@@ -1,5 +1,5 @@
 import { SITE_SECTION_CATALOG } from '@quickly-sites/shared';
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { AdminLayout } from '../components/AdminLayout';
 import { EditEntityModal, type EditModalState } from '../features/dashboard/components/EditEntityModal';
@@ -9,6 +9,7 @@ import { ServicesStaffSection } from '../features/operations/components/Services
 import { SiteSection } from '../features/site/components/SiteSection';
 import {
   createAvailabilityRule,
+  createAppointment,
   createPage,
   createTenantMembership,
   createTenantRole,
@@ -25,6 +26,8 @@ import {
   deleteTenantFile,
   deleteTenantDomain,
   getAppointments,
+  getAppointmentAvailability,
+  type AppointmentAvailabilitySlot,
   getAvailabilityRules,
   getCustomers,
   getPages,
@@ -39,7 +42,6 @@ import {
   resetTenantMembershipPassword,
   sendTenantTestEmail,
   updateAppointment,
-  updateAppointmentStatus,
   updateAvailabilityRule,
   updateCustomer,
   updatePage,
@@ -62,6 +64,7 @@ import { DataTable, DataTablePagination, DataTableShell, DataTableToolbar } from
 import { FormField } from '../shared/components/forms/FormField';
 import { Input } from '../shared/components/ui/Input';
 import { Select } from '../shared/components/ui/Select';
+import { Textarea } from '../shared/components/ui/Textarea';
 import { Skeleton } from '../shared/components/ui/Skeleton';
 import { useNotification } from '../shared/notifications/use-notification';
 
@@ -96,6 +99,7 @@ interface TenantProfileResponse {
   } | null;
   effectiveModules?: string[];
   settings?: {
+    locale?: string | null;
     canonicalDomain?: string | null;
     defaultSeoTitle?: string | null;
     defaultSeoDescription?: string | null;
@@ -104,6 +108,12 @@ interface TenantProfileResponse {
     contactPhone?: string | null;
     whatsappNumber?: string | null;
     contactAddress?: string | null;
+    cashPaymentEnabled?: boolean;
+    transferPaymentEnabled?: boolean;
+    payphonePaymentEnabled?: boolean;
+    payphoneMode?: string | null;
+    payphoneStoreId?: string | null;
+    payphoneToken?: string | null;
     mailConfig?: {
       host?: string;
       port?: number;
@@ -238,11 +248,12 @@ interface ScheduleBlockRecord {
 interface AppointmentRecord {
   id: string;
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show';
+  paymentMethod?: 'cash' | 'transfer' | 'payphone' | null;
   createdAt?: string;
   startDateTime: string;
   notes?: string | null;
   internalNotes?: string | null;
-  customer?: { fullName?: string } | null;
+  customer?: { fullName?: string; phone?: string | null } | null;
   service?: { name?: string } | null;
   staff?: { id?: string; name?: string } | null;
 }
@@ -318,6 +329,18 @@ function appointmentStatusClasses(status: AppointmentRecord['status']) {
   return classes[status];
 }
 
+function appointmentPaymentMethodLabel(method?: AppointmentRecord['paymentMethod']) {
+  const labels: Record<string, string> = {
+    cash: 'Efectivo',
+    transfer: 'Transferencia',
+    payphone: 'Payphone',
+    undefined: 'Sin definir',
+    null: 'Sin definir',
+  };
+
+  return labels[String(method ?? 'undefined')] ?? 'Sin definir';
+}
+
 function toIsoDateTime(value: string) {
   const normalized = value.trim();
   if (!normalized) {
@@ -328,6 +351,21 @@ function toIsoDateTime(value: string) {
     throw new Error('La fecha y hora ingresadas no son válidas');
   }
   return parsed.toISOString();
+}
+
+function formatAvailabilityDateTime(value: string) {
+  return new Date(value).toLocaleString('es-EC', {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function getAppointmentSlotValue(slot: AppointmentAvailabilitySlot) {
+  return `${slot.start}::${slot.staffId ?? 'unassigned'}`;
 }
 
 function formatRelativeUpdate(value: Date | null) {
@@ -433,6 +471,16 @@ export function TenantDetailPage() {
   const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const [createRoleOpen, setCreateRoleOpen] = useState(false);
+  const [createAppointmentOpen, setCreateAppointmentOpen] = useState(false);
+  const [createAppointmentCustomerMode, setCreateAppointmentCustomerMode] = useState<'existing' | 'new'>('existing');
+  const [createAppointmentServiceId, setCreateAppointmentServiceId] = useState('');
+  const [createAppointmentStaffId, setCreateAppointmentStaffId] = useState('');
+  const [createAppointmentDate, setCreateAppointmentDate] = useState('');
+  const [createAppointmentSlot, setCreateAppointmentSlot] = useState('');
+  const [createAppointmentPaymentMethod, setCreateAppointmentPaymentMethod] = useState<'cash' | 'transfer' | 'payphone'>('cash');
+  const [createAppointmentSlots, setCreateAppointmentSlots] = useState<AppointmentAvailabilitySlot[]>([]);
+  const [createAppointmentAvailabilityMessage, setCreateAppointmentAvailabilityMessage] = useState<string | null>(null);
+  const [createAppointmentAvailabilityLoading, setCreateAppointmentAvailabilityLoading] = useState(false);
   const [customerView, setCustomerView] = useState<CustomerRecord | null>(null);
   const [rolesSearch, setRolesSearch] = useState('');
   const [rolesPage, setRolesPage] = useState(1);
@@ -450,6 +498,28 @@ export function TenantDetailPage() {
   const [appointmentsSort, setAppointmentsSort] = useState<'nearest' | 'created_desc'>('nearest');
   const [customersSearch, setCustomersSearch] = useState('');
   const [customersPage, setCustomersPage] = useState(1);
+  const createAppointmentAvailabilityLockRef = useRef(false);
+
+  const createAppointmentSelectedService = useMemo(
+    () => services.find((service) => service.id === createAppointmentServiceId) ?? null,
+    [createAppointmentServiceId, services],
+  );
+  const createAppointmentCompatibleStaff = useMemo(
+    () => (
+      createAppointmentServiceId
+        ? staff.filter((member) => member.serviceIds?.includes(createAppointmentServiceId))
+        : []
+    ),
+    [createAppointmentServiceId, staff],
+  );
+  const createAppointmentPaymentOptions = useMemo(() => {
+    const settings = tenantProfile?.settings;
+    return [
+      { value: 'cash' as const, label: 'Efectivo', enabled: settings?.cashPaymentEnabled ?? true },
+      { value: 'transfer' as const, label: 'Transferencia', enabled: settings?.transferPaymentEnabled ?? false },
+      { value: 'payphone' as const, label: 'Payphone', enabled: settings?.payphonePaymentEnabled ?? false },
+    ].filter((option) => option.enabled);
+  }, [tenantProfile?.settings?.cashPaymentEnabled, tenantProfile?.settings?.transferPaymentEnabled, tenantProfile?.settings?.payphonePaymentEnabled]);
 
   const activeTab = useMemo<TenantTab>(() => {
     const requested = searchParams.get('tab');
@@ -635,7 +705,10 @@ export function TenantDetailPage() {
         appointment.service?.name ?? '',
         appointment.staff?.name ?? '',
         appointmentStatusLabel(appointment.status),
+        appointmentPaymentMethodLabel(appointment.paymentMethod),
         appointment.notes ?? '',
+        appointment.createdAt ? new Date(appointment.createdAt).toLocaleString() : '',
+        new Date(appointment.startDateTime).toLocaleString(),
       ].some((value) => String(value).toLowerCase().includes(query)),
     );
 
@@ -803,6 +876,166 @@ export function TenantDetailPage() {
         setAppointmentsRefreshing(false);
       }
     }
+  }
+
+  async function loadCreateAppointmentAvailability(nextDate = createAppointmentDate, nextServiceId = createAppointmentServiceId, nextStaffId = createAppointmentStaffId) {
+    if (createAppointmentAvailabilityLockRef.current) {
+      return;
+    }
+
+    if (!token || !tenantId) {
+      return;
+    }
+
+    if (!nextServiceId || !nextDate) {
+      setCreateAppointmentAvailabilityMessage('Selecciona un servicio y una fecha para consultar la disponibilidad.');
+      setCreateAppointmentSlots([]);
+      setCreateAppointmentSlot('');
+      return;
+    }
+
+    try {
+      createAppointmentAvailabilityLockRef.current = true;
+      setCreateAppointmentAvailabilityLoading(true);
+      const nextSlots = await getAppointmentAvailability(
+        token,
+        tenantId,
+        nextServiceId,
+        nextDate,
+        nextStaffId || undefined,
+      );
+      setCreateAppointmentSlots(nextSlots);
+      setCreateAppointmentSlot('');
+      setCreateAppointmentAvailabilityMessage(
+        nextSlots.some((slot) => slot.available)
+          ? null
+          : 'No hay horarios disponibles para esa fecha. Prueba con otro día o profesional.',
+      );
+    } catch (err) {
+      setCreateAppointmentSlots([]);
+      setCreateAppointmentSlot('');
+      setCreateAppointmentAvailabilityMessage(null);
+      const message = err instanceof Error ? err.message : 'No se pudo consultar la disponibilidad.';
+      notify(message, 'error');
+    } finally {
+      createAppointmentAvailabilityLockRef.current = false;
+      setCreateAppointmentAvailabilityLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!createAppointmentOpen) {
+      createAppointmentAvailabilityLockRef.current = false;
+      setCreateAppointmentServiceId('');
+      setCreateAppointmentStaffId('');
+      setCreateAppointmentDate('');
+      setCreateAppointmentSlot('');
+      setCreateAppointmentPaymentMethod('cash');
+      setCreateAppointmentSlots([]);
+      setCreateAppointmentAvailabilityMessage(null);
+      setCreateAppointmentAvailabilityLoading(false);
+      return;
+    }
+
+    if (!createAppointmentServiceId && services[0]?.id) {
+      setCreateAppointmentServiceId(services[0].id);
+    }
+  }, [createAppointmentOpen, createAppointmentServiceId, services]);
+
+  useEffect(() => {
+    if (!createAppointmentOpen) {
+      return;
+    }
+
+    if (createAppointmentPaymentOptions.length === 0) {
+      return;
+    }
+
+    if (!createAppointmentPaymentOptions.some((option) => option.value === createAppointmentPaymentMethod)) {
+      setCreateAppointmentPaymentMethod(createAppointmentPaymentOptions[0].value);
+    }
+  }, [createAppointmentOpen, createAppointmentPaymentMethod, createAppointmentPaymentOptions]);
+
+  useEffect(() => {
+    if (!createAppointmentOpen) {
+      return;
+    }
+
+    void loadCreateAppointmentAvailability();
+  }, [createAppointmentOpen, createAppointmentServiceId, createAppointmentStaffId, createAppointmentDate]);
+
+  async function handleCreateAppointmentSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token || !tenantId) return;
+
+    const form = new FormData(event.currentTarget);
+    const customerMode = String(form.get('customerMode') ?? 'existing') as 'existing' | 'new';
+    const customerId = String(form.get('customerId') ?? '').trim();
+    const serviceId = createAppointmentServiceId.trim();
+    const staffId = createAppointmentStaffId.trim();
+    const status = String(form.get('status') ?? 'confirmed') as AppointmentRecord['status'];
+    const startDateTimeIso = createAppointmentSlot.split('::')[0]?.trim() ?? '';
+    const paymentMethod = createAppointmentPaymentMethod;
+
+    const payload: Record<string, unknown> = {
+      serviceId,
+      staffId: staffId || undefined,
+      status,
+      startDateTime: startDateTimeIso,
+      paymentMethod,
+      notes: String(form.get('notes') ?? '').trim() || undefined,
+      internalNotes: String(form.get('internalNotes') ?? '').trim() || undefined,
+    };
+
+    if (customerMode === 'existing') {
+      payload.customerId = customerId;
+    } else {
+      payload.customer = {
+        fullName: String(form.get('customerFullName') ?? '').trim(),
+        email: String(form.get('customerEmail') ?? '').trim(),
+        phone: String(form.get('customerPhone') ?? '').trim(),
+        identification: String(form.get('customerIdentification') ?? '').trim() || undefined,
+        notes: String(form.get('customerNotes') ?? '').trim() || undefined,
+      };
+    }
+
+    await wrapAction('appointment-create', async () => {
+      if (!serviceId || !createAppointmentDate || !startDateTimeIso) {
+        throw new Error('Selecciona un servicio, una fecha y un horario disponible.');
+      }
+
+      if (!paymentMethod) {
+        throw new Error('Selecciona un método de pago.');
+      }
+
+      const availability = await getAppointmentAvailability(
+        token,
+        tenantId,
+        serviceId,
+        createAppointmentDate,
+        staffId || undefined,
+      );
+
+      const slotIsAvailable = availability.some((slot) => {
+        if (slot.start !== startDateTimeIso || !slot.available) {
+          return false;
+        }
+
+        if (staffId) {
+          return slot.staffId === staffId;
+        }
+
+        return true;
+      });
+
+      if (!slotIsAvailable) {
+        throw new Error('El horario seleccionado ya no está disponible. Consulta la agenda antes de crear la reserva.');
+      }
+
+      await createAppointment(token, tenantId, payload);
+      setCreateAppointmentOpen(false);
+      await loadData();
+    });
   }
 
   useEffect(() => {
@@ -1008,21 +1241,17 @@ export function TenantDetailPage() {
             endDateTime: toIsoDateTime(String(form.get('endDateTime') ?? editModal.item.endDateTime)),
           });
           break;
-        case 'appointment':
+        case 'appointment': {
+          const paymentMethod = String(form.get('paymentMethod') ?? '').trim();
           await updateAppointment(token, tenantId, editModal.item.id, {
             startDateTime: toIsoDateTime(String(form.get('startDateTime') ?? editModal.item.startDateTime)),
+            status: String(form.get('status') ?? editModal.item.status) as AppointmentRecord['status'],
+            ...(paymentMethod ? { paymentMethod: paymentMethod as 'cash' | 'transfer' | 'payphone' } : {}),
             notes: String(form.get('notes') ?? editModal.item.notes ?? ''),
             internalNotes: String(form.get('internalNotes') ?? editModal.item.internalNotes ?? ''),
           });
-          if (String(form.get('status') ?? editModal.item.status) !== editModal.item.status) {
-            await updateAppointmentStatus(
-              token,
-              tenantId,
-              editModal.item.id,
-              String(form.get('status') ?? editModal.item.status) as AppointmentRecord['status'],
-            );
-          }
           break;
+        }
         case 'customer':
           await updateCustomer(token, tenantId, editModal.item.id, {
             fullName: String(form.get('fullName') ?? ''),
@@ -1441,6 +1670,9 @@ export function TenantDetailPage() {
               uploadingAsset={uploadingAsset}
               branding={tenantProfile?.branding}
               settings={tenantProfile?.settings}
+              tenantId={tenantId}
+              accessToken={token}
+              notify={notify}
               onUploadBrandingAsset={handleUploadBrandingAsset}
               onSubmitBranding={(event) => {
                 event.preventDefault();
@@ -1465,6 +1697,7 @@ export function TenantDetailPage() {
                 const form = new FormData(event.currentTarget);
                 wrapAction('settings', async () => {
                   await updateTenantSettings(token, tenantId, {
+                    locale: String(form.get('locale') ?? 'es'),
                     canonicalDomain: String(form.get('canonicalDomain') ?? ''),
                     defaultSeoTitle: String(form.get('defaultSeoTitle') ?? ''),
                     defaultSeoDescription: String(form.get('defaultSeoDescription') ?? ''),
@@ -1472,6 +1705,12 @@ export function TenantDetailPage() {
                     contactPhone: String(form.get('contactPhone') ?? ''),
                     whatsappNumber: String(form.get('whatsappNumber') ?? ''),
                     contactAddress: String(form.get('contactAddress') ?? ''),
+                    cashPaymentEnabled: form.get('cashPaymentEnabled') === 'on',
+                    transferPaymentEnabled: form.get('transferPaymentEnabled') === 'on',
+                    payphonePaymentEnabled: form.get('payphonePaymentEnabled') === 'on',
+                    payphoneMode: String(form.get('payphoneMode') ?? 'redirect'),
+                    payphoneStoreId: String(form.get('payphoneStoreId') ?? ''),
+                    payphoneToken: String(form.get('payphoneToken') ?? ''),
                     siteIndexingEnabled: form.get('siteIndexingEnabled') === 'on',
                   });
                   await loadData();
@@ -2036,6 +2275,30 @@ export function TenantDetailPage() {
                   searchPlaceholder="Buscar por cliente, servicio o estado..."
                   actions={(
                     <>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        onClick={() => {
+                          setCreateAppointmentCustomerMode(customers.length > 0 ? 'existing' : 'new');
+                          setCreateAppointmentServiceId(services[0]?.id ?? '');
+                          setCreateAppointmentStaffId('');
+                          setCreateAppointmentDate('');
+                          setCreateAppointmentSlot('');
+                          setCreateAppointmentPaymentMethod(
+                            tenantProfile?.settings?.cashPaymentEnabled
+                              ? 'cash'
+                              : tenantProfile?.settings?.transferPaymentEnabled
+                                ? 'transfer'
+                                : 'payphone',
+                          );
+                          setCreateAppointmentSlots([]);
+                          setCreateAppointmentAvailabilityMessage(null);
+                          setCreateAppointmentAvailabilityLoading(false);
+                          setCreateAppointmentOpen(true);
+                        }}
+                      >
+                        Nueva reserva
+                      </Button>
                       <Select
                         value={appointmentsSort}
                         onChange={(event) => setAppointmentsSort(event.target.value as 'nearest' | 'created_desc')}
@@ -2049,7 +2312,7 @@ export function TenantDetailPage() {
                         type="button"
                         variant="secondary"
                         isLoading={appointmentsRefreshing}
-                        loadingLabel="Actualizando..."
+                        loadingLabel="Cargando..."
                         onClick={() => refreshAppointments()}
                       >
                         Actualizar
@@ -2061,30 +2324,38 @@ export function TenantDetailPage() {
                   <thead className="bg-slate-50 text-slate-500">
                       <tr>
                         <th className="px-4 py-3">Cliente</th>
+                        <th className="px-4 py-3">Teléfono</th>
                         <th className="px-4 py-3">Servicio</th>
                         <th className="px-4 py-3">Profesional</th>
+                        <th className="px-4 py-3">Pago</th>
                         <th className="px-4 py-3">Estado</th>
-                        <th className="px-4 py-3">Inicio</th>
+                        <th className="px-4 py-3">Fecha de reserva</th>
+                        <th className="px-4 py-3">Inicio del servicio</th>
                         <th className="w-px whitespace-nowrap px-4 py-3 text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                       {filteredAppointments.length === 0 ? (
                         <tr>
-                          <td className="px-4 py-4 text-slate-500" colSpan={6}>No hay reservas que coincidan con la búsqueda.</td>
+                          <td className="px-4 py-4 text-slate-500" colSpan={9}>No hay reservas que coincidan con la búsqueda.</td>
                         </tr>
                       ) : (
                         visibleAppointments.map((appointment) => (
                           <tr key={appointment.id} className="border-t border-slate-200">
                             <td className="px-4 py-3">{appointment.customer?.fullName ?? '-'}</td>
+                            <td className="px-4 py-3">{appointment.customer?.phone ?? '-'}</td>
                             <td className="px-4 py-3">{appointment.service?.name ?? '-'}</td>
                             <td className="px-4 py-3">{appointment.staff?.name ?? 'Por asignar'}</td>
+                            <td className="px-4 py-3">{appointmentPaymentMethodLabel(appointment.paymentMethod)}</td>
                             <td className="px-4 py-3">
                               <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${appointmentStatusClasses(appointment.status)}`}>
                                 {appointmentStatusLabel(appointment.status)}
                             </span>
                           </td>
-                          <td className="px-4 py-3">{new Date(appointment.startDateTime).toLocaleString()}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-slate-700">
+                            {appointment.createdAt ? new Date(appointment.createdAt).toLocaleString() : '—'}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">{new Date(appointment.startDateTime).toLocaleString()}</td>
                           <td className="w-px whitespace-nowrap px-4 py-3">
                             <div className="flex justify-end gap-2">
                               <Button
@@ -2181,6 +2452,262 @@ export function TenantDetailPage() {
           ) : null}
         </section>
       )}
+
+      <Modal
+        open={createAppointmentOpen}
+        onClose={() => setCreateAppointmentOpen(false)}
+        title="Nueva reserva"
+        description="Crea una reserva manual y asigna o crea el cliente desde esta misma ventana."
+        maxWidthClassName="max-w-5xl"
+      >
+        <form className="grid gap-5" onSubmit={handleCreateAppointmentSubmit}>
+          <div className="grid gap-4 rounded-[1.75rem] border border-slate-200 bg-slate-50/70 p-5">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <FormField label="Servicio" required>
+                <Select
+                  name="serviceId"
+                  value={createAppointmentServiceId}
+                  disabled={services.length === 0}
+                  onChange={(event) => {
+                    setCreateAppointmentServiceId(event.target.value);
+                    setCreateAppointmentStaffId('');
+                    setCreateAppointmentDate('');
+                    setCreateAppointmentSlot('');
+                    setCreateAppointmentSlots([]);
+                    setCreateAppointmentAvailabilityMessage(null);
+                  }}
+                >
+                  <option value="">Selecciona un servicio</option>
+                  {services.map((service) => (
+                    <option key={service.id} value={service.id}>
+                      {service.name}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
+              <FormField label="Profesional" optional>
+                <Select
+                  name="staffId"
+                  value={createAppointmentStaffId}
+                  disabled={false}
+                  onChange={(event) => {
+                    setCreateAppointmentStaffId(event.target.value);
+                    setCreateAppointmentDate('');
+                    setCreateAppointmentSlot('');
+                    setCreateAppointmentSlots([]);
+                    setCreateAppointmentAvailabilityMessage(null);
+                  }}
+                >
+                  <option value="">Sin asignar</option>
+                  {createAppointmentCompatibleStaff.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.name}
+                    </option>
+                  ))}
+                </Select>
+                {createAppointmentServiceId && createAppointmentCompatibleStaff.length === 0 ? (
+                  <p className="text-xs text-amber-700">
+                    No hay profesionales asignados a este servicio. Puedes dejarlo sin asignar o revisar el equipo.
+                  </p>
+                ) : null}
+              </FormField>
+            </div>
+
+            <div className="grid gap-4">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--brand-navy)] text-sm font-semibold text-white">3</span>
+                <div>
+                  <h4 className="text-base font-semibold text-slate-900">Disponibilidad</h4>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Selecciona una fecha para consultar horarios disponibles en el backend.
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-[0.7fr_0.3fr]">
+                <Input
+                  type="date"
+                  value={createAppointmentDate}
+                  onChange={(event) => {
+                    setCreateAppointmentDate(event.target.value);
+                    setCreateAppointmentSlot('');
+                    setCreateAppointmentSlots([]);
+                    setCreateAppointmentAvailabilityMessage(null);
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  isLoading={createAppointmentAvailabilityLoading}
+                  loadingLabel="Consultando..."
+                  disabled={!createAppointmentServiceId || !createAppointmentDate}
+                  onClick={() => void loadCreateAppointmentAvailability()}
+                >
+                  Consultar disponibilidad
+                </Button>
+              </div>
+
+              {createAppointmentAvailabilityMessage ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  {createAppointmentAvailabilityMessage}
+                </div>
+              ) : null}
+
+              {createAppointmentSlots.length > 0 ? (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {createAppointmentSlots.map((slot) => {
+                    const slotValue = getAppointmentSlotValue(slot);
+                    const isSelected = createAppointmentSlot === slotValue;
+                    const isDisabled = !slot.available;
+
+                    return (
+                      <label
+                        key={slotValue}
+                        className={`flex items-center gap-3 rounded-2xl border p-4 transition ${
+                          isDisabled
+                            ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+                            : isSelected
+                              ? 'cursor-pointer border-[var(--brand-navy)] bg-[rgba(0,64,145,0.06)]'
+                              : 'cursor-pointer border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="slot"
+                          value={slotValue}
+                          checked={isSelected}
+                          disabled={isDisabled}
+                          onChange={(event) => setCreateAppointmentSlot(event.target.value)}
+                        />
+                        <div>
+                          <p className={`font-medium ${isDisabled ? 'text-slate-500' : 'text-slate-900'}`}>
+                            {formatAvailabilityDateTime(slot.start)}
+                          </p>
+                          <p className={`text-sm ${isDisabled ? 'text-slate-400' : 'text-slate-500'}`}>
+                            {slot.staffName ?? createAppointmentSelectedService?.name ?? 'Profesional seleccionado'}
+                          </p>
+                          {isDisabled && slot.unavailableReason ? (
+                            <p className="mt-1 text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                              {slot.unavailableReason}
+                            </p>
+                          ) : null}
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+
+            <FormField label="Estado" required>
+              <Select name="status" defaultValue="confirmed">
+                <option value="confirmed">Confirmada</option>
+                <option value="pending">Pendiente</option>
+                <option value="completed">Completada</option>
+                <option value="cancelled">Cancelada</option>
+                <option value="no_show">No asistió</option>
+              </Select>
+            </FormField>
+
+            <FormField label="Método de pago" required>
+              <Select
+                name="paymentMethod"
+                value={createAppointmentPaymentMethod}
+                onChange={(event) => setCreateAppointmentPaymentMethod(event.target.value as 'cash' | 'transfer' | 'payphone')}
+                disabled={createAppointmentPaymentOptions.length === 0}
+              >
+                {createAppointmentPaymentOptions.length === 0 ? (
+                  <option value="">No hay métodos habilitados</option>
+                ) : (
+                  createAppointmentPaymentOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))
+                )}
+              </Select>
+              {createAppointmentPaymentOptions.length === 0 ? (
+                <p className="mt-1 text-xs text-amber-700">Activa al menos un método de pago en la configuración del tenant.</p>
+              ) : null}
+            </FormField>
+          </div>
+
+          <div className="grid gap-4 rounded-[1.75rem] border border-slate-200 bg-slate-50/70 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h4 className="text-base font-semibold text-slate-900">Cliente</h4>
+                <p className="mt-1 text-sm text-slate-500">Selecciona un cliente existente o crea uno nuevo al instante.</p>
+              </div>
+              <div className="min-w-[220px]">
+                <Select
+                  name="customerMode"
+                  value={createAppointmentCustomerMode}
+                  onChange={(event) => setCreateAppointmentCustomerMode(event.target.value as 'existing' | 'new')}
+                >
+                  <option value="existing" disabled={customers.length === 0}>Cliente existente</option>
+                  <option value="new">Cliente nuevo</option>
+                </Select>
+              </div>
+            </div>
+
+            {createAppointmentCustomerMode === 'existing' ? (
+              <div className="grid gap-4 lg:grid-cols-[1fr,auto] lg:items-end">
+                <FormField label="Cliente existente" required>
+                  <Select name="customerId" defaultValue={customers[0]?.id ?? ''} disabled={customers.length === 0}>
+                    {customers.length === 0 ? (
+                      <option value="">No hay clientes disponibles</option>
+                    ) : (
+                      customers.map((customer) => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.fullName} · {customer.phone}
+                        </option>
+                      ))
+                    )}
+                  </Select>
+                </FormField>
+                <div className="text-xs text-slate-500">
+                  {customers.length === 0 ? 'No hay clientes cargados todavía. Cambia a cliente nuevo.' : 'Puedes elegir cualquier cliente registrado.'}
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-4 lg:grid-cols-2">
+                <FormField label="Nombre completo" required>
+                  <Input name="customerFullName" />
+                </FormField>
+                <FormField label="Correo electrónico" required>
+                  <Input name="customerEmail" type="email" />
+                </FormField>
+                <FormField label="Teléfono" required>
+                  <Input name="customerPhone" />
+                </FormField>
+                <FormField label="Identificación" optional>
+                  <Input name="customerIdentification" />
+                </FormField>
+                <FormField label="Notas del cliente" optional>
+                  <Textarea name="customerNotes" className="min-h-20" />
+                </FormField>
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-4">
+            <FormField label="Notas de la reserva" optional>
+              <Textarea name="notes" className="min-h-24" />
+            </FormField>
+            <FormField label="Notas internas" optional>
+              <Textarea name="internalNotes" className="min-h-24" />
+            </FormField>
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <Button type="button" variant="secondary" onClick={() => setCreateAppointmentOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" isLoading={saving === 'appointment-create'} loadingLabel="Creando..." disabled={!createAppointmentSlot || createAppointmentPaymentOptions.length === 0}>
+              Crear reserva
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       <EditEntityModal
         editModal={editModal}

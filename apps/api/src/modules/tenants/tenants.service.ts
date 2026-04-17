@@ -80,6 +80,19 @@ export class TenantsService {
     return fallback;
   }
 
+  private normalizeLocale(value: string | null | undefined) {
+    const normalized = String(value ?? '').toLowerCase().trim();
+    if (normalized.startsWith('en')) {
+      return 'en';
+    }
+    return 'es';
+  }
+
+  private normalizePayphoneMode(value: string | null | undefined) {
+    const normalized = String(value ?? '').toLowerCase().trim();
+    return normalized === 'box' ? 'box' : 'redirect';
+  }
+
   async resolveTenantByHost(host: string) {
     const normalizedHost = this.normalizeHost(host);
 
@@ -225,6 +238,9 @@ export class TenantsService {
     }
 
     const nextInput: Record<string, unknown> = { ...input };
+    if (typeof nextInput.locale === 'string') {
+      nextInput.locale = this.normalizeLocale(nextInput.locale);
+    }
     if (typeof nextInput.defaultSeoTitle === 'string') {
       const normalized = nextInput.defaultSeoTitle.trim();
       nextInput.defaultSeoTitle = normalized || null;
@@ -240,6 +256,17 @@ export class TenantsService {
     if (typeof nextInput.canonicalDomain === 'string') {
       const normalized = this.normalizeHost(nextInput.canonicalDomain);
       nextInput.canonicalDomain = normalized || null;
+    }
+    if (typeof nextInput.payphoneMode === 'string') {
+      nextInput.payphoneMode = this.normalizePayphoneMode(nextInput.payphoneMode);
+    }
+    if (typeof nextInput.payphoneStoreId === 'string') {
+      const normalized = nextInput.payphoneStoreId.trim();
+      nextInput.payphoneStoreId = normalized || null;
+    }
+    if (typeof nextInput.payphoneToken === 'string') {
+      const normalized = nextInput.payphoneToken.trim();
+      nextInput.payphoneToken = normalized || null;
     }
 
     Object.assign(settings, nextInput);

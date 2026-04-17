@@ -6,6 +6,8 @@ export type TenantPlan = 'starter' | 'pro' | 'enterprise';
 export type SiteSectionType = 'hero' | 'about' | 'services' | 'gallery' | 'testimonials' | 'booking_cta' | 'contact' | 'footer';
 export type AppointmentStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show';
 export type AppointmentSource = 'public_site' | 'admin' | 'imported';
+export type PaymentMethod = 'cash' | 'transfer' | 'payphone';
+export type PayphoneMode = 'redirect' | 'box';
 export interface TenantTheme {
     primaryColor: string;
     secondaryColor: string;
@@ -58,6 +60,14 @@ export interface PublicStaff {
     avatarUrl?: string | null;
     serviceIds?: string[];
 }
+export interface TenantPaymentSettings {
+    cashPaymentEnabled: boolean;
+    transferPaymentEnabled: boolean;
+    payphonePaymentEnabled: boolean;
+    payphoneMode: PayphoneMode;
+    payphoneBox: { token: string; storeId: string } | null;
+    payphonePublicApi: { token: string; storeId: string } | null;
+}
 export interface PublicSiteConfig {
     tenant: {
         id: string;
@@ -70,6 +80,7 @@ export interface PublicSiteConfig {
         contactPhone?: string | null;
         whatsappNumber?: string | null;
         contactAddress?: string | null;
+        paymentMethods: TenantPaymentSettings;
     };
     domain: {
         host: string;
@@ -92,6 +103,7 @@ export interface CreatePublicAppointmentInput {
     serviceId: string;
     staffId?: string | null;
     startDateTime: string;
+    paymentMethod?: PaymentMethod;
     customer: {
         fullName: string;
         email: string;

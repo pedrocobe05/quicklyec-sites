@@ -27,6 +27,9 @@ export class AppointmentEntity {
   @Column({ length: 32, default: 'pending' })
   status!: string;
 
+  @Column({ length: 16, default: 'cash' })
+  paymentMethod!: string;
+
   @Column({ type: 'timestamptz' })
   startDateTime!: Date;
 

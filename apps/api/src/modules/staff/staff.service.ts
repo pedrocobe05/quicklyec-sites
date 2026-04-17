@@ -97,13 +97,15 @@ export class StaffService {
   }
 
   async create(input: CreateStaffDto) {
+    const email = input.email?.trim() || null;
+    const phone = input.phone?.trim() || null;
     const staff = await this.staffRepository.save({
       tenantId: input.tenantId,
       name: input.name,
       bio: input.bio ?? null,
       avatarUrl: input.avatarUrl ?? null,
-      email: input.email ?? null,
-      phone: input.phone ?? null,
+      email,
+      phone,
       isBookable: input.isBookable ?? true,
       isActive: input.isActive ?? true,
     });
@@ -126,12 +128,15 @@ export class StaffService {
       throw new NotFoundException('Staff member not found');
     }
 
+    const nextEmail = input.email?.trim();
+    const nextPhone = input.phone?.trim();
+
     Object.assign(staff, {
       name: input.name ?? staff.name,
       bio: input.bio ?? staff.bio,
       avatarUrl: input.avatarUrl ?? staff.avatarUrl,
-      email: input.email ?? staff.email,
-      phone: input.phone ?? staff.phone,
+      email: nextEmail === undefined ? staff.email : nextEmail || null,
+      phone: nextPhone === undefined ? staff.phone : nextPhone || null,
       isBookable: input.isBookable ?? staff.isBookable,
       isActive: input.isActive ?? staff.isActive,
     });

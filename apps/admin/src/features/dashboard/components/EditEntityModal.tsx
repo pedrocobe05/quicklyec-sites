@@ -54,6 +54,7 @@ type AppointmentRecord = {
   id: string;
   startDateTime: string;
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show';
+  paymentMethod?: 'cash' | 'transfer' | 'payphone' | null;
   notes?: string | null;
   internalNotes?: string | null;
   staff?: { id?: string; name?: string } | null;
@@ -320,8 +321,8 @@ export function EditEntityModal({
                   <Textarea name="bio" defaultValue={editModal.item.bio ?? ''} />
                 </FormField>
                 <div className="grid gap-4 md:grid-cols-2">
-                  <FormField label="Correo">
-                    <Input name="email" defaultValue={editModal.item.email ?? ''} />
+                  <FormField label="Correo del profesional">
+                    <Input name="email" type="email" defaultValue={editModal.item.email ?? ''} />
                   </FormField>
                   <FormField label="Teléfono">
                     <Input name="phone" defaultValue={editModal.item.phone ?? ''} />
@@ -778,6 +779,14 @@ export function EditEntityModal({
                     </Select>
                   </FormField>
                 </div>
+                <FormField label="Método de pago" required>
+                  <Select name="paymentMethod" defaultValue={editModal.item.paymentMethod ?? ''}>
+                    <option value="">Mantener actual</option>
+                    <option value="cash">Efectivo</option>
+                    <option value="transfer">Transferencia</option>
+                    <option value="payphone">Payphone</option>
+                  </Select>
+                </FormField>
                 <FormField label="Notas del cliente">
                   <Textarea name="notes" defaultValue={editModal.item.notes ?? ''} />
                 </FormField>

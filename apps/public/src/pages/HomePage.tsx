@@ -3,16 +3,18 @@ import { PageErrorState } from '../components/PageErrorState';
 import { PageLoadingShell } from '../components/PageLoadingShell';
 import { TemplateRenderer } from '../components/TemplateRenderer';
 import { useSiteConfig } from '../lib/useSiteConfig';
+import { usePublicCopy } from '../lib/public-language';
 
 export function HomePage() {
   const { data, loading, error } = useSiteConfig('/');
+  const copy = usePublicCopy();
 
   if (loading) {
     return (
       <PageLoadingShell
-        eyebrow="Cargando sitio"
-        title="Preparando una experiencia visual más suave y continua."
-        description="Estamos cargando las secciones, estilos y contenido del sitio para que la transición se sienta natural."
+        eyebrow={copy.home.loading.eyebrow}
+        title={copy.home.loading.title}
+        description={copy.home.loading.description}
       />
     );
   }

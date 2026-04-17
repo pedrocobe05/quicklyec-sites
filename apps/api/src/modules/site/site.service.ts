@@ -40,6 +40,19 @@ export class SiteService {
     return type as SiteSectionType;
   }
 
+  private normalizeLocale(value: string | null | undefined) {
+    const normalized = String(value ?? '').toLowerCase().trim();
+    if (normalized.startsWith('en')) {
+      return 'en';
+    }
+    return 'es';
+  }
+
+  private normalizePayphoneMode(value: string | null | undefined) {
+    const normalized = String(value ?? '').toLowerCase().trim();
+    return normalized === 'box' ? 'box' : 'redirect';
+  }
+
   private sanitizeSectionContent(type: SiteSectionType, content?: Record<string, unknown>) {
     const nextContent = { ...(content ?? {}) };
 
@@ -216,10 +229,13 @@ export class SiteService {
     const services = await this.servicesService.findPublicByTenant(tenantId);
     const staff = await this.staffService.findPublicByTenant(tenantId);
 
-    const defaultTitle = resolved.setting?.defaultSeoTitle ?? `${resolved.tenant.name} | Reservas online`;
-    const defaultDescription =
-      resolved.setting?.defaultSeoDescription ??
-      `Reserva servicios en ${resolved.tenant.name} desde su sitio público.`;
+    const tenantLocale = this.normalizeLocale(resolved.setting?.locale);
+    const defaultTitle = resolved.setting?.defaultSeoTitle ??
+      `${resolved.tenant.name} | ${tenantLocale === 'en' ? 'Online booking' : 'Reservas online'}`;
+    const defaultDescription = resolved.setting?.defaultSeoDescription ??
+      (tenantLocale === 'en'
+        ? `Book services at ${resolved.tenant.name} from its public site.`
+        : `Reserva servicios en ${resolved.tenant.name} desde su sitio público.`);
 
     const canonicalHost = resolved.setting?.canonicalDomain ?? resolved.domain.domain;
     const [logoUrl, faviconUrl] = await Promise.all([
@@ -249,19 +265,39 @@ export class SiteService {
       section.isVisible && (bookingEnabled || section.type !== 'booking_cta')
     ));
 
+    const payphoneMode = this.normalizePayphoneMode(resolved.setting?.payphoneMode);
+    const payphoneToken = resolved.setting?.payphoneToken?.trim() ?? '';
+    const payphoneStoreId = resolved.setting?.payphoneStoreId?.trim() ?? '';
+    const payphoneEnabled = resolved.setting?.payphonePaymentEnabled ?? false;
+    const payphoneBoxCredentials =
+      payphoneEnabled && payphoneMode === 'box' && payphoneToken && payphoneStoreId
+        ? { token: payphoneToken, storeId: payphoneStoreId }
+        : null;
+
+    const payphonePublicApi =
+      payphoneEnabled && payphoneToken && payphoneStoreId ? { token: payphoneToken, storeId: payphoneStoreId } : null;
+
     const response: PublicSiteConfig = {
       tenant: {
         id: resolved.tenant.id,
         name: resolved.tenant.name,
         slug: resolved.tenant.slug,
         plan: normalizedPlan,
-        locale: resolved.setting?.locale ?? 'es-EC',
+        locale: tenantLocale,
         timezone: resolved.setting?.timezone ?? 'America/Guayaquil',
         currency: resolved.setting?.currency ?? 'USD',
         contactEmail: resolved.setting?.contactEmail ?? null,
         contactPhone: resolved.setting?.contactPhone ?? null,
         whatsappNumber: resolved.setting?.whatsappNumber ?? null,
         contactAddress: resolved.setting?.contactAddress ?? null,
+        paymentMethods: {
+          cashPaymentEnabled: resolved.setting?.cashPaymentEnabled ?? true,
+          transferPaymentEnabled: resolved.setting?.transferPaymentEnabled ?? false,
+          payphonePaymentEnabled: payphoneEnabled,
+          payphoneMode,
+          payphoneBox: payphoneBoxCredentials,
+          payphonePublicApi,
+        },
       },
       capabilities: {
         publicSiteEnabled,

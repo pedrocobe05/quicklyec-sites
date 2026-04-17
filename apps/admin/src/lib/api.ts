@@ -175,6 +175,15 @@ function authHeaders(accessToken: string) {
   };
 }
 
+export interface AppointmentAvailabilitySlot {
+  start: string;
+  end: string;
+  staffId?: string | null;
+  staffName?: string | null;
+  available: boolean;
+  unavailableReason?: string | null;
+}
+
 export async function login(email: string, password: string) {
   return request('/auth/login', {
     method: 'POST',
@@ -279,6 +288,14 @@ export async function sendTenantTestEmail(accessToken: string, tenantId: string,
   });
 }
 
+export async function preparePayphoneTestPayment(accessToken: string, tenantId: string, payload: Record<string, unknown>) {
+  return request(`/admin/payments/payphone-test-prepare?tenantId=${tenantId}`, {
+    method: 'POST',
+    headers: authHeaders(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function createTenantDomain(accessToken: string, payload: Record<string, unknown>) {
   return request('/tenants/domains', {
     method: 'POST',
@@ -365,6 +382,34 @@ export async function updateStaff(
 export async function getAppointments(accessToken: string, tenantId: string) {
   return request(`/appointments?tenantId=${tenantId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+export async function getAppointmentAvailability(
+  accessToken: string,
+  tenantId: string,
+  serviceId: string,
+  date: string,
+  staffId?: string,
+) {
+  const staffQuery = staffId ? `&staffId=${encodeURIComponent(staffId)}` : '';
+  return request<AppointmentAvailabilitySlot[]>(
+    `/appointments/availability?tenantId=${tenantId}&serviceId=${encodeURIComponent(serviceId)}&date=${encodeURIComponent(date)}${staffQuery}`,
+    {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    },
+  );
+}
+
+export async function createAppointment(
+  accessToken: string,
+  tenantId: string,
+  payload: Record<string, unknown>,
+) {
+  return request(`/appointments?tenantId=${tenantId}`, {
+    method: 'POST',
+    headers: authHeaders(accessToken),
+    body: JSON.stringify(payload),
   });
 }
 

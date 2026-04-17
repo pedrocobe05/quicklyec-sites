@@ -24,6 +24,16 @@ type MailTheme = {
   fromEmail: string;
 };
 
+type MailLocale = 'es' | 'en';
+
+function normalizeMailLocale(value?: string | null): MailLocale {
+  const normalized = String(value ?? '').toLowerCase().trim();
+  if (normalized.startsWith('en')) {
+    return 'en';
+  }
+  return 'es';
+}
+
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
@@ -40,6 +50,18 @@ export class MailService {
     private readonly platformSettingsRepository: Repository<PlatformSettingEntity>,
   ) {}
 
+  private async resolveTenantLocale(tenantId: string): Promise<MailLocale> {
+    const settings = await this.tenantSettingsRepository.findOne({ where: { tenantId } });
+    return normalizeMailLocale(settings?.locale);
+  }
+
+  private formatDateTime(value: Date | string, locale: MailLocale) {
+    return new Date(value).toLocaleString(locale === 'en' ? 'en-US' : 'es-EC', {
+      dateStyle: 'full',
+      timeStyle: 'short',
+    });
+  }
+
   async sendWelcomeEmail(input: {
     to: string;
     tenantId: string;
@@ -51,23 +73,38 @@ export class MailService {
     if (!transporter) return;
 
     const theme = await this.resolveTheme(input.tenantId);
+    const locale = await this.resolveTenantLocale(input.tenantId);
     const adminUrl = this.configService.get<string>('app.adminUrl') ?? 'http://localhost:5173';
-    const subject = `Bienvenido a ${input.tenantName ?? 'Quickly Sites'}`;
+    const subject = locale === 'en'
+      ? `Welcome to ${input.tenantName ?? 'Quickly Sites'}`
+      : `Bienvenido a ${input.tenantName ?? 'Quickly Sites'}`;
+    const greeting = locale === 'en' ? 'Hello' : 'Hola';
+    const accessLabel = locale === 'en' ? 'Access' : 'Acceso';
+    const emailLabel = locale === 'en' ? 'Email' : 'Correo';
+    const tempPasswordLabel = locale === 'en' ? 'Temporary password' : 'Contraseña temporal';
+    const changePasswordNote = locale === 'en'
+      ? 'Please change your password after logging in.'
+      : 'Cambia tu contraseña al ingresar.';
 
     await transporter.sendMail({
       from: `"${theme.fromName}" <${theme.fromEmail}>`,
       to: input.to,
       subject,
-      text: `Hola ${input.recipientName ?? ''}\n\nTu usuario fue creado correctamente.\nAcceso: ${adminUrl}\nCorreo: ${input.to}\nContraseña temporal: ${input.temporaryPassword}\n\nCambia tu contraseña al ingresar.`,
+      text: `${greeting} ${input.recipientName ?? ''}\n\n${
+        locale === 'en'
+          ? 'Your user account was created successfully.'
+          : 'Tu usuario fue creado correctamente.'
+      }\n${accessLabel}: ${adminUrl}\n${emailLabel}: ${input.to}\n${tempPasswordLabel}: ${input.temporaryPassword}\n\n${changePasswordNote}`,
       html: this.renderEmailTemplate({
         theme,
-        title: 'Bienvenido a tu panel',
-        intro: `Hola ${input.recipientName ?? ''}, tu acceso ya está listo.`,
+        title: locale === 'en' ? 'Welcome to your dashboard' : 'Bienvenido a tu panel',
+        intro: `${greeting} ${input.recipientName ?? ''}, ${locale === 'en' ? 'your access is ready.' : 'tu acceso ya está listo.'}`,
         body: `
-          <p style="margin:0 0 10px 0;"><strong>Empresa:</strong> ${input.tenantName ?? 'Quickly Sites'}</p>
-          <p style="margin:0 0 10px 0;"><strong>Acceso:</strong> <a href="${adminUrl}" style="color:${theme.accentColor};">${adminUrl}</a></p>
-          <p style="margin:0 0 10px 0;"><strong>Correo:</strong> ${input.to}</p>
-          <p style="margin:0;"><strong>Contraseña temporal:</strong> ${input.temporaryPassword}</p>
+          <p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Company' : 'Empresa'}:</strong> ${input.tenantName ?? 'Quickly Sites'}</p>
+          <p style="margin:0 0 10px 0;"><strong>${accessLabel}:</strong> <a href="${adminUrl}" style="color:${theme.accentColor};">${adminUrl}</a></p>
+          <p style="margin:0 0 10px 0;"><strong>${emailLabel}:</strong> ${input.to}</p>
+          <p style="margin:0;"><strong>${tempPasswordLabel}:</strong> ${input.temporaryPassword}</p>
+          <p style="margin:12px 0 0 0;">${changePasswordNote}</p>
         `,
       }),
     });
@@ -83,17 +120,22 @@ export class MailService {
     if (!transporter) return;
 
     const theme = await this.resolveTheme(input.tenantId);
+    const locale = await this.resolveTenantLocale(input.tenantId);
 
     await transporter.sendMail({
       from: `"${theme.fromName}" <${theme.fromEmail}>`,
       to: input.to,
-      subject: 'Restablecimiento de contraseña',
-      text: `Hola ${input.recipientName ?? ''}\n\nTu contraseña fue restablecida.\nNueva contraseña temporal: ${input.temporaryPassword}\n\nIngresa y cámbiala cuanto antes.`,
+      subject: locale === 'en' ? 'Password reset' : 'Restablecimiento de contraseña',
+      text:
+        `${locale === 'en' ? 'Hello' : 'Hola'} ${input.recipientName ?? ''}\n\n` +
+        `${locale === 'en' ? 'Your password was reset.' : 'Tu contraseña fue restablecida.'}\n` +
+        `${locale === 'en' ? 'Temporary password' : 'Nueva contraseña temporal'}: ${input.temporaryPassword}\n\n` +
+        `${locale === 'en' ? 'Please sign in and change it as soon as possible.' : 'Ingresa y cámbiala cuanto antes.'}`,
       html: this.renderEmailTemplate({
         theme,
-        title: 'Restablece tu acceso',
-        intro: `Hola ${input.recipientName ?? ''}, generamos una nueva contraseña temporal para tu usuario.`,
-        body: `<p style="margin:0;"><strong>Nueva contraseña temporal:</strong> ${input.temporaryPassword}</p>`,
+        title: locale === 'en' ? 'Reset your access' : 'Restablece tu acceso',
+        intro: `${locale === 'en' ? 'Hello' : 'Hola'} ${input.recipientName ?? ''}, ${locale === 'en' ? 'we generated a new temporary password for your account.' : 'generamos una nueva contraseña temporal para tu usuario.'}`,
+        body: `<p style="margin:0;"><strong>${locale === 'en' ? 'Temporary password' : 'Nueva contraseña temporal'}:</strong> ${input.temporaryPassword}</p>`,
       }),
     });
   }
@@ -147,7 +189,7 @@ export class MailService {
     tenantId: string;
     recipientName?: string | null;
     serviceName: string;
-    startDateTime: string;
+    startDateTime: Date | string;
     staffName?: string | null;
     statusLabel?: string;
     contactPhone?: string | null;
@@ -158,35 +200,37 @@ export class MailService {
     if (!transporter) return;
 
     const theme = await this.resolveTheme(input.tenantId);
-    const statusLabel = input.statusLabel ?? 'Pendiente de gestión';
+    const locale = await this.resolveTenantLocale(input.tenantId);
+    const statusLabel = input.statusLabel ?? (locale === 'en' ? 'Pending management' : 'Pendiente de gestión');
+    const dateTime = this.formatDateTime(input.startDateTime, locale);
     await transporter.sendMail({
       from: `"${theme.fromName}" <${theme.fromEmail}>`,
       to: input.to,
-      subject: 'Recordatorio de cita',
+      subject: locale === 'en' ? 'Appointment reminder' : 'Recordatorio de cita',
       text:
-        `Hola ${input.recipientName ?? ''}\n\n` +
-        `Te recordamos tu próxima cita.\n` +
-        `Servicio: ${input.serviceName}\n` +
-        `${input.staffName ? `Profesional: ${input.staffName}\n` : ''}` +
-        `Fecha: ${input.startDateTime}\n` +
-        `Estado: ${statusLabel}\n` +
-        `${input.contactPhone ? `Teléfono: ${input.contactPhone}\n` : ''}` +
-        `${input.contactAddress ? `Dirección: ${input.contactAddress}\n` : ''}\n` +
-        `Si necesitas reprogramarla o tienes dudas, contáctanos directamente.`,
+        `${locale === 'en' ? 'Hello' : 'Hola'} ${input.recipientName ?? ''}\n\n` +
+        `${locale === 'en' ? 'This is a reminder for your upcoming appointment.' : 'Te recordamos tu próxima cita.'}\n` +
+        `${locale === 'en' ? 'Service' : 'Servicio'}: ${input.serviceName}\n` +
+        `${input.staffName ? `${locale === 'en' ? 'Professional' : 'Profesional'}: ${input.staffName}\n` : ''}` +
+        `${locale === 'en' ? 'Date' : 'Fecha'}: ${dateTime}\n` +
+        `${locale === 'en' ? 'Status' : 'Estado'}: ${statusLabel}\n` +
+        `${input.contactPhone ? `${locale === 'en' ? 'Phone' : 'Teléfono'}: ${input.contactPhone}\n` : ''}` +
+        `${input.contactAddress ? `${locale === 'en' ? 'Address' : 'Dirección'}: ${input.contactAddress}\n` : ''}\n` +
+        `${locale === 'en' ? 'If you need to reschedule or have questions, contact us directly.' : 'Si necesitas reprogramarla o tienes dudas, contáctanos directamente.'}`,
       html: this.renderEmailTemplate({
         theme,
-        title: 'Recordatorio de cita',
-        intro: `Hola ${input.recipientName ?? ''}, te recordamos tu próxima cita.`,
+        title: locale === 'en' ? 'Appointment reminder' : 'Recordatorio de cita',
+        intro: `${locale === 'en' ? 'Hello' : 'Hola'} ${input.recipientName ?? ''}, ${locale === 'en' ? 'this is a reminder for your upcoming appointment.' : 'te recordamos tu próxima cita.'}`,
         body: `
-          <p style="margin:0 0 10px 0;">Queremos asegurarnos de que tengas a mano los datos esenciales de tu reserva.</p>
+          <p style="margin:0 0 10px 0;">${locale === 'en' ? 'We want to make sure you have the essential details of your booking handy.' : 'Queremos asegurarnos de que tengas a mano los datos esenciales de tu reserva.'}</p>
           ${input.staffPhotoUrl ? `<p style="margin:0 0 16px 0;"><img src="${input.staffPhotoUrl}" alt="${input.staffName ?? 'Profesional asignado'}" style="width:84px;height:84px;border-radius:18px;object-fit:cover;border:1px solid rgba(15,23,42,0.08);" /></p>` : ''}
-          <p style="margin:0 0 10px 0;"><strong>Servicio:</strong> ${input.serviceName}</p>
-          ${input.staffName ? `<p style="margin:0 0 10px 0;"><strong>Profesional:</strong> ${input.staffName}</p>` : ''}
-          <p style="margin:0 0 10px 0;"><strong>Fecha:</strong> ${input.startDateTime}</p>
-          <p style="margin:0 0 10px 0;"><strong>Estado:</strong> ${statusLabel}</p>
-          ${input.contactPhone ? `<p style="margin:0 0 10px 0;"><strong>Teléfono:</strong> ${input.contactPhone}</p>` : ''}
-          ${input.contactAddress ? `<p style="margin:0 0 10px 0;"><strong>Dirección:</strong> ${input.contactAddress}</p>` : ''}
-          <p style="margin:0;">Si necesitas reprogramarla o tienes dudas, puedes responder este correo o comunicarte con el negocio.</p>
+          <p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Service' : 'Servicio'}:</strong> ${input.serviceName}</p>
+          ${input.staffName ? `<p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Professional' : 'Profesional'}:</strong> ${input.staffName}</p>` : ''}
+          <p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Date' : 'Fecha'}:</strong> ${dateTime}</p>
+          <p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Status' : 'Estado'}:</strong> ${statusLabel}</p>
+          ${input.contactPhone ? `<p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Phone' : 'Teléfono'}:</strong> ${input.contactPhone}</p>` : ''}
+          ${input.contactAddress ? `<p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Address' : 'Dirección'}:</strong> ${input.contactAddress}</p>` : ''}
+          <p style="margin:0;">${locale === 'en' ? 'If you need to reschedule or have questions, reply to this email or contact the business.' : 'Si necesitas reprogramarla o tienes dudas, puedes responder este correo o comunicarte con el negocio.'}</p>
         `,
       }),
     });
@@ -197,7 +241,7 @@ export class MailService {
     tenantId: string;
     recipientName?: string | null;
     serviceName: string;
-    startDateTime: string;
+    startDateTime: Date | string;
     staffName?: string | null;
     statusLabel?: string;
     contactPhone?: string | null;
@@ -208,36 +252,110 @@ export class MailService {
     if (!transporter) return;
 
     const theme = await this.resolveTheme(input.tenantId);
-    const statusLabel = input.statusLabel ?? 'Pendiente de gestión';
+    const locale = await this.resolveTenantLocale(input.tenantId);
+    const statusLabel = input.statusLabel ?? (locale === 'en' ? 'Pending management' : 'Pendiente de gestión');
+    const dateTime = this.formatDateTime(input.startDateTime, locale);
 
     await transporter.sendMail({
       from: `"${theme.fromName}" <${theme.fromEmail}>`,
       to: input.to,
-      subject: 'Gracias por tu reserva',
+      subject: locale === 'en' ? 'Thanks for your booking' : 'Gracias por tu reserva',
       text:
-        `Hola ${input.recipientName ?? ''}\n\n` +
-        `Tu reserva fue registrada correctamente.\n` +
-        `Servicio: ${input.serviceName}\n` +
-        `${input.staffName ? `Profesional: ${input.staffName}\n` : ''}` +
-        `Fecha: ${input.startDateTime}\n` +
-        `Estado: ${statusLabel}\n` +
-        `${input.contactPhone ? `Teléfono: ${input.contactPhone}\n` : ''}` +
-        `${input.contactAddress ? `Dirección: ${input.contactAddress}\n` : ''}\n` +
-        `Si necesitas cambiarla, contáctanos directamente.`,
+        `${locale === 'en' ? 'Hello' : 'Hola'} ${input.recipientName ?? ''}\n\n` +
+        `${locale === 'en' ? 'Your booking was registered successfully.' : 'Tu reserva fue registrada correctamente.'}\n` +
+        `${locale === 'en' ? 'Service' : 'Servicio'}: ${input.serviceName}\n` +
+        `${input.staffName ? `${locale === 'en' ? 'Professional' : 'Profesional'}: ${input.staffName}\n` : ''}` +
+        `${locale === 'en' ? 'Date' : 'Fecha'}: ${dateTime}\n` +
+        `${locale === 'en' ? 'Status' : 'Estado'}: ${statusLabel}\n` +
+        `${input.contactPhone ? `${locale === 'en' ? 'Phone' : 'Teléfono'}: ${input.contactPhone}\n` : ''}` +
+        `${input.contactAddress ? `${locale === 'en' ? 'Address' : 'Dirección'}: ${input.contactAddress}\n` : ''}\n` +
+        `${locale === 'en' ? 'If you need to change it, contact us directly.' : 'Si necesitas cambiarla, contáctanos directamente.'}`,
       html: this.renderEmailTemplate({
         theme,
-        title: 'Gracias por tu reserva',
-        intro: `Hola ${input.recipientName ?? ''}, tu reserva fue registrada correctamente.`,
+        title: locale === 'en' ? 'Thanks for your booking' : 'Gracias por tu reserva',
+        intro: `${locale === 'en' ? 'Hello' : 'Hola'} ${input.recipientName ?? ''}, ${locale === 'en' ? 'your booking was registered successfully.' : 'tu reserva fue registrada correctamente.'}`,
         body: `
-          <p style="margin:0 0 10px 0;">Hemos recibido tu solicitud y la dejamos registrada en agenda.</p>
+          <p style="margin:0 0 10px 0;">${locale === 'en' ? 'We received your request and added it to the schedule.' : 'Hemos recibido tu solicitud y la dejamos registrada en agenda.'}</p>
           ${input.staffPhotoUrl ? `<p style="margin:0 0 16px 0;"><img src="${input.staffPhotoUrl}" alt="${input.staffName ?? 'Profesional asignado'}" style="width:84px;height:84px;border-radius:18px;object-fit:cover;border:1px solid rgba(15,23,42,0.08);" /></p>` : ''}
-          <p style="margin:0 0 10px 0;"><strong>Servicio:</strong> ${input.serviceName}</p>
-          ${input.staffName ? `<p style="margin:0 0 10px 0;"><strong>Profesional:</strong> ${input.staffName}</p>` : ''}
-          <p style="margin:0 0 10px 0;"><strong>Fecha:</strong> ${input.startDateTime}</p>
-          <p style="margin:0 0 10px 0;"><strong>Estado:</strong> ${statusLabel}</p>
-          ${input.contactPhone ? `<p style="margin:0 0 10px 0;"><strong>Teléfono:</strong> ${input.contactPhone}</p>` : ''}
-          ${input.contactAddress ? `<p style="margin:0 0 10px 0;"><strong>Dirección:</strong> ${input.contactAddress}</p>` : ''}
-          <p style="margin:0;">Si necesitas reprogramarla o tienes dudas, puedes responder este correo o comunicarte con el negocio.</p>
+          <p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Service' : 'Servicio'}:</strong> ${input.serviceName}</p>
+          ${input.staffName ? `<p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Professional' : 'Profesional'}:</strong> ${input.staffName}</p>` : ''}
+          <p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Date' : 'Fecha'}:</strong> ${dateTime}</p>
+          <p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Status' : 'Estado'}:</strong> ${statusLabel}</p>
+          ${input.contactPhone ? `<p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Phone' : 'Teléfono'}:</strong> ${input.contactPhone}</p>` : ''}
+          ${input.contactAddress ? `<p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Address' : 'Dirección'}:</strong> ${input.contactAddress}</p>` : ''}
+          <p style="margin:0;">${locale === 'en' ? 'If you need to reschedule or have questions, reply to this email or contact the business.' : 'Si necesitas reprogramarla o tienes dudas, puedes responder este correo o comunicarte con el negocio.'}</p>
+        `,
+      }),
+    });
+  }
+
+  async sendAppointmentStaffNotificationEmail(input: {
+    to: string;
+    tenantId: string;
+    recipientName?: string | null;
+    notificationKind?: 'created' | 'updated';
+    customerName: string;
+    customerEmail: string;
+    customerPhone?: string | null;
+    serviceName: string;
+    startDateTime: Date | string;
+    statusLabel?: string;
+    contactPhone?: string | null;
+    contactAddress?: string | null;
+    notes?: string | null;
+  }) {
+    const transporter = await this.createTransporter(input.tenantId);
+    if (!transporter) return;
+
+    const theme = await this.resolveTheme(input.tenantId);
+    const locale = await this.resolveTenantLocale(input.tenantId);
+    const adminUrl = this.configService.get<string>('app.adminUrl') ?? 'http://localhost:5173';
+    const statusLabel = input.statusLabel ?? (locale === 'en' ? 'New booking' : 'Nueva reserva');
+    const notificationKind = input.notificationKind ?? 'created';
+    const subject = notificationKind === 'updated'
+      ? (locale === 'en' ? 'Booking updated' : 'Reserva actualizada')
+      : (locale === 'en' ? 'New booking assigned' : 'Nueva reserva asignada');
+    const title = subject;
+    const intro =
+      notificationKind === 'updated'
+        ? `${locale === 'en' ? 'Hello' : 'Hola'} ${input.recipientName ?? ''}, ${locale === 'en' ? 'an assigned booking was updated.' : 'se actualizó una reserva asignada.'}`
+        : `${locale === 'en' ? 'Hello' : 'Hola'} ${input.recipientName ?? ''}, ${locale === 'en' ? 'you have a new assigned booking.' : 'tienes una nueva reserva asignada.'}`;
+    const dateTime = this.formatDateTime(input.startDateTime, locale);
+
+    await transporter.sendMail({
+      from: `"${theme.fromName}" <${theme.fromEmail}>`,
+      to: input.to,
+      subject,
+      text:
+        `${locale === 'en' ? 'Hello' : 'Hola'} ${input.recipientName ?? ''}\n\n` +
+        `${notificationKind === 'updated' ? (locale === 'en' ? 'An assigned booking was updated.' : 'Se actualizó una reserva asignada.') : (locale === 'en' ? 'You have a new assigned booking.' : 'Tienes una nueva reserva asignada.')}\n` +
+        `${locale === 'en' ? 'Customer' : 'Cliente'}: ${input.customerName}\n` +
+        `${locale === 'en' ? 'Customer email' : 'Correo del cliente'}: ${input.customerEmail}\n` +
+        `${input.customerPhone ? `${locale === 'en' ? 'Customer phone' : 'Teléfono del cliente'}: ${input.customerPhone}\n` : ''}` +
+        `${locale === 'en' ? 'Service' : 'Servicio'}: ${input.serviceName}\n` +
+        `${locale === 'en' ? 'Date' : 'Fecha'}: ${dateTime}\n` +
+        `${locale === 'en' ? 'Status' : 'Estado'}: ${statusLabel}\n` +
+        `${input.contactPhone ? `${locale === 'en' ? 'Contact phone' : 'Teléfono de contacto'}: ${input.contactPhone}\n` : ''}` +
+        `${input.contactAddress ? `${locale === 'en' ? 'Address' : 'Dirección'}: ${input.contactAddress}\n` : ''}` +
+        `${input.notes ? `${locale === 'en' ? 'Notes' : 'Notas'}: ${input.notes}\n` : ''}\n` +
+        `${locale === 'en' ? 'You can review your schedule in QuicklyEC Sites:' : 'Puedes revisar tu agenda en QuicklyEC Sites:'} ${adminUrl}\n` +
+        `${locale === 'en' ? 'Review your schedule to manage this booking.' : 'Revisa la agenda para gestionar esta reserva.'}`,
+      html: this.renderEmailTemplate({
+        theme,
+        title,
+        intro,
+        body: `
+          <p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Customer' : 'Cliente'}:</strong> ${input.customerName}</p>
+          <p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Customer email' : 'Correo del cliente'}:</strong> ${input.customerEmail}</p>
+          ${input.customerPhone ? `<p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Customer phone' : 'Teléfono del cliente'}:</strong> ${input.customerPhone}</p>` : ''}
+          <p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Service' : 'Servicio'}:</strong> ${input.serviceName}</p>
+          <p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Date' : 'Fecha'}:</strong> ${dateTime}</p>
+          <p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Status' : 'Estado'}:</strong> ${statusLabel}</p>
+          ${input.contactPhone ? `<p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Contact phone' : 'Teléfono de contacto'}:</strong> ${input.contactPhone}</p>` : ''}
+          ${input.contactAddress ? `<p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Address' : 'Dirección'}:</strong> ${input.contactAddress}</p>` : ''}
+          ${input.notes ? `<p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Notes' : 'Notas'}:</strong> ${input.notes}</p>` : ''}
+          <p style="margin:0 0 10px 0;">${locale === 'en' ? 'You can review your schedule in' : 'Puedes revisar tu agenda en'} <a href="${adminUrl}" style="color:${theme.accentColor};text-decoration:underline;">QuicklyEC Sites</a>.</p>
+          <p style="margin:0;">${locale === 'en' ? 'Review your schedule to manage this booking.' : 'Revisa la agenda para gestionar esta reserva.'}</p>
         `,
       }),
     });
@@ -253,18 +371,23 @@ export class MailService {
     }
 
     const theme = await this.resolveTheme(input.tenantId);
+    const locale = await this.resolveTenantLocale(input.tenantId);
     await transporter.sendMail({
       from: `"${theme.fromName}" <${theme.fromEmail}>`,
       to: input.to,
-      subject: 'Prueba de correo',
-      text: `Esta es una prueba de configuración SMTP para ${theme.tenantName}. Si recibiste este mensaje, el envío funciona correctamente.`,
+      subject: locale === 'en' ? 'Email test' : 'Prueba de correo',
+      text: locale === 'en'
+        ? `This is an SMTP test for ${theme.tenantName}. If you received this message, sending works correctly.`
+        : `Esta es una prueba de configuración SMTP para ${theme.tenantName}. Si recibiste este mensaje, el envío funciona correctamente.`,
       html: this.renderEmailTemplate({
         theme,
-        title: 'Prueba de correo',
-        intro: 'Esta es una prueba de la configuración SMTP del tenant.',
+        title: locale === 'en' ? 'Email test' : 'Prueba de correo',
+        intro: locale === 'en'
+          ? 'This is a test of the tenant SMTP configuration.'
+          : 'Esta es una prueba de la configuración SMTP del tenant.',
         body: `
           <p style="margin:0 0 10px 0;"><strong>Tenant:</strong> ${theme.tenantName}</p>
-          <p style="margin:0;">Si recibiste este correo, el envío está funcionando correctamente.</p>
+          <p style="margin:0;">${locale === 'en' ? 'If you received this email, sending is working correctly.' : 'Si recibiste este correo, el envío está funcionando correctamente.'}</p>
         `,
       }),
     });

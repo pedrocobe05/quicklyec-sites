@@ -1,4 +1,5 @@
 import { PublicSiteConfig } from '@quickly-sites/shared';
+import { getPublicCopy, resolvePreferredPublicLanguage } from './public-language';
 
 function resolveApiUrl() {
   const configuredUrl = import.meta.env.VITE_API_URL;
@@ -38,22 +39,40 @@ function buildIdempotencyHeaders() {
 function extractErrorMessage(errorText: string, status: number) {
   const trimmed = errorText.trim();
   if (!trimmed) {
-    return `No se pudo completar la solicitud (${status}).`;
+    const copy = getPublicCopy(resolvePreferredPublicLanguage());
+    return `${copy.api.requestFailed} (${status}).`;
   }
 
   try {
-    const parsed = JSON.parse(trimmed) as { message?: string | string[] };
+    const parsed = JSON.parse(trimmed) as {
+      message?: string | string[];
+      payphoneHttpStatus?: number;
+      payphoneRawBody?: string;
+      payphoneParsed?: unknown;
+    };
+    let base: string;
     if (Array.isArray(parsed.message) && parsed.message.length > 0) {
-      return parsed.message.join(', ');
+      base = parsed.message.join(', ');
+    } else if (typeof parsed.message === 'string' && parsed.message.trim()) {
+      base = parsed.message.trim();
+    } else {
+      base = trimmed;
     }
-    if (typeof parsed.message === 'string' && parsed.message.trim()) {
-      return parsed.message.trim();
+    if (parsed.payphoneRawBody) {
+      const head = `[Payphone HTTP ${parsed.payphoneHttpStatus ?? '?'}]\n`;
+      return `${base}\n\n${head}${parsed.payphoneRawBody}`;
     }
+    if (parsed.payphoneParsed !== undefined) {
+      try {
+        return `${base}\n\n[Payphone JSON]\n${JSON.stringify(parsed.payphoneParsed, null, 2)}`;
+      } catch {
+        return base;
+      }
+    }
+    return base;
   } catch {
     return trimmed;
   }
-
-  return trimmed;
 }
 
 async function request<T>(path: string, options?: RequestInit) {
@@ -61,7 +80,7 @@ async function request<T>(path: string, options?: RequestInit) {
   try {
     response = await fetch(`${API_URL}${path}`, options);
   } catch {
-    throw new Error('No se pudo establecer conexión con el servidor.');
+    throw new Error(getPublicCopy(resolvePreferredPublicLanguage()).api.connectionFailed);
   }
 
   if (!response.ok) {
@@ -95,6 +114,20 @@ export function resolveCurrentHost() {
   return host;
 }
 
+/**
+ * Origen (esquema + host + puerto) para URLs de retorno/cancelación de Payphone.
+ * Por defecto es `window.location.origin` (p. ej. `http://localhost:5176`).
+ * Si en Payphone registraste otro dominio, define `VITE_PUBLIC_APP_ORIGIN` con ese origen
+ * (y abre el sitio con ese host, p. ej. vía `/etc/hosts`).
+ */
+export function resolvePublicAppOrigin() {
+  const configured = import.meta.env.VITE_PUBLIC_APP_ORIGIN;
+  if (typeof configured === 'string' && configured.trim()) {
+    return configured.trim().replace(/\/$/, '');
+  }
+  return window.location.origin;
+}
+
 export function getSiteConfig(slug = '/') {
   const host = resolveCurrentHost();
   return request<PublicSiteConfig>(`/public/site?host=${host}&slug=${encodeURIComponent(slug)}`).then(normalizeSiteConfig);
@@ -118,6 +151,67 @@ export function getAvailability(serviceId: string, date: string, staffId?: strin
 export function createAppointment(payload: unknown) {
   const host = resolveCurrentHost();
   return request(`/public/appointments?host=${host}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...buildIdempotencyHeaders(),
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function preparePayphonePayment(payload: unknown) {
+  const host = resolveCurrentHost();
+  return request<{
+    clientTransactionId: string;
+    payphoneFlow?: 'redirect' | 'box';
+    redirectUrl: string;
+    amount?: number;
+    currency?: string;
+    reference?: string;
+    payWithPayPhone?: string | null;
+    payWithCard?: string | null;
+    payphonePrepare?: Record<string, unknown>;
+    payphonePrepareRaw?: string | null;
+  }>(`/public/payphone/prepare?host=${host}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...buildIdempotencyHeaders(),
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+/** `clientTxId` = mismo valor que `clientTransactionId` en la query de retorno de Payphone (doc cajita, consultar respuesta). */
+export function confirmPayphonePayment(payload: { id: number; clientTxId: string }) {
+  const host = resolveCurrentHost();
+  return request<{
+    status: 'pending' | 'approved' | 'cancelled' | 'failed';
+    appointmentId?: string | null;
+    clientTransactionId: string;
+    transaction?: Record<string, unknown> | null;
+    payphoneConfirmRaw?: string;
+  }>(`/public/payphone/confirm?host=${host}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...buildIdempotencyHeaders(),
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Persiste el JSON de `V2/Confirm` obtenido en el navegador (sin que el API vuelva a llamar a Payphone). */
+export function applyPayphoneClientConfirm(payload: { id: number; clientTxId: string; confirmPayload: Record<string, unknown> }) {
+  const host = resolveCurrentHost();
+  return request<{
+    status: 'pending' | 'approved' | 'cancelled' | 'failed';
+    appointmentId?: string | null;
+    clientTransactionId: string;
+    transaction?: Record<string, unknown> | null;
+    payphoneConfirmRaw?: string | null;
+  }>(`/public/payphone/apply-confirm?host=${host}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

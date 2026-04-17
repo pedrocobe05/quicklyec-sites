@@ -169,8 +169,8 @@ export function ServicesStaffSection({
                   <Textarea name="bio" placeholder="Biografía" className="min-h-20" />
                 </FormField>
                 <div className="grid gap-3 md:grid-cols-2">
-                  <FormField label="Correo">
-                    <Input name="email" placeholder="Correo" />
+                  <FormField label="Correo del profesional">
+                    <Input name="email" placeholder="Correo para notificaciones" type="email" />
                   </FormField>
                   <FormField label="Teléfono">
                     <Input name="phone" placeholder="Teléfono" />

@@ -22,6 +22,8 @@ export type AppointmentStatus =
   | 'completed'
   | 'no_show';
 export type AppointmentSource = 'public_site' | 'admin' | 'imported';
+export type PaymentMethod = 'cash' | 'transfer' | 'payphone';
+export type PayphoneMode = 'redirect' | 'box';
 
 export const SITE_SECTION_TYPES: SiteSectionType[] = [
   'header',
@@ -143,6 +145,23 @@ export interface PublicStaff {
   serviceIds?: string[];
 }
 
+export interface TenantPaymentSettings {
+  cashPaymentEnabled: boolean;
+  transferPaymentEnabled: boolean;
+  payphonePaymentEnabled: boolean;
+  payphoneMode: PayphoneMode;
+  /**
+   * Solo cuando payphoneMode es `box` y hay credenciales: token + storeId para el SDK de la cajita en el navegador
+   * (según documentación Payphone el widget se configura en cliente con dominio permitido).
+   */
+  payphoneBox: { token: string; storeId: string } | null;
+  /**
+   * Mismas credenciales cuando Payphone está habilitado y hay token/storeId (cualquier modo).
+   * Sirve para `V2/Confirm` desde el navegador en la URL de retorno (doc Payphone).
+   */
+  payphonePublicApi: { token: string; storeId: string } | null;
+}
+
 export interface PublicSiteConfig {
   tenant: {
     id: string;
@@ -152,11 +171,12 @@ export interface PublicSiteConfig {
     locale: string;
     timezone: string;
     currency: string;
-        contactEmail?: string | null;
-        contactPhone?: string | null;
-        whatsappNumber?: string | null;
-        contactAddress?: string | null;
-    };
+    contactEmail?: string | null;
+    contactPhone?: string | null;
+    whatsappNumber?: string | null;
+    contactAddress?: string | null;
+    paymentMethods: TenantPaymentSettings;
+  };
   capabilities: {
     publicSiteEnabled: boolean;
     bookingEnabled: boolean;
@@ -187,6 +207,7 @@ export interface CreatePublicAppointmentInput {
   serviceId: string;
   staffId?: string | null;
   startDateTime: string;
+  paymentMethod?: PaymentMethod;
   customer: {
     fullName: string;
     email: string;

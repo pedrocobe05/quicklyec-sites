@@ -1,4 +1,5 @@
 import { PublicSiteConfig, SiteSection, SiteSectionAsset } from '@quickly-sites/shared';
+import { getLocalizedPath, usePublicCopy, usePublicLanguage } from '../lib/public-language';
 
 function scopeSectionCss(sectionId: string, css: string) {
   const rootClass = `.qs-custom-html-${sectionId}`;
@@ -39,6 +40,7 @@ function resolveCustomHtml(section: SiteSection) {
 }
 
 function HeroSection({ section }: { section: SiteSection }) {
+  const copy = usePublicCopy();
   return (
     <section className="overflow-hidden rounded-[calc(var(--radius)+0.5rem)] border border-black/5 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(245,239,233,0.92))] p-10 shadow-[0_24px_80px_rgba(15,23,42,0.08)] md:p-14">
       <div className="grid gap-8 md:grid-cols-[1.4fr,0.8fr] md:items-end">
@@ -47,18 +49,16 @@ function HeroSection({ section }: { section: SiteSection }) {
             <p className="text-xs uppercase tracking-[0.4em] text-[var(--accent)]">{String(section.content.kicker ?? '').trim()}</p>
           ) : null}
           <h1 className="mt-4 font-serif text-5xl leading-[0.95] text-slate-900 md:text-7xl">
-            {String(section.content.title ?? 'Una presencia digital diseñada para destacar tu marca')}
+            {String(section.content.title ?? copy.template.heroTitle)}
           </h1>
           <p className="mt-6 max-w-2xl text-base leading-7 text-slate-600 md:text-lg">
             {String(section.content.subtitle ?? '')}
           </p>
         </div>
         <div className="rounded-[var(--radius)] border border-[rgba(15,23,42,0.08)] bg-white/70 p-6 backdrop-blur">
-          <p className="text-[0.7rem] uppercase tracking-[0.35em] text-slate-400">Experiencia</p>
-          <p className="mt-3 font-serif text-3xl text-slate-900">Diseño editorial y experiencia premium.</p>
-          <p className="mt-4 text-sm leading-6 text-slate-600">
-            Presentación visual pensada para marcas que quieren verse cuidadas, coherentes y memorables desde el primer contacto.
-          </p>
+          <p className="text-[0.7rem] uppercase tracking-[0.35em] text-slate-400">{copy.template.experienceLabel}</p>
+          <p className="mt-3 font-serif text-3xl text-slate-900">{copy.template.experienceTitle}</p>
+          <p className="mt-4 text-sm leading-6 text-slate-600">{copy.template.experienceBody}</p>
         </div>
       </div>
     </section>
@@ -66,11 +66,12 @@ function HeroSection({ section }: { section: SiteSection }) {
 }
 
 function AboutSection({ section }: { section: SiteSection }) {
+  const copy = usePublicCopy();
   return (
     <section className="grid gap-8 rounded-[calc(var(--radius)+0.25rem)] border border-black/5 bg-white/90 p-8 shadow-[0_18px_50px_rgba(15,23,42,0.06)] md:grid-cols-2">
       <div>
-        <p className="text-sm uppercase tracking-[0.3em] text-[var(--accent)]">Nosotros</p>
-        <h2 className="mt-3 font-serif text-4xl text-slate-900">{String(section.content.title ?? 'Sobre la marca')}</h2>
+        <p className="text-sm uppercase tracking-[0.3em] text-[var(--accent)]">{copy.template.aboutKicker}</p>
+        <h2 className="mt-3 font-serif text-4xl text-slate-900">{String(section.content.title ?? copy.template.aboutTitle)}</h2>
       </div>
       <p className="text-lg leading-8 text-slate-600">{String(section.content.body ?? '')}</p>
     </section>
@@ -78,9 +79,10 @@ function AboutSection({ section }: { section: SiteSection }) {
 }
 
 function ServicesSection({ section, site }: { section: SiteSection; site: PublicSiteConfig }) {
+  const copy = usePublicCopy();
   return (
     <section className="rounded-[calc(var(--radius)+0.25rem)] border border-black/5 bg-white/90 p-8 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
-      <h2 className="font-serif text-4xl text-slate-900">{String(section.content.title ?? 'Servicios')}</h2>
+      <h2 className="font-serif text-4xl text-slate-900">{String(section.content.title ?? copy.template.servicesTitle)}</h2>
       <div className="mt-8 grid gap-5 md:grid-cols-2">
         {site.services.map((service) => (
           <article key={service.id} className="rounded-[var(--radius)] border border-[rgba(15,23,42,0.08)] bg-[linear-gradient(180deg,#fff,#faf8f5)] p-6">
@@ -101,11 +103,12 @@ function ServicesSection({ section, site }: { section: SiteSection; site: Public
 }
 
 function GallerySection({ section }: { section: SiteSection }) {
+  const copy = usePublicCopy();
   const items =
     (section.content.items as { title?: string; imageUrl?: string | null }[] | undefined) ?? [];
   return (
     <section className="rounded-[calc(var(--radius)+0.25rem)] border border-black/5 bg-white/90 p-8 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
-      <h2 className="font-serif text-4xl text-slate-900">{String(section.content.title ?? 'Galería')}</h2>
+      <h2 className="font-serif text-4xl text-slate-900">{String(section.content.title ?? copy.template.galleryTitle)}</h2>
       <div className="mt-8 grid gap-5 md:grid-cols-3">
         {items.map((item, index) => (
           <div key={`${item.title ?? 'gallery-item'}-${index}`} className="aspect-square overflow-hidden rounded-[var(--radius)] bg-[var(--secondary)] p-4">
@@ -113,12 +116,12 @@ function GallerySection({ section }: { section: SiteSection }) {
               {item.imageUrl ? (
                 <img
                   src={item.imageUrl}
-                  alt={item.title ?? 'Imagen de galería'}
+                  alt={item.title ?? copy.template.galleryItemFallback}
                   className="absolute inset-0 h-full w-full object-cover"
                 />
               ) : null}
               <div className="relative z-10 rounded-full bg-white/80 px-3 py-1.5">
-                {item.title ?? 'Imagen'}
+                {item.title ?? copy.template.galleryItemFallback}
               </div>
             </div>
           </div>
@@ -129,10 +132,11 @@ function GallerySection({ section }: { section: SiteSection }) {
 }
 
 function TestimonialsSection({ section }: { section: SiteSection }) {
+  const copy = usePublicCopy();
   const items = (section.content.items as { author: string; text: string }[] | undefined) ?? [];
   return (
     <section className="rounded-[calc(var(--radius)+0.25rem)] bg-[#23201d] p-8 text-white shadow-[0_24px_80px_rgba(15,23,42,0.18)]">
-      <h2 className="font-serif text-4xl">{String(section.content.title ?? 'Testimonios')}</h2>
+      <h2 className="font-serif text-4xl">{String(section.content.title ?? copy.template.testimonialsTitle)}</h2>
       <div className="mt-8 grid gap-5 md:grid-cols-2">
         {items.map((item, index) => (
           <blockquote key={`${item.author}-${index}`} className="rounded-[var(--radius)] border border-white/10 bg-white/5 p-6">
@@ -146,30 +150,31 @@ function TestimonialsSection({ section }: { section: SiteSection }) {
 }
 
 function BookingCTASection() {
+  const copy = usePublicCopy();
+  const { language } = usePublicLanguage();
   return (
     <section className="rounded-[calc(var(--radius)+0.25rem)] bg-[linear-gradient(135deg,var(--primary),var(--accent))] p-8 text-white shadow-[0_24px_80px_rgba(124,58,70,0.18)]">
-      <h2 className="font-serif text-4xl">Agenda tu cita online</h2>
-      <p className="mt-3 max-w-2xl text-white/80">
-        Selecciona tu servicio, revisa disponibilidad y confirma la reserva en pocos pasos.
-      </p>
+      <h2 className="font-serif text-4xl">{copy.template.bookingTitle}</h2>
+      <p className="mt-3 max-w-2xl text-white/80">{copy.template.bookingBody}</p>
       <a
-        href="/reservar"
+        href={getLocalizedPath('booking', language)}
         className="mt-6 inline-flex rounded-full border border-white/20 bg-[color-mix(in_srgb,var(--secondary)_78%,white)] px-5 py-3 text-sm font-semibold text-[color-mix(in_srgb,var(--primary)_80%,#0f172a)]"
       >
-        Reservar ahora
+        {copy.template.bookingAction}
       </a>
     </section>
   );
 }
 
 function ContactSection({ site }: { site: PublicSiteConfig }) {
+  const copy = usePublicCopy();
   return (
     <section className="rounded-[calc(var(--radius)+0.25rem)] border border-black/5 bg-white/90 p-8 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
-      <h2 className="font-serif text-4xl text-slate-900">Contacto</h2>
+      <h2 className="font-serif text-4xl text-slate-900">{copy.template.contactTitle}</h2>
       <div className="mt-6 grid gap-3 text-slate-600">
-        <p>Email: {site.tenant.contactEmail ?? 'demo@quicklyecsites.local'}</p>
-        <p>Teléfono: {site.tenant.contactPhone ?? '+593 999 999 999'}</p>
-        <p>WhatsApp: {site.tenant.whatsappNumber ?? '+593 999 999 999'}</p>
+        <p>{copy.template.contactEmail}: {site.tenant.contactEmail ?? 'demo@quicklyecsites.local'}</p>
+        <p>{copy.template.contactPhone}: {site.tenant.contactPhone ?? '+593 999 999 999'}</p>
+        <p>{copy.template.contactWhatsapp}: {site.tenant.whatsappNumber ?? '+593 999 999 999'}</p>
       </div>
     </section>
   );
@@ -193,10 +198,7 @@ function CustomHtmlSection({ section }: { section: SiteSection }) {
       }`}
     >
       {css ? <style>{scopeSectionCss(section.id, css)}</style> : null}
-      <div
-        className="prose prose-slate max-w-none"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
+      <div className="prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: html }} />
     </section>
   );
 }

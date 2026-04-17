@@ -4,6 +4,7 @@ import { Idempotent } from 'src/core/decorators/idempotent.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/jwt-auth.guard';
 import { TenantModuleAccess } from 'src/modules/auth/tenant-module-access.decorator';
 import { TenantMembershipGuard } from 'src/modules/auth/tenant-membership.guard';
+import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { CreatePublicAppointmentDto } from './dto/create-public-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { UpdateAppointmentStatusDto } from './dto/update-appointment-status.dto';
@@ -20,6 +21,17 @@ export class AppointmentsController {
   @Get()
   listAdmin(@Query('tenantId') tenantId: string) {
     return this.appointmentsService.listByTenant(tenantId);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, TenantMembershipGuard)
+  @Post()
+  @Idempotent()
+  createAdmin(
+    @Query('tenantId') tenantId: string,
+    @Body() input: CreateAppointmentDto,
+  ) {
+    return this.appointmentsService.createAdminAppointment(tenantId, input);
   }
 
   @ApiBearerAuth()

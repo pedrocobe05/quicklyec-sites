@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEmail, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsIn, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpdateTenantSettingsDto {
   @ApiPropertyOptional()
@@ -20,12 +20,46 @@ export class UpdateTenantSettingsDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @IsIn(['es', 'en'])
   locale?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   currency?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  cashPaymentEnabled?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  transferPaymentEnabled?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  payphonePaymentEnabled?: boolean;
+
+  @ApiPropertyOptional({ enum: ['redirect', 'box'] })
+  @IsOptional()
+  @IsString()
+  @IsIn(['redirect', 'box'])
+  payphoneMode?: 'redirect' | 'box';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  payphoneStoreId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  payphoneToken?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

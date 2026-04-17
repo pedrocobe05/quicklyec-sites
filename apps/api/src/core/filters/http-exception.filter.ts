@@ -37,12 +37,27 @@ export class HttpExceptionFilter implements ExceptionFilter {
       }),
     );
 
-    response.status(status).json({
+    const payload: Record<string, unknown> = {
       statusCode: status,
       message,
       timestamp: new Date().toISOString(),
       path: request.url,
-    });
+    };
+
+    if (process.env.PAYPHONE_EXPOSE_RAW_RESPONSE === 'true' && exceptionResponse && typeof exceptionResponse === 'object') {
+      const ex = exceptionResponse as Record<string, unknown>;
+      if (typeof ex.payphoneRawBody === 'string') {
+        payload.payphoneRawBody = ex.payphoneRawBody;
+      }
+      if (typeof ex.payphoneHttpStatus === 'number') {
+        payload.payphoneHttpStatus = ex.payphoneHttpStatus;
+      }
+      if ('payphoneParsed' in ex) {
+        payload.payphoneParsed = ex.payphoneParsed;
+      }
+    }
+
+    response.status(status).json(payload);
   }
 
   private resolveMessage(exceptionResponse: string | object | null, exception: unknown): string | string[] {

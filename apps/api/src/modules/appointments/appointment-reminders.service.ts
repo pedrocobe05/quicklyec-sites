@@ -62,10 +62,7 @@ export class AppointmentRemindersService {
           staffPhotoUrl,
           contactPhone: settings?.contactPhone ?? null,
           contactAddress: settings?.contactAddress ?? null,
-          startDateTime: appointment.startDateTime.toLocaleString('es-EC', {
-            dateStyle: 'full',
-            timeStyle: 'short',
-          }),
+          startDateTime: appointment.startDateTime,
         });
 
         appointment.reminderSentAt = new Date();

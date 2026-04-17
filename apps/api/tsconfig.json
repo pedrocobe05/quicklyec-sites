@@ -14,7 +14,8 @@
     "baseUrl": "./",
     "incremental": true,
     "paths": {
-      "src/*": ["src/*"]
+      "src/*": ["src/*"],
+      "@quickly-sites/shared": ["../../packages/shared/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts"],

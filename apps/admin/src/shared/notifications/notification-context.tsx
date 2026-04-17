@@ -1,4 +1,5 @@
 import { PropsWithChildren, createContext, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface NotificationItem {
   id: number;
@@ -42,23 +43,26 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   return (
     <NotificationContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed right-4 top-4 z-[100] flex w-full max-w-sm flex-col gap-3">
-        {items.map((item) => (
-          <div
-            key={item.id}
-            className={[
-              'rounded-2xl border px-4 py-3 text-sm shadow-panel backdrop-blur',
-              item.variant === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-700',
-              item.variant === 'error' && 'border-red-200 bg-red-50 text-red-700',
-              item.variant === 'info' && 'border-slate-200 bg-white/90 text-slate-700',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-          >
-            {item.title}
-          </div>
-        ))}
-      </div>
+      {createPortal(
+        <div className="pointer-events-none fixed right-4 top-4 z-[10050] flex w-full max-w-sm flex-col gap-3">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className={[
+                'rounded-2xl border px-4 py-3 text-sm shadow-panel backdrop-blur',
+                item.variant === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-700',
+                item.variant === 'error' && 'border-red-200 bg-red-50 text-red-700',
+                item.variant === 'info' && 'border-slate-200 bg-white/90 text-slate-700',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+            >
+              {item.title}
+            </div>
+          ))}
+        </div>,
+        document.body,
+      )}
     </NotificationContext.Provider>
   );
 }

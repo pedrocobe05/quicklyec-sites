@@ -13,6 +13,7 @@ export * from './availability-rule.entity';
 export * from './schedule-block.entity';
 export * from './customer.entity';
 export * from './appointment.entity';
+export * from './payphone-transaction.entity';
 export * from './admin-user.entity';
 export * from './platform-role.entity';
 export * from './platform-setting.entity';

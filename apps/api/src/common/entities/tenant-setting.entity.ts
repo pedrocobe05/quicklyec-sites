@@ -24,6 +24,24 @@ export class TenantSettingEntity {
   @Column({ length: 8, default: 'USD' })
   currency!: string;
 
+  @Column({ default: true })
+  cashPaymentEnabled!: boolean;
+
+  @Column({ default: false })
+  transferPaymentEnabled!: boolean;
+
+  @Column({ default: false })
+  payphonePaymentEnabled!: boolean;
+
+  @Column({ length: 16, default: 'redirect' })
+  payphoneMode!: string;
+
+  @Column({ type: 'varchar', nullable: true, length: 120 })
+  payphoneStoreId!: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  payphoneToken!: string | null;
+
   @Column({ type: 'varchar', nullable: true, length: 255 })
   contactEmail!: string | null;
 

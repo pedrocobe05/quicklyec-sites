@@ -13,6 +13,7 @@ import { getPlanMetadata, normalizePlanCode } from 'src/modules/tenants/tenant-a
 import { FilesService } from 'src/modules/files/files.service';
 import { MailService } from 'src/modules/mail/mail.service';
 import { ServicesService } from 'src/modules/services/services.service';
+import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 
 interface AvailabilityQuery {
@@ -21,6 +22,8 @@ interface AvailabilityQuery {
   date: string;
   staffId?: string;
 }
+
+type PaymentMethod = 'cash' | 'transfer' | 'payphone';
 
 export interface AvailabilitySlot {
   start: string;
@@ -63,6 +66,46 @@ export class AppointmentsService {
     private readonly mailService: MailService,
     private readonly servicesService: ServicesService,
   ) {}
+
+  private resolveLocale(value?: string | null) {
+    const normalized = String(value ?? '').toLowerCase().trim();
+    return normalized.startsWith('en') ? 'en' : 'es';
+  }
+
+  private getAvailablePaymentMethods(settings?: TenantSettingEntity | null): PaymentMethod[] {
+    const methods: PaymentMethod[] = [];
+
+    if (settings?.cashPaymentEnabled ?? true) {
+      methods.push('cash');
+    }
+
+    if (settings?.transferPaymentEnabled) {
+      methods.push('transfer');
+    }
+
+    if (settings?.payphonePaymentEnabled) {
+      methods.push('payphone');
+    }
+
+    return methods;
+  }
+
+  private resolvePaymentMethod(settings?: TenantSettingEntity | null, requested?: string | null): PaymentMethod {
+    const availableMethods = this.getAvailablePaymentMethods(settings);
+    if (availableMethods.length === 0) {
+      throw new BadRequestException('No hay métodos de pago habilitados para este tenant');
+    }
+
+    const normalizedRequested = String(requested ?? '').toLowerCase().trim();
+    if (normalizedRequested) {
+      if (!availableMethods.includes(normalizedRequested as PaymentMethod)) {
+        throw new BadRequestException('El método de pago seleccionado no está habilitado');
+      }
+      return normalizedRequested as PaymentMethod;
+    }
+
+    return availableMethods[0];
+  }
 
   private computeReminderScheduledAt(startDateTime: Date) {
     const now = new Date();
@@ -197,13 +240,70 @@ export class AppointmentsService {
     return appointment;
   }
 
-  private async sendPublicAppointmentNotifications(appointmentId: string) {
+  private async resolveAppointmentCustomer(
+    tenantId: string,
+    input: {
+      customerId?: string;
+      customer?: {
+        fullName: string;
+        email: string;
+        phone: string;
+        identification?: string;
+        notes?: string;
+      };
+    },
+  ) {
+    if (input.customerId) {
+      const customer = await this.customersRepository.findOne({
+        where: { id: input.customerId, tenantId },
+      });
+
+      if (!customer) {
+        throw new NotFoundException('Customer not found');
+      }
+
+      return customer;
+    }
+
+    if (input.customer) {
+      return this.customersRepository.save({
+        tenantId,
+        fullName: input.customer.fullName,
+        email: input.customer.email.toLowerCase(),
+        phone: input.customer.phone,
+        identification: input.customer.identification ?? null,
+        notes: input.customer.notes ?? null,
+        tags: null,
+      });
+    }
+
+    throw new BadRequestException('Debe seleccionar un cliente existente o crear uno nuevo');
+  }
+
+  private getAppointmentStatusLabel(status: AppointmentEntity['status'], locale: 'es' | 'en' = 'es') {
+    switch (status) {
+      case 'pending':
+        return locale === 'en' ? 'Pending management' : 'Pendiente de gestión';
+      case 'confirmed':
+        return locale === 'en' ? 'Confirmed' : 'Confirmada';
+      case 'cancelled':
+        return locale === 'en' ? 'Cancelled' : 'Cancelada';
+      case 'completed':
+        return locale === 'en' ? 'Completed' : 'Completada';
+      case 'no_show':
+        return locale === 'en' ? 'No-show' : 'No asistió';
+      default:
+        return locale === 'en' ? 'Updated' : 'Actualizada';
+    }
+  }
+
+  private async sendAppointmentCreatedNotifications(appointmentId: string) {
     const appointment = await this.appointmentsRepository.findOne({
       where: { id: appointmentId },
       relations: ['tenant', 'customer', 'service', 'staff'],
     });
 
-    if (!appointment?.tenant || !appointment.customer?.email) {
+    if (!appointment?.tenant) {
       return;
     }
 
@@ -215,31 +315,152 @@ export class AppointmentsService {
     const settings = await this.tenantSettingsRepository.findOne({
       where: { tenantId: appointment.tenantId },
     });
+    const locale = this.resolveLocale(settings?.locale);
     const staffPhotoUrl = await this.filesService.resolveStoredReference(appointment.staff?.avatarUrl, appointment.tenantId);
+    const statusLabel = this.getAppointmentStatusLabel(appointment.status, locale);
+
+    if (appointment.customer?.email) {
+      try {
+        await this.mailService.sendAppointmentConfirmationEmail({
+          to: appointment.customer.email,
+          tenantId: appointment.tenantId,
+          recipientName: appointment.customer.fullName,
+          serviceName: appointment.service?.name ?? 'tu cita',
+          staffName: appointment.staff?.name ?? null,
+          staffPhotoUrl,
+          startDateTime: appointment.startDateTime,
+          statusLabel,
+          contactPhone: settings?.contactPhone ?? null,
+          contactAddress: settings?.contactAddress ?? null,
+        });
+      } catch (error) {
+        this.logger.error(
+          `No se pudo enviar correo de confirmación para la cita ${appointment.id}: ${
+            error instanceof Error ? error.stack ?? error.message : 'error desconocido'
+          }`,
+        );
+      }
+    }
+
+    await this.sendAppointmentStaffNotification(appointment, 'created', {
+      settings,
+      startDateTime: appointment.startDateTime,
+      statusLabel,
+    });
+  }
+
+  private async sendAppointmentStaffNotification(
+    appointment: AppointmentEntity,
+    notificationKind: 'created' | 'updated',
+    context?: {
+      settings?: TenantSettingEntity | null;
+      startDateTime?: Date | string;
+      statusLabel?: string;
+    },
+  ) {
+    if (!appointment.staff) {
+      return;
+    }
+
+    const effectiveAppointment = appointment.customer && appointment.service && appointment.tenant
+      ? appointment
+      : await this.appointmentsRepository.findOne({
+        where: { id: appointment.id },
+        relations: ['tenant', 'customer', 'service', 'staff'],
+      });
+
+    if (!effectiveAppointment?.tenant) {
+      return;
+    }
+
+    const planMetadata = getPlanMetadata(normalizePlanCode(effectiveAppointment.tenant.plan));
+    if (!planMetadata.features.includes('email_notifications')) {
+      return;
+    }
+
+    const settings = context?.settings ?? await this.tenantSettingsRepository.findOne({
+      where: { tenantId: effectiveAppointment.tenantId },
+    });
+    const locale = this.resolveLocale(settings?.locale);
+    const staff = effectiveAppointment.staff;
+
+    if (!staff?.email) {
+      this.logger.warn(`La cita ${effectiveAppointment.id} tiene profesional asignado sin correo de notificación.`);
+      return;
+    }
+
+    const startDateTime = context?.startDateTime ?? effectiveAppointment.startDateTime;
+    const statusLabel =
+      context?.statusLabel
+      ?? this.getAppointmentStatusLabel(effectiveAppointment.status, locale);
 
     try {
-      await this.mailService.sendAppointmentConfirmationEmail({
-        to: appointment.customer.email,
-        tenantId: appointment.tenantId,
-        recipientName: appointment.customer.fullName,
-        serviceName: appointment.service?.name ?? 'tu cita',
-        staffName: appointment.staff?.name ?? null,
-        staffPhotoUrl,
-        startDateTime: appointment.startDateTime.toLocaleString('es-EC', {
-          dateStyle: 'full',
-          timeStyle: 'short',
-        }),
-        statusLabel: appointment.status === 'pending' ? 'Pendiente de gestión' : 'Confirmada',
+      await this.mailService.sendAppointmentStaffNotificationEmail({
+        to: staff.email,
+        tenantId: effectiveAppointment.tenantId,
+        recipientName: staff.name ?? null,
+        notificationKind,
+        customerName: effectiveAppointment.customer?.fullName ?? 'Cliente',
+        customerEmail: effectiveAppointment.customer?.email ?? 'sin-correo',
+        customerPhone: effectiveAppointment.customer?.phone ?? null,
+        serviceName: effectiveAppointment.service?.name ?? 'tu servicio',
+        startDateTime,
+        statusLabel,
         contactPhone: settings?.contactPhone ?? null,
         contactAddress: settings?.contactAddress ?? null,
+        notes: effectiveAppointment.notes ?? null,
       });
     } catch (error) {
       this.logger.error(
-        `No se pudo enviar correo de confirmación para la cita ${appointment.id}: ${
+        `No se pudo enviar correo al profesional para la cita ${effectiveAppointment.id}: ${
           error instanceof Error ? error.stack ?? error.message : 'error desconocido'
         }`,
       );
     }
+  }
+
+  private async persistAppointmentAndNotify(input: {
+    tenantId: string;
+    serviceId: string;
+    staffId?: string | null;
+    paymentMethod: PaymentMethod;
+    startDateTime: Date;
+    endDateTime: Date;
+    status: AppointmentEntity['status'];
+    customer: CustomerEntity;
+    notes?: string | null;
+    internalNotes?: string | null;
+  }) {
+    const appointment = await this.appointmentsRepository.save({
+      tenantId: input.tenantId,
+      customerId: input.customer.id,
+      serviceId: input.serviceId,
+      staffId: input.staffId ?? null,
+      source: 'admin',
+      status: input.status,
+      paymentMethod: input.paymentMethod,
+      startDateTime: input.startDateTime,
+      endDateTime: input.endDateTime,
+      notes: input.notes ?? null,
+      internalNotes: input.internalNotes ?? null,
+      reminderScheduledAt: null,
+      reminderSentAt: null,
+      reminderError: null,
+    });
+
+    const hydratedAppointment = await this.appointmentsRepository.findOne({
+      where: { id: appointment.id },
+      relations: ['tenant', 'customer', 'service', 'staff'],
+    });
+
+    if (hydratedAppointment) {
+      await this.applyReminderState(hydratedAppointment);
+      await this.appointmentsRepository.save(hydratedAppointment);
+      await this.sendAppointmentCreatedNotifications(hydratedAppointment.id);
+      return hydratedAppointment;
+    }
+
+    return appointment;
   }
 
   private toDateWithTime(date: string, time: string, timeZone: string) {
@@ -458,6 +679,7 @@ export class AppointmentsService {
     serviceId: string;
     staffId?: string;
     startDateTime: string;
+    paymentMethod?: string;
     customer: {
       fullName: string;
       email: string;
@@ -469,6 +691,10 @@ export class AppointmentsService {
     const service = await this.servicesService.findOne(input.serviceId);
     const startDateTime = new Date(input.startDateTime);
     const endDateTime = new Date(startDateTime.getTime() + service.durationMinutes * 60 * 1000);
+    const settings = await this.tenantSettingsRepository.findOne({
+      where: { tenantId },
+    });
+    const paymentMethod = this.resolvePaymentMethod(settings, input.paymentMethod);
 
     await this.ensureAppointmentSlotAvailable({
       tenantId,
@@ -493,38 +719,71 @@ export class AppointmentsService {
       });
     }
 
-    const appointment = await this.appointmentsRepository.save({
+    const created = await this.persistAppointmentAndNotify({
       tenantId,
-      customerId: customer.id,
       serviceId: service.id,
       staffId: input.staffId ?? null,
-      source: 'public_site',
-      status: 'pending',
+      paymentMethod,
       startDateTime,
       endDateTime,
+      status: 'pending',
+      customer,
       notes: input.notes ?? null,
       internalNotes: null,
-      reminderScheduledAt: null,
-      reminderSentAt: null,
-      reminderError: null,
     });
-
-    const hydratedAppointment = await this.appointmentsRepository.findOne({
-      where: { id: appointment.id },
-      relations: ['tenant', 'customer', 'service', 'staff'],
-    });
-
-    if (hydratedAppointment) {
-      await this.applyReminderState(hydratedAppointment);
-      await this.appointmentsRepository.save(hydratedAppointment);
-      await this.sendPublicAppointmentNotifications(hydratedAppointment.id);
-    }
 
     return {
-      id: appointment.id,
-      status: appointment.status,
-      startDateTime: appointment.startDateTime,
-      endDateTime: appointment.endDateTime,
+      id: created.id,
+      status: created.status,
+      startDateTime: created.startDateTime,
+      endDateTime: created.endDateTime,
+    };
+  }
+
+  async createAdminAppointment(tenantId: string, input: CreateAppointmentDto) {
+    const service = await this.servicesService.findOne(input.serviceId);
+    if (service.tenantId !== tenantId) {
+      throw new NotFoundException('Service not found');
+    }
+
+    const startDateTime = new Date(input.startDateTime);
+    const endDateTime = new Date(startDateTime.getTime() + service.durationMinutes * 60 * 1000);
+
+    const customer = await this.resolveAppointmentCustomer(tenantId, {
+      customerId: input.customerId,
+      customer: input.customer,
+    });
+    const settings = await this.tenantSettingsRepository.findOne({
+      where: { tenantId },
+    });
+    const paymentMethod = this.resolvePaymentMethod(settings, input.paymentMethod);
+
+    await this.ensureAppointmentSlotAvailable({
+      tenantId,
+      serviceId: service.id,
+      startDateTime,
+      endDateTime,
+      staffId: input.staffId ?? null,
+    });
+
+    const created = await this.persistAppointmentAndNotify({
+      tenantId,
+      serviceId: service.id,
+      staffId: input.staffId ?? null,
+      paymentMethod,
+      startDateTime,
+      endDateTime,
+      status: input.status ?? 'confirmed',
+      customer,
+      notes: input.notes ?? null,
+      internalNotes: input.internalNotes ?? null,
+    });
+
+    return {
+      id: created.id,
+      status: created.status,
+      startDateTime: created.startDateTime,
+      endDateTime: created.endDateTime,
     };
   }
 
@@ -546,15 +805,22 @@ export class AppointmentsService {
       throw new NotFoundException('Appointment not found');
     }
 
+    const previousStatus = appointment.status;
     appointment.status = status;
     await this.applyReminderState(appointment);
-    return this.appointmentsRepository.save(appointment);
+    const saved = await this.appointmentsRepository.save(appointment);
+
+    if (previousStatus !== status) {
+      await this.sendAppointmentStaffNotification(saved, 'updated');
+    }
+
+    return saved;
   }
 
   async updateAppointment(appointmentId: string, tenantId: string, input: UpdateAppointmentDto) {
     const appointment = await this.appointmentsRepository.findOne({
       where: { id: appointmentId, tenantId },
-      relations: ['service', 'tenant'],
+      relations: ['customer', 'service', 'staff', 'tenant'],
     });
 
     if (!appointment) {
@@ -562,6 +828,17 @@ export class AppointmentsService {
     }
 
     let durationMinutes = appointment.service.durationMinutes;
+    const previousState = {
+      serviceId: appointment.serviceId,
+      staffId: appointment.staffId,
+      paymentMethod: appointment.paymentMethod,
+      customerId: appointment.customerId,
+      startDateTime: appointment.startDateTime.getTime(),
+      endDateTime: appointment.endDateTime.getTime(),
+      notes: appointment.notes ?? null,
+      internalNotes: appointment.internalNotes ?? null,
+      status: appointment.status,
+    };
 
     if (input.serviceId && input.serviceId !== appointment.serviceId) {
       const service = await this.servicesService.findOne(input.serviceId);
@@ -577,10 +854,21 @@ export class AppointmentsService {
       appointment.staffId = input.staffId || null;
     }
 
+    if (input.paymentMethod !== undefined) {
+      const settings = await this.tenantSettingsRepository.findOne({
+        where: { tenantId },
+      });
+      appointment.paymentMethod = this.resolvePaymentMethod(settings, input.paymentMethod);
+    }
+
     if (input.startDateTime) {
       const nextStart = new Date(input.startDateTime);
       appointment.startDateTime = nextStart;
       appointment.endDateTime = new Date(nextStart.getTime() + durationMinutes * 60 * 1000);
+    }
+
+    if (input.status) {
+      appointment.status = input.status;
     }
 
     appointment.notes = input.notes ?? appointment.notes;
@@ -596,7 +884,22 @@ export class AppointmentsService {
     });
 
     await this.applyReminderState(appointment);
+    const saved = await this.appointmentsRepository.save(appointment);
+    const shouldNotifyStaff =
+      previousState.serviceId !== saved.serviceId
+      || previousState.staffId !== saved.staffId
+      || previousState.paymentMethod !== saved.paymentMethod
+      || previousState.customerId !== saved.customerId
+      || previousState.startDateTime !== saved.startDateTime.getTime()
+      || previousState.endDateTime !== saved.endDateTime.getTime()
+      || previousState.notes !== (saved.notes ?? null)
+      || previousState.internalNotes !== (saved.internalNotes ?? null)
+      || previousState.status !== saved.status;
 
-    return this.appointmentsRepository.save(appointment);
+    if (shouldNotifyStaff) {
+      await this.sendAppointmentStaffNotification(saved, 'updated');
+    }
+
+    return saved;
   }
 }

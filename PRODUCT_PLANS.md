@@ -35,7 +35,7 @@ Incluye:
 - ubicación y contacto
 - botón directo a WhatsApp
 - hosting incluido
-- subdominio `quicklysites`
+- subdominio `quicklyecsites`
 
 No incluye:
 
@@ -66,7 +66,7 @@ Sugerencias futuras opcionales:
 
 ## Plan Pro
 
-Precio: `$25/mes`
+Precio: `$20/mes`
 
 Enfoque:
 
@@ -78,7 +78,6 @@ Incluye todo lo del plan básico, más:
 - agenda digital
 - panel administrativo
 - gestión de clientes
-- dominio personalizado `.com`
 
 Capacidades esperadas:
 
@@ -94,7 +93,7 @@ Capacidades esperadas:
 
 ## Plan Premium
 
-Precio: `$35/mes`
+Precio: `$30/mes`
 
 Enfoque:
 

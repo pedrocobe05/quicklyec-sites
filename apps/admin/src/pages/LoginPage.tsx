@@ -144,7 +144,7 @@ export function LoginPage() {
                   className="h-12 w-full rounded-2xl bg-[var(--brand-navy)] text-sm tracking-[0.08em] text-white hover:bg-[rgba(0,1,32,0.94)]"
                   type="submit"
                   isLoading={resetLoading}
-                  loadingLabel="Actualizando..."
+                  loadingLabel="Cargando..."
                 >
                   Guardar nueva contraseña
                 </Button>

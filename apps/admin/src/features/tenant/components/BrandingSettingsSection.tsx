@@ -1,5 +1,7 @@
 import { SITE_FONT_OPTIONS } from '@quickly-sites/shared';
 import { CSSProperties, FormEvent, useEffect, useMemo, useState } from 'react';
+import { preparePayphoneTestPayment } from '../../../lib/api';
+import { mountPayphonePaymentBox } from '../../../lib/payphone-box-sdk';
 import { Button } from '../../../shared/components/ui/Button';
 import { Input } from '../../../shared/components/ui/Input';
 import { Select } from '../../../shared/components/ui/Select';
@@ -23,6 +25,7 @@ interface BrandingSettingsSectionProps {
     faviconUrl?: string | null;
   } | null;
   settings?: {
+    locale?: string | null;
     canonicalDomain?: string | null;
     defaultSeoTitle?: string | null;
     defaultSeoDescription?: string | null;
@@ -31,10 +34,19 @@ interface BrandingSettingsSectionProps {
     contactPhone?: string | null;
     whatsappNumber?: string | null;
     contactAddress?: string | null;
+    cashPaymentEnabled?: boolean;
+    transferPaymentEnabled?: boolean;
+    payphonePaymentEnabled?: boolean;
+    payphoneMode?: string | null;
+    payphoneStoreId?: string | null;
+    payphoneToken?: string | null;
   } | null;
   onUploadBrandingAsset?: (field: 'logo' | 'favicon', file: File) => void;
   onSubmitBranding: (event: FormEvent<HTMLFormElement>) => void;
   onSubmitSettings: (event: FormEvent<HTMLFormElement>) => void;
+  tenantId?: string;
+  accessToken?: string;
+  notify?: (message: string, variant: 'success' | 'error' | 'info') => void;
 }
 
 const BUTTON_STYLE_OPTIONS = [
@@ -60,6 +72,34 @@ const BUTTON_STYLE_OPTIONS = [
 
 const HEX_COLOR_PATTERN = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
+const PAYPHONE_ADMIN_BOX_ID = 'pp-admin-payphone-test';
+
+function buildPublicPayphoneReturnUrl(canonicalDomain: string): string | null {
+  const trimmed = canonicalDomain.trim();
+  const fromEnv = import.meta.env.VITE_PUBLIC_PAYPHONE_RETURN_ORIGIN;
+  if (!trimmed && typeof fromEnv === 'string' && fromEnv.trim()) {
+    try {
+      return `${new URL(fromEnv.trim()).origin}/payphone/return`;
+    } catch {
+      return null;
+    }
+  }
+  if (!trimmed) {
+    return null;
+  }
+  let href = trimmed;
+  if (!/^https?:\/\//i.test(href)) {
+    const host = href.split('/')[0] ?? '';
+    const protocol = host.startsWith('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https';
+    href = `${protocol}://${host}`;
+  }
+  try {
+    return `${new URL(href).origin}/payphone/return`;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeHexColor(value: string | null | undefined, fallback: string) {
   const normalized = String(value ?? '').trim();
   if (HEX_COLOR_PATTERN.test(normalized)) {
@@ -76,6 +116,9 @@ export function BrandingSettingsSection({
   onUploadBrandingAsset,
   onSubmitBranding,
   onSubmitSettings,
+  tenantId,
+  accessToken,
+  notify,
 }: BrandingSettingsSectionProps) {
   const [preview, setPreview] = useState({
     primaryColor: normalizeHexColor(branding?.primaryColor, '#C16A7B'),
@@ -121,7 +164,137 @@ export function BrandingSettingsSection({
     '--preview-button-radius': previewButtonRadius,
   } as CSSProperties;
 
+  const [payphoneTestBusy, setPayphoneTestBusy] = useState(false);
+  const [payphoneBoxModal, setPayphoneBoxModal] = useState<null | {
+    clientTransactionId: string;
+    token: string;
+    storeId: string;
+    amount: number;
+    currency: string;
+    reference: string;
+    email: string;
+    phoneNumber: string;
+  }>(null);
+
+  async function handlePayphonePaymentTest() {
+    if (!tenantId || !accessToken) {
+      notify?.('No hay sesión o tenant para probar Payphone.', 'error');
+      return;
+    }
+    const form = document.getElementById('tenant-seo-settings-form') as HTMLFormElement | null;
+    if (!form) {
+      notify?.('No se encontró el formulario de configuración.', 'error');
+      return;
+    }
+    const fd = new FormData(form);
+    const canonical = String(fd.get('canonicalDomain') ?? '');
+    const responseUrl = buildPublicPayphoneReturnUrl(canonical);
+    if (!responseUrl) {
+      notify?.(
+        'Indica el dominio canónico del sitio público (o define VITE_PUBLIC_PAYPHONE_RETURN_ORIGIN en el admin) para la URL de retorno de Payphone.',
+        'error',
+      );
+      return;
+    }
+    const payphoneToken = String(fd.get('payphoneToken') ?? '');
+    const payphoneStoreId = String(fd.get('payphoneStoreId') ?? '');
+    const payphoneMode = String(fd.get('payphoneMode') ?? 'redirect');
+    const contactEmail = String(fd.get('contactEmail') ?? '').trim();
+    const contactPhone = String(fd.get('contactPhone') ?? '').trim();
+
+    setPayphoneTestBusy(true);
+    try {
+      const result = (await preparePayphoneTestPayment(accessToken, tenantId, {
+        responseUrl,
+        cancellationUrl: `${new URL(responseUrl).origin}/book`,
+        amountCents: 100,
+        payphoneToken: payphoneToken || undefined,
+        payphoneStoreId: payphoneStoreId || undefined,
+        payphoneMode: payphoneMode === 'box' ? 'box' : 'redirect',
+        customerEmail: contactEmail || undefined,
+        customerPhone: contactPhone || undefined,
+      })) as {
+        payphoneFlow?: string;
+        redirectUrl?: string;
+        clientTransactionId: string;
+        amount?: number;
+        currency?: string;
+        reference?: string;
+        payphoneBox?: { token: string; storeId: string };
+      };
+
+      if (result.payphoneFlow === 'box' && result.payphoneBox && result.amount != null) {
+        setPayphoneBoxModal({
+          clientTransactionId: result.clientTransactionId,
+          token: result.payphoneBox.token,
+          storeId: result.payphoneBox.storeId,
+          amount: result.amount,
+          currency: result.currency ?? 'USD',
+          reference: result.reference ?? '',
+          email: contactEmail || 'prueba@example.com',
+          phoneNumber: contactPhone || '+593999999999',
+        });
+        notify?.('Cajita lista: pago de prueba por $1.00 (100 centavos).', 'success');
+      } else if (result.redirectUrl?.trim()) {
+        window.open(result.redirectUrl, '_blank', 'noopener,noreferrer');
+        notify?.('Se abrió Payphone en una pestaña nueva (prueba $1.00). Tras pagar, confirma en el sitio público.', 'success');
+      } else {
+        notify?.('Respuesta de prueba incompleta.', 'error');
+      }
+    } catch (error) {
+      notify?.(error instanceof Error ? error.message : 'No se pudo iniciar la prueba de Payphone', 'error');
+    } finally {
+      setPayphoneTestBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!payphoneBoxModal) {
+      return;
+    }
+
+    let cancelled = false;
+    let destroyBox: (() => void) | undefined;
+
+    mountPayphonePaymentBox({
+      containerId: PAYPHONE_ADMIN_BOX_ID,
+      token: payphoneBoxModal.token,
+      storeId: payphoneBoxModal.storeId,
+      clientTransactionId: payphoneBoxModal.clientTransactionId,
+      amount: payphoneBoxModal.amount,
+      currency: payphoneBoxModal.currency,
+      reference: payphoneBoxModal.reference,
+      lang: 'es',
+      timeZone: -5,
+      email: payphoneBoxModal.email,
+      phoneNumber: payphoneBoxModal.phoneNumber,
+    })
+      .then((handle) => {
+        if (cancelled) {
+          handle.destroy();
+          return;
+        }
+        destroyBox = handle.destroy;
+      })
+      .catch((err: Error) => {
+        if (!cancelled) {
+          notify?.(err.message || 'No se pudo cargar la cajita Payphone', 'error');
+          setPayphoneBoxModal(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      destroyBox?.();
+      const el = document.getElementById(PAYPHONE_ADMIN_BOX_ID);
+      if (el) {
+        el.innerHTML = '';
+      }
+    };
+  }, [payphoneBoxModal, notify]);
+
   return (
+    <>
     <div className="grid gap-6 xl:grid-cols-2">
       <article id="branding" className="rounded-[2rem] bg-white p-6 shadow-sm scroll-mt-6">
         <h3 className="font-serif text-2xl">Marca</h3>
@@ -279,7 +452,13 @@ export function BrandingSettingsSection({
 
       <article id="settings" className="rounded-[2rem] bg-white p-6 shadow-sm scroll-mt-6">
         <h3 className="font-serif text-2xl">SEO y contacto</h3>
-        <form className="mt-5 grid gap-3" onSubmit={onSubmitSettings}>
+        <form id="tenant-seo-settings-form" className="mt-5 grid gap-3" onSubmit={onSubmitSettings}>
+          <FormField label="Idioma del tenant">
+            <Select name="locale" defaultValue={String(settings?.locale ?? 'es').toLowerCase().startsWith('en') ? 'en' : 'es'}>
+              <option value="es">Español</option>
+              <option value="en">English</option>
+            </Select>
+          </FormField>
           <FormField label="Dominio canónico">
             <Input name="canonicalDomain" defaultValue={settings?.canonicalDomain ?? ''} placeholder="Dominio canónico" />
           </FormField>
@@ -303,6 +482,65 @@ export function BrandingSettingsSection({
           <FormField label="Dirección">
             <Input name="contactAddress" defaultValue={settings?.contactAddress ?? ''} placeholder="Dirección del negocio" />
           </FormField>
+          <div className="grid gap-4 rounded-3xl border border-slate-200 bg-slate-50/80 p-4">
+            <div>
+              <h4 className="text-base font-semibold text-slate-900">Métodos de pago</h4>
+              <p className="mt-1 text-sm text-slate-500">Activa los métodos que el tenant podrá mostrar al reservar.</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-sm text-slate-700">
+                <Checkbox type="checkbox" name="cashPaymentEnabled" defaultChecked={settings?.cashPaymentEnabled ?? true} />
+                Efectivo
+              </label>
+              <label className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-sm text-slate-700">
+                <Checkbox type="checkbox" name="transferPaymentEnabled" defaultChecked={settings?.transferPaymentEnabled ?? false} />
+                Transferencia
+              </label>
+              <label className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-sm text-slate-700">
+                <Checkbox type="checkbox" name="payphonePaymentEnabled" defaultChecked={settings?.payphonePaymentEnabled ?? false} />
+                Payphone
+              </label>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <FormField label="Modo Payphone">
+                <Select name="payphoneMode" defaultValue={settings?.payphoneMode ?? 'redirect'}>
+                  <option value="redirect">Redirección</option>
+                  <option value="box">Cajita</option>
+                </Select>
+              </FormField>
+              <FormField label="Payphone Store ID">
+                <Input
+                  name="payphoneStoreId"
+                  defaultValue={settings?.payphoneStoreId ?? ''}
+                  placeholder="Credenciales en Payphone Developer"
+                />
+              </FormField>
+              <FormField label="Payphone Token">
+                <Input
+                  name="payphoneToken"
+                  defaultValue={settings?.payphoneToken ?? ''}
+                  placeholder="Token"
+                  maxLength={2048}
+                />
+              </FormField>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <p className="text-sm text-slate-600">
+                Prueba un cobro de <span className="font-semibold text-slate-900">$1.00</span> sin pasar por la reserva. Usa token y Store ID del formulario (no hace falta guardar antes).
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold"
+                disabled={payphoneTestBusy || !tenantId || !accessToken}
+                onClick={() => {
+                  void handlePayphonePaymentTest();
+                }}
+              >
+                {payphoneTestBusy ? 'Preparando…' : 'Probar pago Payphone'}
+              </Button>
+            </div>
+          </div>
           <label className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
             <Checkbox type="checkbox" name="siteIndexingEnabled" defaultChecked={settings?.siteIndexingEnabled ?? true} />
             Permitir indexación del sitio
@@ -439,5 +677,35 @@ export function BrandingSettingsSection({
         </div>
       </article>
     </div>
+    {payphoneBoxModal ? (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="payphone-test-dialog-title"
+      >
+        <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[1.5rem] bg-white p-6 shadow-2xl">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h4 id="payphone-test-dialog-title" className="font-serif text-xl text-slate-900">
+                Prueba cajita Payphone
+              </h4>
+              <p className="mt-1 text-sm text-slate-600">
+                Pago de prueba por $1.00. Al terminar, Payphone redirige al sitio público; la confirmación se procesa en la página de retorno.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              onClick={() => setPayphoneBoxModal(null)}
+            >
+              Cerrar
+            </button>
+          </div>
+          <div id={PAYPHONE_ADMIN_BOX_ID} className="mt-4 min-h-[140px]" />
+        </div>
+      </div>
+    ) : null}
+    </>
   );
 }

@@ -8,7 +8,7 @@
     "dev:ts-node": "ts-node -r tsconfig-paths/register src/main.ts",
     "prebuild": "npm run build -w @quickly-sites/shared",
     "build": "rm -rf dist && nest build",
-    "start": "node dist/main.js",
+    "start": "node dist/apps/api/src/main.js",
     "prestart:dev": "npm run build -w @quickly-sites/shared",
     "start:dev": "node --watch --watch-path ./src --watch-path ../../packages/shared/src -r ts-node/register -r tsconfig-paths/register ./src/main.ts",
     "prestart:debug": "npm run build -w @quickly-sites/shared",
