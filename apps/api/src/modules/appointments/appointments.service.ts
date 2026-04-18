@@ -563,6 +563,12 @@ export class AppointmentsService {
     return aStart < bEnd && bStart < aEnd;
   }
 
+  private isBlockingStatus(status?: string | null) {
+    return AppointmentsService.BLOCKING_STATUSES.includes(
+      status as (typeof AppointmentsService.BLOCKING_STATUSES)[number],
+    );
+  }
+
   private getMinimumBookableStart() {
     return new Date(Date.now() + 30 * 60 * 1000);
   }
@@ -623,7 +629,7 @@ export class AppointmentsService {
         return false;
       }
 
-      if (!AppointmentsService.BLOCKING_STATUSES.includes(appointment.status as (typeof AppointmentsService.BLOCKING_STATUSES)[number])) {
+      if (!this.isBlockingStatus(appointment.status)) {
         return false;
       }
 
@@ -902,6 +908,18 @@ export class AppointmentsService {
     }
 
     const previousStatus = appointment.status;
+    const shouldValidateSlot = this.isBlockingStatus(status) && !this.isBlockingStatus(previousStatus);
+
+    if (shouldValidateSlot) {
+      await this.ensureAppointmentSlotAvailable({
+        tenantId,
+        serviceId: appointment.serviceId,
+        startDateTime: appointment.startDateTime,
+        endDateTime: appointment.endDateTime,
+        staffId: appointment.staffId,
+        ignoreAppointmentId: appointment.id,
+      });
+    }
 
     appointment.status = status;
     await this.applyReminderState(appointment);
@@ -978,14 +996,26 @@ export class AppointmentsService {
     appointment.notes = input.notes ?? appointment.notes;
     appointment.internalNotes = input.internalNotes ?? appointment.internalNotes;
 
-    await this.ensureAppointmentSlotAvailable({
-      tenantId,
-      serviceId: appointment.serviceId,
-      startDateTime: appointment.startDateTime,
-      endDateTime: appointment.endDateTime,
-      staffId: appointment.staffId,
-      ignoreAppointmentId: appointment.id,
-    });
+    const shouldValidateSlot =
+      this.isBlockingStatus(appointment.status)
+      && (
+        previousState.serviceId !== appointment.serviceId
+        || previousState.staffId !== appointment.staffId
+        || previousState.startDateTime !== appointment.startDateTime.getTime()
+        || previousState.endDateTime !== appointment.endDateTime.getTime()
+        || !this.isBlockingStatus(previousState.status)
+      );
+
+    if (shouldValidateSlot) {
+      await this.ensureAppointmentSlotAvailable({
+        tenantId,
+        serviceId: appointment.serviceId,
+        startDateTime: appointment.startDateTime,
+        endDateTime: appointment.endDateTime,
+        staffId: appointment.staffId,
+        ignoreAppointmentId: appointment.id,
+      });
+    }
 
     await this.applyReminderState(appointment);
     const saved = await this.appointmentsRepository.save(appointment);

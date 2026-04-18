@@ -1,10 +1,12 @@
 import { FormEvent, useEffect, useState } from 'react';
+import type { AppointmentAvailabilitySlot } from '../../../lib/api';
 import { Alert } from '../../../shared/components/ui/Alert';
 import { Button } from '../../../shared/components/ui/Button';
 import { Input } from '../../../shared/components/ui/Input';
 import { Textarea } from '../../../shared/components/ui/Textarea';
 import { Select } from '../../../shared/components/ui/Select';
 import { Checkbox } from '../../../shared/components/ui/Checkbox';
+import { Toggle } from '../../../shared/components/ui/Toggle';
 import { FormField } from '../../../shared/components/forms/FormField';
 import { Modal } from '../../../shared/components/modal/Modal';
 import { ImagePreview } from '../../../shared/components/ui/ImagePreview';
@@ -58,7 +60,7 @@ type AppointmentRecord = {
   notes?: string | null;
   internalNotes?: string | null;
   staff?: { id?: string; name?: string } | null;
-  service?: { name?: string } | null;
+  service?: { id?: string; name?: string } | null;
 };
 type CustomerRecord = { id: string; fullName: string; email: string; phone: string; identification?: string | null; notes?: string | null };
 type SectionAssetRecord = { name: string; url: string; alt?: string | null; label?: string | null; kind?: 'image' };
@@ -119,6 +121,15 @@ interface EditEntityModalProps {
   sectionTypeOptions?: Array<{ value: string; label: string; description?: string }>;
   services?: Array<{ id: string; name: string }>;
   staffOptions?: Array<{ id: string; name: string }>;
+  appointmentRescheduleEnabled?: boolean;
+  onAppointmentRescheduleEnabledChange?: (checked: boolean) => void;
+  appointmentDate?: string;
+  onAppointmentDateChange?: (value: string) => void;
+  appointmentSlots?: AppointmentAvailabilitySlot[];
+  appointmentSlot?: string;
+  onAppointmentSlotChange?: (value: string) => void;
+  appointmentAvailabilityLoading?: boolean;
+  appointmentAvailabilityMessage?: string | null;
 }
 
 export function EditEntityModal({
@@ -136,9 +147,19 @@ export function EditEntityModal({
   sectionTypeOptions = [],
   services = [],
   staffOptions = [],
+  appointmentRescheduleEnabled = false,
+  onAppointmentRescheduleEnabledChange,
+  appointmentDate = '',
+  onAppointmentDateChange,
+  appointmentSlots = [],
+  appointmentSlot = '',
+  onAppointmentSlotChange,
+  appointmentAvailabilityLoading = false,
+  appointmentAvailabilityMessage = null,
 }: EditEntityModalProps) {
   const [sectionAssets, setSectionAssets] = useState<SectionAssetRecord[]>([]);
   const [customHtmlSource, setCustomHtmlSource] = useState('');
+  const [appointmentStatus, setAppointmentStatus] = useState<AppointmentRecord['status']>('pending');
 
   useEffect(() => {
     if (editModal?.type === 'section' && editModal.item.type === 'custom_html') {
@@ -154,6 +175,25 @@ export function EditEntityModal({
     setSectionAssets([]);
     setCustomHtmlSource('');
   }, [editModal]);
+
+  useEffect(() => {
+    if (editModal?.type === 'appointment') {
+      setAppointmentStatus(editModal.item.status);
+      return;
+    }
+
+    setAppointmentStatus('pending');
+  }, [editModal]);
+
+  useEffect(() => {
+    if (
+      editModal?.type === 'appointment'
+      && (appointmentStatus === 'cancelled' || appointmentStatus === 'completed')
+      && appointmentRescheduleEnabled
+    ) {
+      onAppointmentRescheduleEnabledChange?.(false);
+    }
+  }, [appointmentRescheduleEnabled, appointmentStatus, editModal, onAppointmentRescheduleEnabledChange]);
 
   const requiredAssetAliases = Array.from(
     customHtmlSource.matchAll(/\{\{\s*asset:([a-zA-Z0-9._-]+)\s*\}\}/g),
@@ -176,7 +216,7 @@ export function EditEntityModal({
           : editModal?.type === 'section' ? 'Editar sección'
           : editModal?.type === 'rule' ? 'Editar regla'
           : editModal?.type === 'block' ? 'Editar bloqueo'
-          : editModal?.type === 'appointment' ? 'Reagendar reserva'
+          : editModal?.type === 'appointment' ? 'Gestionar reserva'
           : editModal?.type === 'customer' ? 'Editar cliente'
           : 'Editar'
         }
@@ -765,25 +805,110 @@ export function EditEntityModal({
                     <Input value={editModal.item.service?.name ?? 'Sin servicio'} readOnly />
                   </FormField>
                 </div>
+                <FormField label="Horario actual">
+                  <Input value={toDateTimeLocal(editModal.item.startDateTime).replace('T', ' ')} readOnly />
+                </FormField>
                 <div className="grid gap-4 md:grid-cols-2">
-                  <FormField label="Nueva fecha y hora" required>
-                    <Input name="startDateTime" type="datetime-local" defaultValue={toDateTimeLocal(editModal.item.startDateTime)} />
-                  </FormField>
                   <FormField label="Estado" required>
-                    <Select name="status" defaultValue={editModal.item.status} disabled={editModal.item.status === 'completed'}>
+                    <Select
+                      name="status"
+                      value={appointmentStatus}
+                      onChange={(event) => setAppointmentStatus(event.target.value as AppointmentRecord['status'])}
+                      disabled={editModal.item.status === 'completed'}
+                    >
                       <option value="pending">Pendiente</option>
                       <option value="confirmed">Confirmada</option>
                       <option value="completed">Completada</option>
                       <option value="cancelled">Cancelada</option>
                       <option value="no_show">No asistió</option>
                     </Select>
-                    {editModal.item.status === 'completed' ? (
-                      <p className="mt-1 text-xs text-amber-700">
-                        Esta reserva ya está completada y su estado no puede cambiarse.
-                      </p>
-                    ) : null}
                   </FormField>
                 </div>
+                {editModal.item.status === 'completed' ? (
+                  <p className="mt-1 text-xs text-amber-700">
+                    Esta reserva ya está completada y su estado no puede cambiarse.
+                  </p>
+                ) : appointmentStatus === 'cancelled' ? (
+                  <Alert variant="info">
+                    Al cancelar la reserva se libera el horario actual. No necesitas seleccionar una nueva fecha.
+                  </Alert>
+                ) : (
+                  <div className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                    <Toggle
+                      checked={appointmentRescheduleEnabled}
+                      onCheckedChange={onAppointmentRescheduleEnabledChange}
+                      label="Reagendar reserva"
+                      description="Consulta la agenda del profesional y elige un horario disponible antes de guardar."
+                    />
+                    {appointmentRescheduleEnabled ? (
+                      <>
+                        <FormField label="Nueva fecha" required>
+                          <Input
+                            name="appointmentDate"
+                            type="date"
+                            value={appointmentDate}
+                            onChange={(event) => onAppointmentDateChange?.(event.target.value)}
+                            required={appointmentRescheduleEnabled}
+                          />
+                        </FormField>
+                        {appointmentAvailabilityLoading ? (
+                          <Alert variant="info">Consultando horarios disponibles...</Alert>
+                        ) : null}
+                        {appointmentAvailabilityMessage ? (
+                          <Alert variant="info">{appointmentAvailabilityMessage}</Alert>
+                        ) : null}
+                        {appointmentSlots.length > 0 ? (
+                          <div className="grid gap-3 md:grid-cols-2">
+                            {appointmentSlots.map((slot) => {
+                              const slotValue = getAppointmentSlotValue(slot);
+                              const isSelected = appointmentSlot === slotValue;
+                              const isDisabled = !slot.available;
+
+                              return (
+                                <label
+                                  key={slotValue}
+                                  className={`flex items-center gap-3 rounded-2xl border p-4 transition ${
+                                    isDisabled
+                                      ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+                                      : isSelected
+                                        ? 'cursor-pointer border-[var(--brand-navy)] bg-[rgba(0,64,145,0.06)]'
+                                        : 'cursor-pointer border-slate-200 bg-white hover:border-slate-300'
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name="appointmentSlot"
+                                    value={slotValue}
+                                    checked={isSelected}
+                                    disabled={isDisabled}
+                                    onChange={(event) => onAppointmentSlotChange?.(event.target.value)}
+                                  />
+                                  <div>
+                                    <p className={`font-medium ${isDisabled ? 'text-slate-500' : 'text-slate-900'}`}>
+                                      {formatAvailabilityDateTime(slot.start)}
+                                    </p>
+                                    <p className={`text-sm ${isDisabled ? 'text-slate-400' : 'text-slate-500'}`}>
+                                      {slot.staffName ?? editModal.item.staff?.name ?? 'Profesional disponible'}
+                                    </p>
+                                    {isDisabled && slot.unavailableReason ? (
+                                      <p className="mt-1 text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                                        {slot.unavailableReason}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <Alert variant="info">
+                        Activa esta opción solo si vas a mover la reserva a otro horario.
+                      </Alert>
+                    )}
+                  </div>
+                )}
                 <FormField label="Método de pago" required>
                   <Select name="paymentMethod" defaultValue={editModal.item.paymentMethod ?? ''}>
                     <option value="">Mantener actual</option>
@@ -838,7 +963,11 @@ export function EditEntityModal({
               <Button type="button" variant="secondary" onClick={onClose}>
                 Cancelar
               </Button>
-              <Button type="submit" isLoading={savingKey === `edit-${editModal.type}-${editModal.item.id}`}>
+              <Button
+                type="submit"
+                isLoading={savingKey === `edit-${editModal.type}-${editModal.item.id}`}
+                disabled={editModal.type === 'appointment' && appointmentRescheduleEnabled && !appointmentSlot}
+              >
                 Guardar cambios
               </Button>
             </div>
@@ -880,4 +1009,19 @@ function toDateTimeLocal(value: string) {
   const minutes = String(date.getMinutes()).padStart(2, '0');
 
   return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function formatAvailabilityDateTime(value: string) {
+  return new Date(value).toLocaleString('es-EC', {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function getAppointmentSlotValue(slot: AppointmentAvailabilitySlot) {
+  return `${slot.start}::${slot.staffId ?? 'unassigned'}`;
 }

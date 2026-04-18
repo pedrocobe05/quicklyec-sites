@@ -42,6 +42,7 @@ import {
   resetTenantMembershipPassword,
   sendTenantTestEmail,
   updateAppointment,
+  updateAppointmentStatus,
   updateAvailabilityRule,
   updateCustomer,
   updatePage,
@@ -255,7 +256,7 @@ interface AppointmentRecord {
   notes?: string | null;
   internalNotes?: string | null;
   customer?: { fullName?: string; phone?: string | null } | null;
-  service?: { name?: string } | null;
+  service?: { id?: string; name?: string } | null;
   staff?: { id?: string; name?: string } | null;
 }
 
@@ -367,6 +368,16 @@ function formatAvailabilityDateTime(value: string) {
 
 function getAppointmentSlotValue(slot: AppointmentAvailabilitySlot) {
   return `${slot.start}::${slot.staffId ?? 'unassigned'}`;
+}
+
+function parseAppointmentSlotValue(value: string) {
+  const [startDateTime, rawStaffId] = value.split('::');
+  const staffId = rawStaffId && rawStaffId !== 'unassigned' ? rawStaffId : null;
+
+  return {
+    startDateTime: startDateTime?.trim() ?? '',
+    staffId,
+  };
 }
 
 function formatRelativeUpdate(value: Date | null) {
@@ -482,6 +493,12 @@ export function TenantDetailPage() {
   const [createAppointmentSlots, setCreateAppointmentSlots] = useState<AppointmentAvailabilitySlot[]>([]);
   const [createAppointmentAvailabilityMessage, setCreateAppointmentAvailabilityMessage] = useState<string | null>(null);
   const [createAppointmentAvailabilityLoading, setCreateAppointmentAvailabilityLoading] = useState(false);
+  const [editAppointmentRescheduleEnabled, setEditAppointmentRescheduleEnabled] = useState(false);
+  const [editAppointmentDate, setEditAppointmentDate] = useState('');
+  const [editAppointmentSlot, setEditAppointmentSlot] = useState('');
+  const [editAppointmentSlots, setEditAppointmentSlots] = useState<AppointmentAvailabilitySlot[]>([]);
+  const [editAppointmentAvailabilityMessage, setEditAppointmentAvailabilityMessage] = useState<string | null>(null);
+  const [editAppointmentAvailabilityLoading, setEditAppointmentAvailabilityLoading] = useState(false);
   const [customerView, setCustomerView] = useState<CustomerRecord | null>(null);
   const [rolesSearch, setRolesSearch] = useState('');
   const [rolesPage, setRolesPage] = useState(1);
@@ -500,6 +517,7 @@ export function TenantDetailPage() {
   const [customersSearch, setCustomersSearch] = useState('');
   const [customersPage, setCustomersPage] = useState(1);
   const createAppointmentAvailabilityLockRef = useRef(false);
+  const editAppointmentAvailabilityLockRef = useRef(false);
 
   const createAppointmentSelectedService = useMemo(
     () => services.find((service) => service.id === createAppointmentServiceId) ?? null,
@@ -924,6 +942,74 @@ export function TenantDetailPage() {
     }
   }
 
+  function clearEditAppointmentAvailability(options?: { preserveDate?: boolean }) {
+    editAppointmentAvailabilityLockRef.current = false;
+    setEditAppointmentSlots([]);
+    setEditAppointmentSlot('');
+    setEditAppointmentAvailabilityMessage(null);
+    setEditAppointmentAvailabilityLoading(false);
+
+    if (!options?.preserveDate) {
+      setEditAppointmentDate('');
+    }
+  }
+
+  function handleEditAppointmentRescheduleChange(checked: boolean) {
+    setEditAppointmentRescheduleEnabled(checked);
+
+    if (!checked) {
+      clearEditAppointmentAvailability({ preserveDate: true });
+    }
+  }
+
+  async function loadEditAppointmentAvailability(nextDate = editAppointmentDate) {
+    if (editAppointmentAvailabilityLockRef.current) {
+      return;
+    }
+
+    if (!token || !tenantId || editModal?.type !== 'appointment') {
+      return;
+    }
+
+    const serviceId = String(editModal.item.service?.id ?? '').trim();
+    const staffId = String(editModal.item.staff?.id ?? '').trim();
+
+    if (!serviceId || !nextDate) {
+      setEditAppointmentAvailabilityMessage('Selecciona una fecha para consultar la disponibilidad.');
+      setEditAppointmentSlots([]);
+      setEditAppointmentSlot('');
+      return;
+    }
+
+    try {
+      editAppointmentAvailabilityLockRef.current = true;
+      setEditAppointmentAvailabilityLoading(true);
+      const nextSlots = await getAppointmentAvailability(
+        token,
+        tenantId,
+        serviceId,
+        nextDate,
+        staffId || undefined,
+      );
+      setEditAppointmentSlots(nextSlots);
+      setEditAppointmentSlot('');
+      setEditAppointmentAvailabilityMessage(
+        nextSlots.some((slot) => slot.available)
+          ? null
+          : 'No hay horarios disponibles para esa fecha. Prueba con otro día o deja la reserva en su horario actual.',
+      );
+    } catch (err) {
+      setEditAppointmentSlots([]);
+      setEditAppointmentSlot('');
+      setEditAppointmentAvailabilityMessage(null);
+      const message = err instanceof Error ? err.message : 'No se pudo consultar la disponibilidad.';
+      notify(message, 'error');
+    } finally {
+      editAppointmentAvailabilityLockRef.current = false;
+      setEditAppointmentAvailabilityLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (!createAppointmentOpen) {
       createAppointmentAvailabilityLockRef.current = false;
@@ -964,6 +1050,26 @@ export function TenantDetailPage() {
 
     void loadCreateAppointmentAvailability();
   }, [createAppointmentOpen, createAppointmentServiceId, createAppointmentStaffId, createAppointmentDate]);
+
+  useEffect(() => {
+    if (editModal?.type !== 'appointment') {
+      setEditAppointmentRescheduleEnabled(false);
+      clearEditAppointmentAvailability();
+      return;
+    }
+
+    setEditAppointmentRescheduleEnabled(false);
+    clearEditAppointmentAvailability({ preserveDate: true });
+    setEditAppointmentDate(editModal.item.startDateTime.slice(0, 10));
+  }, [editModal]);
+
+  useEffect(() => {
+    if (editModal?.type !== 'appointment' || !editAppointmentRescheduleEnabled) {
+      return;
+    }
+
+    void loadEditAppointmentAvailability();
+  }, [editAppointmentDate, editAppointmentRescheduleEnabled, editModal]);
 
   async function handleCreateAppointmentSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1244,13 +1350,73 @@ export function TenantDetailPage() {
           break;
         case 'appointment': {
           const paymentMethod = String(form.get('paymentMethod') ?? '').trim();
-          await updateAppointment(token, tenantId, editModal.item.id, {
-            startDateTime: toIsoDateTime(String(form.get('startDateTime') ?? editModal.item.startDateTime)),
-            status: String(form.get('status') ?? editModal.item.status) as AppointmentRecord['status'],
+          const status = String(form.get('status') ?? editModal.item.status) as AppointmentRecord['status'];
+          const notes = String(form.get('notes') ?? editModal.item.notes ?? '');
+          const internalNotes = String(form.get('internalNotes') ?? editModal.item.internalNotes ?? '');
+          const basePayload: Record<string, unknown> = {
             ...(paymentMethod ? { paymentMethod: paymentMethod as 'cash' | 'transfer' | 'payphone' } : {}),
-            notes: String(form.get('notes') ?? editModal.item.notes ?? ''),
-            internalNotes: String(form.get('internalNotes') ?? editModal.item.internalNotes ?? ''),
-          });
+            notes,
+            internalNotes,
+          };
+
+          if (status === 'cancelled') {
+            await updateAppointmentStatus(token, tenantId, editModal.item.id, status);
+
+            const notesChanged = notes !== String(editModal.item.notes ?? '');
+            const internalNotesChanged = internalNotes !== String(editModal.item.internalNotes ?? '');
+            if (paymentMethod || notesChanged || internalNotesChanged) {
+              await updateAppointment(token, tenantId, editModal.item.id, basePayload);
+            }
+            break;
+          }
+
+          const payload: Record<string, unknown> = {
+            ...basePayload,
+            status,
+          };
+
+          if (editAppointmentRescheduleEnabled) {
+            const serviceId = String(editModal.item.service?.id ?? '').trim();
+            const slotValue = String(form.get('appointmentSlot') ?? editAppointmentSlot).trim();
+
+            if (!serviceId) {
+              throw new Error('No se pudo identificar el servicio de la reserva para consultar disponibilidad.');
+            }
+
+            if (!editAppointmentDate || !slotValue) {
+              throw new Error('Selecciona una nueva fecha y un horario disponible para reagendar.');
+            }
+
+            const { startDateTime, staffId } = parseAppointmentSlotValue(slotValue);
+            if (!startDateTime) {
+              throw new Error('Selecciona un horario disponible para reagendar.');
+            }
+
+            const availability = await getAppointmentAvailability(
+              token,
+              tenantId,
+              serviceId,
+              editAppointmentDate,
+              String(editModal.item.staff?.id ?? '').trim() || undefined,
+            );
+
+            const slotIsAvailable = availability.some((slot) => {
+              if (slot.start !== startDateTime || !slot.available) {
+                return false;
+              }
+
+              return (slot.staffId ?? null) === staffId;
+            });
+
+            if (!slotIsAvailable) {
+              throw new Error('El horario seleccionado ya no está disponible. Consulta la agenda antes de guardar.');
+            }
+
+            payload.startDateTime = startDateTime;
+            payload.staffId = staffId ?? '';
+          }
+
+          await updateAppointment(token, tenantId, editModal.item.id, payload);
           break;
         }
         case 'customer':
@@ -2755,6 +2921,15 @@ export function TenantDetailPage() {
         sectionTypeOptions={sectionTypeOptions}
         services={services.map((service) => ({ id: service.id, name: service.name }))}
         staffOptions={staff.map((member) => ({ id: member.id, name: member.name }))}
+        appointmentRescheduleEnabled={editAppointmentRescheduleEnabled}
+        onAppointmentRescheduleEnabledChange={handleEditAppointmentRescheduleChange}
+        appointmentDate={editAppointmentDate}
+        onAppointmentDateChange={setEditAppointmentDate}
+        appointmentSlots={editAppointmentSlots}
+        appointmentSlot={editAppointmentSlot}
+        onAppointmentSlotChange={setEditAppointmentSlot}
+        appointmentAvailabilityLoading={editAppointmentAvailabilityLoading}
+        appointmentAvailabilityMessage={editAppointmentAvailabilityMessage}
       />
 
       <Modal
