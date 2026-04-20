@@ -7,7 +7,6 @@ import {
   getPlatformPlans,
   getPlatformTenants,
   updatePlatformTenant,
-  updatePlatformTenantPlan,
 } from '../lib/api';
 import { Modal } from '../shared/components/modal/Modal';
 import { Button } from '../shared/components/ui/Button';
@@ -31,6 +30,8 @@ interface PlatformTenantRecord {
   slug: string;
   status: string;
   plan: string;
+  subscriptionStartsAt?: string | null;
+  subscriptionEndsAt?: string | null;
 }
 
 export function PlatformTenantsPage() {
@@ -91,6 +92,8 @@ export function PlatformTenantsPage() {
         slug: String(form.get('slug') ?? ''),
         status: editing ? String(form.get('status') ?? editing.status) : 'active',
         plan: String(form.get('plan') ?? 'starter'),
+        subscriptionStartsAt: String(form.get('subscriptionStartsAt') ?? ''),
+        subscriptionEndsAt: String(form.get('subscriptionEndsAt') ?? ''),
         primaryDomain: String(form.get('primaryDomain') ?? ''),
         customDomain: String(form.get('customDomain') ?? ''),
         contactEmail: String(form.get('contactEmail') ?? ''),
@@ -100,9 +103,6 @@ export function PlatformTenantsPage() {
 
       if (editing) {
         await updatePlatformTenant(token, editing.id, payload);
-        if (editing.plan !== payload.plan) {
-          await updatePlatformTenantPlan(token, editing.id, payload.plan);
-        }
       } else {
         await createPlatformTenant(token, payload);
       }
@@ -252,6 +252,22 @@ export function PlatformTenantsPage() {
                 </Select>
               </FormField>
             ) : null}
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <FormField label="Inicio de suscripción">
+              <Input
+                name="subscriptionStartsAt"
+                type="date"
+                defaultValue={editing?.subscriptionStartsAt ?? ''}
+              />
+            </FormField>
+            <FormField label="Fin de suscripción">
+              <Input
+                name="subscriptionEndsAt"
+                type="date"
+                defaultValue={editing?.subscriptionEndsAt ?? ''}
+              />
+            </FormField>
           </div>
           {!editing ? (
             <>

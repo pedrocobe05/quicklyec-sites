@@ -1,0 +1,147 @@
+<section class="doctor-care-programs">
+  <span class="doctor-eyebrow">Featured consultations</span>
+  <h2>Three ways patients typically begin care with us.</h2>
+
+  <div class="doctor-care-programs__grid">
+    <article>
+      <img src="{{asset:service-first-consultation}}" alt="Initial medical consultation in a private clinic" />
+      <strong>Initial comprehensive consultation</strong>
+      <p>A full visit to review symptoms, history, current concerns, and the most appropriate next steps with clarity.</p>
+    </article>
+    <article>
+      <img src="{{asset:service-preventive-care}}" alt="Preventive health planning and regular monitoring" />
+      <strong>Preventive health review</strong>
+      <p>Ideal for patients who want a proactive plan focused on risk awareness, healthy routines, and long-term follow-up.</p>
+    </article>
+    <article>
+      <img src="{{asset:service-follow-up-care}}" alt="Doctor providing calm follow-up guidance to a patient" />
+      <strong>Follow-up and care continuity</strong>
+      <p>Structured monitoring for ongoing conditions, treatment adjustments, and better day-to-day health decisions.</p>
+    </article>
+  </div>
+
+  <div class="doctor-care-programs__closing">
+    <div class="doctor-care-programs__visual">
+      <img src="{{asset:medical-booking-mood}}" alt="Quiet waiting area prepared for upcoming patient consultations" />
+    </div>
+    <div class="doctor-care-programs__cta">
+      <p>
+        Whether you are coming in for answers, prevention, or continuity, the goal is the same:
+        to make medical care feel trustworthy, understandable, and human.
+      </p>
+      <a href="/contact" class="doctor-btn doctor-btn--primary">Request an appointment</a>
+    </div>
+  </div>
+</section>
+
+& .doctor-care-programs {
+  border: 1px solid rgba(18,52,58,0.08);
+  border-radius: 2rem;
+  padding: clamp(1.35rem, 2.6vw, 2.4rem);
+  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(238,247,246,0.96));
+  box-shadow: 0 24px 80px rgba(17,53,60,0.07);
+}
+& .doctor-eyebrow {
+  display: inline-block;
+  margin-bottom: 0.95rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.34em;
+  color: #2f7c81;
+}
+& .doctor-care-programs h2 {
+  margin: 0;
+  max-width: 18ch;
+  color: #12343a;
+  font-size: clamp(1.8rem, 3.1vw, 3rem);
+  line-height: 1;
+}
+& .doctor-care-programs__grid {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1.35rem;
+}
+@media (min-width: 920px) {
+  & .doctor-care-programs__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+& .doctor-care-programs article {
+  overflow: hidden;
+  border-radius: 1.5rem;
+  background: #f5faf9;
+  border: 1px solid rgba(18,52,58,0.06);
+}
+& .doctor-care-programs article img {
+  width: 100%;
+  height: 12.5rem;
+  object-fit: cover;
+  display: block;
+}
+& .doctor-care-programs article strong,
+& .doctor-care-programs article p {
+  display: block;
+  padding-left: 1.35rem;
+  padding-right: 1.35rem;
+}
+& .doctor-care-programs article strong {
+  padding-top: 1.05rem;
+  color: #12343a;
+  font-size: 1.08rem;
+}
+& .doctor-care-programs article p {
+  padding-bottom: 1.1rem;
+  margin: 0.55rem 0 0;
+  color: #4f676c;
+  font-size: 0.95rem;
+  line-height: 1.72;
+}
+& .doctor-care-programs__closing {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+@media (min-width: 920px) {
+  & .doctor-care-programs__closing {
+    grid-template-columns: 1.1fr 0.9fr;
+    align-items: center;
+  }
+}
+& .doctor-care-programs__visual {
+  border-radius: 1.5rem;
+  overflow: hidden;
+  border: 1px solid rgba(18,52,58,0.08);
+}
+& .doctor-care-programs__visual img {
+  width: 100%;
+  height: 11rem;
+  object-fit: cover;
+  display: block;
+}
+& .doctor-care-programs__cta {
+  display: grid;
+  gap: 1rem;
+  align-content: center;
+}
+& .doctor-care-programs__cta p {
+  margin: 0;
+  color: #456166;
+  font-size: 0.97rem;
+  line-height: 1.8;
+}
+& .doctor-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 3rem;
+  padding: 0 1.35rem;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+& .doctor-btn--primary {
+  background: #12343a;
+  color: #ffffff;
+}

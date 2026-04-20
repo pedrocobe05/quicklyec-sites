@@ -1,7 +1,8 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import type { AppointmentAvailabilitySlot } from '../../../lib/api';
 import { Alert } from '../../../shared/components/ui/Alert';
 import { Button } from '../../../shared/components/ui/Button';
+import { Card } from '../../../shared/components/ui/Card';
 import { Input } from '../../../shared/components/ui/Input';
 import { Textarea } from '../../../shared/components/ui/Textarea';
 import { Select } from '../../../shared/components/ui/Select';
@@ -10,10 +11,19 @@ import { Toggle } from '../../../shared/components/ui/Toggle';
 import { FormField } from '../../../shared/components/forms/FormField';
 import { Modal } from '../../../shared/components/modal/Modal';
 import { ImagePreview } from '../../../shared/components/ui/ImagePreview';
+import { cn } from '../../../shared/utils/cn';
 
 type PlatformTenantRecord = { id: string; name: string; slug: string; status: string; plan: string };
 type PlatformPlanRecord = { id: string; code: string; name: string };
-type TenantRoleRecord = { id: string; code: string; name: string; description?: string | null; isActive: boolean; permissions: string[] };
+type TenantRoleRecord = {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  isSystem?: boolean;
+  isActive: boolean;
+  permissions: string[];
+};
 type TenantMembershipRecord = {
   id: string;
   role: string;
@@ -34,7 +44,16 @@ type StaffRecord = {
   serviceIds?: string[];
 };
 type PageRecord = { id: string; slug: string; title: string; isHome: boolean; isPublished: boolean; ogImageUrl?: string | null };
-type SectionRecord = { id: string; type: string; variant: string; position: number; isVisible: boolean; content: Record<string, unknown> };
+type SectionRecord = {
+  id: string;
+  scope?: 'global' | 'page';
+  pageId?: string | null;
+  type: string;
+  variant: string;
+  position: number;
+  isVisible: boolean;
+  content: Record<string, unknown>;
+};
 type AvailabilityRuleRecord = {
   id: string;
   dayOfWeek: number;
@@ -159,7 +178,11 @@ export function EditEntityModal({
 }: EditEntityModalProps) {
   const [sectionAssets, setSectionAssets] = useState<SectionAssetRecord[]>([]);
   const [customHtmlSource, setCustomHtmlSource] = useState('');
+  const [customCssSource, setCustomCssSource] = useState('');
+  const [customHtmlPreviewViewport, setCustomHtmlPreviewViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [appointmentStatus, setAppointmentStatus] = useState<AppointmentRecord['status']>('pending');
+  const isCustomHtmlSection = editModal?.type === 'section' && editModal.item.type === 'custom_html';
+  const isSystemTenantRole = editModal?.type === 'role' && Boolean(editModal.item.isSystem);
 
   useEffect(() => {
     if (editModal?.type === 'section' && editModal.item.type === 'custom_html') {
@@ -169,11 +192,15 @@ export function EditEntityModal({
           : [],
       );
       setCustomHtmlSource(String(editModal.item.content.html ?? ''));
+      setCustomCssSource(String(editModal.item.content.css ?? ''));
+      setCustomHtmlPreviewViewport('desktop');
       return;
     }
 
     setSectionAssets([]);
     setCustomHtmlSource('');
+    setCustomCssSource('');
+    setCustomHtmlPreviewViewport('desktop');
   }, [editModal]);
 
   useEffect(() => {
@@ -195,16 +222,37 @@ export function EditEntityModal({
     }
   }, [appointmentRescheduleEnabled, appointmentStatus, editModal, onAppointmentRescheduleEnabledChange]);
 
-  const requiredAssetAliases = Array.from(
-    customHtmlSource.matchAll(/\{\{\s*asset:([a-zA-Z0-9._-]+)\s*\}\}/g),
-    (match) => match[1],
-  ).filter((value, index, values) => values.indexOf(value) === index);
+  const requiredAssetAliases = useMemo(
+    () => Array.from(
+      customHtmlSource.matchAll(/\{\{\s*asset:([a-zA-Z0-9._-]+)\s*\}\}/g),
+      (match) => match[1],
+    ).filter((value, index, values) => values.indexOf(value) === index),
+    [customHtmlSource],
+  );
+  const missingAssetAliases = useMemo(
+    () => requiredAssetAliases.filter((alias) => !sectionAssets.some(
+      (asset) => normalizeAssetAlias(asset.name) === normalizeAssetAlias(alias),
+    )),
+    [requiredAssetAliases, sectionAssets],
+  );
+  const customHtmlPreviewDocument = useMemo(
+    () => buildCustomHtmlPreviewDocument({
+      html: customHtmlSource,
+      css: customCssSource,
+      assets: sectionAssets,
+      sectionLabel: editModal?.type === 'section'
+        ? `${editModal.item.scope === 'global' ? 'Global' : 'Page'} custom block`
+        : 'Custom block',
+    }),
+    [customCssSource, customHtmlSource, editModal, sectionAssets],
+  );
 
   return (
     <>
       <Modal
         open={Boolean(editModal)}
         onClose={onClose}
+        maxWidthClassName={isCustomHtmlSection ? 'max-w-[min(96vw,1680px)]' : 'max-w-4xl'}
         title={
           editModal?.type === 'tenant-plan' ? 'Cambiar plan de la empresa'
           : editModal?.type === 'membership' ? 'Editar usuario'
@@ -260,11 +308,16 @@ export function EditEntityModal({
 
             {editModal.type === 'role' ? (
               <>
+                {isSystemTenantRole ? (
+                  <Alert variant="info">
+                    Este es un rol de sistema con permisos fijos. Puedes verlo, pero no modificarlo desde el panel.
+                  </Alert>
+                ) : null}
                 <FormField label="Nombre" required>
-                  <Input name="name" defaultValue={editModal.item.name} />
+                  <Input name="name" defaultValue={editModal.item.name} disabled={isSystemTenantRole} />
                 </FormField>
                 <FormField label="Descripción">
-                  <Textarea name="description" defaultValue={editModal.item.description ?? ''} />
+                  <Textarea name="description" defaultValue={editModal.item.description ?? ''} disabled={isSystemTenantRole} />
                 </FormField>
                 <div className="grid gap-4">
                   {rolePermissionGroups.map((group) => (
@@ -278,6 +331,7 @@ export function EditEntityModal({
                               name="permissions"
                               value={permission}
                               defaultChecked={editModal.item.permissions.includes(permission)}
+                              disabled={isSystemTenantRole}
                             />
                             {permission}
                           </label>
@@ -287,7 +341,7 @@ export function EditEntityModal({
                   ))}
                 </div>
                 <label className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
-                  <Checkbox type="checkbox" name="isActive" defaultChecked={editModal.item.isActive} /> Activo
+                  <Checkbox type="checkbox" name="isActive" defaultChecked={editModal.item.isActive} disabled={isSystemTenantRole} /> Activo
                 </label>
               </>
             ) : null}
@@ -494,146 +548,231 @@ export function EditEntityModal({
             ) : null}
 
             {editModal.type === 'section' ? (
-              <>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <FormField label="Tipo">
-                    <Select name="type" defaultValue={editModal.item.type}>
-                      {sectionTypeOptions.length > 0 ? (
-                        sectionTypeOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))
-                      ) : (
-                        <option value={editModal.item.type}>{editModal.item.type}</option>
-                      )}
-                    </Select>
-                  </FormField>
-                  <FormField label="Variante">
-                    <Input name="variant" defaultValue={editModal.item.variant} />
-                  </FormField>
-                  <FormField label="Posición">
-                    <Input name="position" type="number" defaultValue={editModal.item.position} />
-                  </FormField>
-                </div>
-                {editModal.item.type === 'header' ? (
-                  <>
-                    <FormField label="Etiqueta superior">
-                      <Input name="kicker" defaultValue={String(editModal.item.content.kicker ?? '')} />
-                    </FormField>
-                    <FormField label="Título">
-                      <Input name="title" defaultValue={String(editModal.item.content.title ?? '')} />
-                    </FormField>
-                    <FormField label="Subtítulo">
-                      <Textarea
-                        name="subtitle"
-                        defaultValue={String(editModal.item.content.subtitle ?? editModal.item.content.body ?? '')}
-                      />
-                    </FormField>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <FormField label="Texto botón">
-                        <Input name="ctaLabel" defaultValue={String(editModal.item.content.ctaLabel ?? '')} />
-                      </FormField>
-                      <FormField label="URL botón">
-                        <Input name="ctaUrl" defaultValue={String(editModal.item.content.ctaUrl ?? '')} placeholder="/contacto" />
-                      </FormField>
+              isCustomHtmlSection ? (
+                <>
+                  <Card className="grid gap-4 border-slate-200 bg-slate-50/70 shadow-none">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h4 className="text-base font-semibold text-slate-900">Datos de la sección</h4>
+                        <p className="mt-1 text-sm text-slate-500">
+                          Campos base del bloque. Mantén estos datos estables mientras editas el HTML y el CSS.
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600">
+                        {editModal.item.scope === 'global' ? 'Bloque global' : 'Bloque de página'}
+                      </span>
                     </div>
-                  </>
-                ) : editModal.item.type === 'footer' ? (
-                  <>
-                    <FormField label="Texto del pie de página">
-                      <Textarea
-                        name="text"
-                        defaultValue={String(editModal.item.content.text ?? editModal.item.content.body ?? '')}
-                      />
-                    </FormField>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <FormField label="Dirección">
-                        <Input name="address" defaultValue={String(editModal.item.content.address ?? '')} />
+                    <div className="grid gap-4 xl:grid-cols-5">
+                      <FormField label="ID de sección">
+                        <Input value={editModal.item.id} readOnly />
                       </FormField>
-                      <FormField label="Horario">
-                        <Input name="hours" defaultValue={String(editModal.item.content.hours ?? '')} />
+                      <FormField label="Tipo">
+                        <Select name="type" defaultValue={editModal.item.type}>
+                          {sectionTypeOptions.length > 0 ? (
+                            sectionTypeOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))
+                          ) : (
+                            <option value={editModal.item.type}>{editModal.item.type}</option>
+                          )}
+                        </Select>
                       </FormField>
-                      <FormField label="Instagram">
-                        <Input name="instagram" defaultValue={String(editModal.item.content.instagram ?? '')} />
+                      <FormField label="Variante">
+                        <Input name="variant" defaultValue={editModal.item.variant} />
                       </FormField>
-                      <FormField label="WhatsApp visible">
-                        <Input name="footerWhatsapp" defaultValue={String(editModal.item.content.footerWhatsapp ?? '')} />
+                      <FormField label="Posición">
+                        <Input name="position" type="number" defaultValue={editModal.item.position} />
                       </FormField>
+                      <div className="grid gap-4">
+                        <FormField label="Alcance">
+                          <Input value={editModal.item.scope === 'global' ? 'Global' : 'Página'} readOnly />
+                        </FormField>
+                        <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                          <Checkbox type="checkbox" name="isVisible" defaultChecked={editModal.item.isVisible} /> Visible
+                        </label>
+                      </div>
                     </div>
-                  </>
-                ) : editModal.item.type === 'custom_html' ? (
-                  <>
-                    <FormField label="HTML personalizado">
-                      <Textarea
-                        name="html"
-                        value={customHtmlSource}
-                        onChange={(event) => setCustomHtmlSource(event.target.value)}
-                        className="min-h-40 font-mono text-xs"
-                      />
-                    </FormField>
-                    <FormField label="CSS personalizado">
-                      <Textarea
-                        name="css"
-                        defaultValue={String(editModal.item.content.css ?? '')}
-                        className="min-h-32 font-mono text-xs"
-                      />
-                    </FormField>
-                    <input type="hidden" name="assetsJson" value={JSON.stringify(sectionAssets)} readOnly />
-                    <Alert variant="info">
-                      Usa placeholders dentro del HTML como <span className="font-mono">{'{{asset:hero-main}}'}</span>. Los aliases se normalizan automáticamente para evitar errores.
-                    </Alert>
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">Recursos requeridos por esta sección</p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            Detectados automáticamente desde los placeholders <span className="font-mono">{'{{asset:...}}'}</span> del HTML.
-                          </p>
-                        </div>
-                        <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600">
-                          {requiredAssetAliases.length} requeridos
+                    {editModal.item.scope === 'page' && editModal.item.pageId ? (
+                      <div className="grid gap-3 md:max-w-md">
+                        <FormField label="ID de página">
+                          <Input value={editModal.item.pageId} readOnly />
+                        </FormField>
+                      </div>
+                    ) : null}
+                  </Card>
+
+                  <Card className="grid gap-5 border-slate-200 shadow-none">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h4 className="text-base font-semibold text-slate-900">Editor de código</h4>
+                        <p className="mt-1 text-sm text-slate-500">
+                          La vista previa se actualiza dentro de un shell aislado del sitio y resuelve los placeholders de assets automáticamente.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+                        <span className="rounded-full bg-slate-100 px-3 py-1">
+                          HTML {countEditorLines(customHtmlSource)} líneas
+                        </span>
+                        <span className="rounded-full bg-slate-100 px-3 py-1">
+                          CSS {countEditorLines(customCssSource)} líneas
                         </span>
                       </div>
-                      {requiredAssetAliases.length > 0 ? (
-                        <div className="mt-4 grid gap-2">
-                          {requiredAssetAliases.map((alias) => {
-                            const matchedAsset = sectionAssets.find(
-                              (asset) => normalizeAssetAlias(asset.name) === normalizeAssetAlias(alias),
-                            );
+                    </div>
+                    <div className="grid gap-4 xl:grid-cols-2">
+                      <Card className="grid gap-3 border border-slate-200 bg-slate-50/60 p-4 shadow-none">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h5 className="text-sm font-semibold text-slate-900">HTML</h5>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Soporta markup enriquecido y placeholders como <span className="font-mono">{'{{asset:hero-main}}'}</span>.
+                            </p>
+                          </div>
+                        </div>
+                        <Textarea
+                          name="html"
+                          value={customHtmlSource}
+                          onChange={(event) => setCustomHtmlSource(event.target.value)}
+                          className="min-h-[420px] bg-white font-mono text-xs leading-6"
+                        />
+                      </Card>
+                      <Card className="grid gap-3 border border-slate-200 bg-slate-50/60 p-4 shadow-none">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h5 className="text-sm font-semibold text-slate-900">CSS</h5>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Los selectores con scope usando <span className="font-mono">&amp;</span> se expanden automáticamente en la vista previa.
+                            </p>
+                          </div>
+                        </div>
+                        <Textarea
+                          name="css"
+                          value={customCssSource}
+                          onChange={(event) => setCustomCssSource(event.target.value)}
+                          className="min-h-[420px] bg-white font-mono text-xs leading-6"
+                        />
+                      </Card>
+                    </div>
+                  </Card>
 
-                            return (
-                              <div
-                                key={alias}
-                                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3"
-                              >
-                                <div className="min-w-0">
-                                  <p className="font-mono text-sm text-slate-900">{`{{asset:${alias}}}`}</p>
-                                  <p className="mt-1 text-xs text-slate-500">
-                                    {matchedAsset
-                                      ? `Asignado a: ${matchedAsset.label?.trim() || matchedAsset.name}`
-                                      : 'Aún no existe un recurso cargado con este alias'}
-                                  </p>
-                                </div>
-                                <span
-                                  className={[
-                                    'rounded-full px-3 py-1 text-xs font-semibold',
-                                    matchedAsset
-                                      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                                      : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
-                                  ].join(' ')}
-                                >
-                                  {matchedAsset ? 'Listo' : 'Falta recurso'}
-                                </span>
+                  <Card className="grid gap-4 border-slate-200 shadow-none">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h4 className="text-base font-semibold text-slate-900">Vista previa</h4>
+                        <p className="mt-1 text-sm text-slate-500">
+                          Renderiza únicamente el bloque actual, con sus assets y estilos aplicados.
+                        </p>
+                      </div>
+                      <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1" role="group" aria-label="Viewport de vista previa">
+                        {(['desktop', 'tablet', 'mobile'] as const).map((viewport) => (
+                          <button
+                            key={viewport}
+                            type="button"
+                            aria-pressed={customHtmlPreviewViewport === viewport}
+                            className={cn(
+                              'rounded-full px-4 py-2 text-sm font-medium transition',
+                              customHtmlPreviewViewport === viewport
+                                ? 'bg-slate-900 text-white'
+                                : 'text-slate-600 hover:text-slate-900',
+                            )}
+                            onClick={() => setCustomHtmlPreviewViewport(viewport)}
+                          >
+                            {viewport === 'desktop' ? 'Escritorio' : viewport === 'tablet' ? 'Tablet' : 'Móvil'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {missingAssetAliases.length > 0 ? (
+                      <Alert variant="error">
+                        Faltan assets en la vista previa: {missingAssetAliases.join(', ')}. Se muestran placeholders hasta que esos recursos sean asignados.
+                      </Alert>
+                    ) : (
+                      <Alert variant="info">
+                        La vista previa se actualiza en vivo mientras editas. Solo se renderiza este bloque.
+                      </Alert>
+                    )}
+                    <div className="overflow-auto rounded-[1.75rem] border border-slate-200 bg-slate-100/80 p-4">
+                      <div
+                        className="mx-auto overflow-hidden rounded-[1.4rem] border border-slate-300 bg-white shadow-[0_20px_55px_rgba(15,23,42,0.12)] transition-all duration-200"
+                        style={getPreviewViewportStyle(customHtmlPreviewViewport)}
+                      >
+                        <iframe
+                          title="Vista previa de sección custom HTML"
+                          sandbox=""
+                          srcDoc={customHtmlPreviewDocument}
+                          className="h-[720px] w-full border-0 bg-white"
+                        />
+                      </div>
+                    </div>
+                  </Card>
+
+                  <input type="hidden" name="assetsJson" value={JSON.stringify(sectionAssets)} readOnly />
+
+                  <Card className="grid gap-4 border-slate-200 bg-slate-50/70 shadow-none">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h4 className="text-base font-semibold text-slate-900">Assets requeridos</h4>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Se detectan automáticamente desde los placeholders <span className="font-mono">{'{{asset:...}}'}</span> en el editor HTML.
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600">
+                        {requiredAssetAliases.length} requeridos
+                      </span>
+                    </div>
+                    {requiredAssetAliases.length > 0 ? (
+                      <div className="grid gap-2">
+                        {requiredAssetAliases.map((alias) => {
+                          const matchedAsset = sectionAssets.find(
+                            (asset) => normalizeAssetAlias(asset.name) === normalizeAssetAlias(alias),
+                          );
+
+                          return (
+                            <div
+                              key={alias}
+                              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                            >
+                              <div className="min-w-0">
+                                <p className="font-mono text-sm text-slate-900">{`{{asset:${alias}}}`}</p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {matchedAsset
+                                    ? `Asignado a: ${matchedAsset.label?.trim() || matchedAsset.name}`
+                                    : 'No existe un recurso cargado mapeado a este alias'}
+                                </p>
                               </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-500">
-                          Este HTML todavía no usa placeholders de assets. Si agregas referencias como <span className="font-mono">{'{{asset:hero-main}}'}</span>, aparecerán aquí.
-                        </div>
-                      )}
+                              <span
+                                className={cn(
+                                  'rounded-full px-3 py-1 text-xs font-semibold',
+                                  matchedAsset
+                                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                                    : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
+                                )}
+                              >
+                                {matchedAsset ? 'Listo' : 'Falta recurso'}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-500">
+                        Este bloque todavía no usa placeholders de assets. Agrega referencias como <span className="font-mono">{'{{asset:hero-main}}'}</span> y aparecerán aquí.
+                      </div>
+                    )}
+                  </Card>
+
+                  <Card className="grid gap-4 border-slate-200 shadow-none">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h4 className="text-base font-semibold text-slate-900">Librería de recursos</h4>
+                        <p className="mt-1 text-sm text-slate-500">
+                          Administra aliases, labels y texto alternativo para los recursos usados por este bloque.
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                        {sectionAssets.length} recurso{sectionAssets.length === 1 ? '' : 's'}
+                      </span>
                     </div>
                     {sectionAssets.length > 0 ? (
                       <div className="grid gap-3">
@@ -765,34 +904,105 @@ export function EditEntityModal({
                       </div>
                     ) : (
                       <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-4 text-sm text-slate-500">
-                        Esta sección aún no tiene assets visuales. Súbelos desde el listado de secciones y luego usa aquí sus placeholders.
+                        Esta sección todavía no tiene assets visuales. Súbelos desde el listado de secciones y luego usa aquí sus placeholders.
                       </div>
                     )}
-                  </>
-                ) : (
-                  <>
-                    <FormField label="Título">
-                      <Input name="title" defaultValue={String(editModal.item.content.title ?? '')} />
+                  </Card>
+                </>
+              ) : (
+                <>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <FormField label="Tipo">
+                      <Select name="type" defaultValue={editModal.item.type}>
+                        {sectionTypeOptions.length > 0 ? (
+                          sectionTypeOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))
+                        ) : (
+                          <option value={editModal.item.type}>{editModal.item.type}</option>
+                        )}
+                      </Select>
                     </FormField>
-                    <FormField label="Descripción">
-                      <Textarea name="body" defaultValue={String(editModal.item.content.body ?? '')} />
+                    <FormField label="Variante">
+                      <Input name="variant" defaultValue={editModal.item.variant} />
                     </FormField>
-                    <FormField label="Imagen">
-                      <Input name="imageUrl" defaultValue={String(editModal.item.content.imageUrl ?? '')} />
+                    <FormField label="Posición">
+                      <Input name="position" type="number" defaultValue={editModal.item.position} />
                     </FormField>
-                    <ImagePreview
-                      src={String(editModal.item.content.imageUrl ?? '') || undefined}
-                      alt={`Vista previa ${editModal.item.type}`}
-                      label="Vista previa"
-                      className="h-32 w-full max-w-xs"
-                      imgClassName="h-24 w-full object-cover"
-                    />
-                  </>
-                )}
-                <label className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
-                  <Checkbox type="checkbox" name="isVisible" defaultChecked={editModal.item.isVisible} /> Visible
-                </label>
-              </>
+                  </div>
+                  {editModal.item.type === 'header' ? (
+                    <>
+                      <FormField label="Etiqueta superior">
+                        <Input name="kicker" defaultValue={String(editModal.item.content.kicker ?? '')} />
+                      </FormField>
+                      <FormField label="Título">
+                        <Input name="title" defaultValue={String(editModal.item.content.title ?? '')} />
+                      </FormField>
+                      <FormField label="Subtítulo">
+                        <Textarea
+                          name="subtitle"
+                          defaultValue={String(editModal.item.content.subtitle ?? editModal.item.content.body ?? '')}
+                        />
+                      </FormField>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <FormField label="Texto botón">
+                          <Input name="ctaLabel" defaultValue={String(editModal.item.content.ctaLabel ?? '')} />
+                        </FormField>
+                        <FormField label="URL botón">
+                          <Input name="ctaUrl" defaultValue={String(editModal.item.content.ctaUrl ?? '')} placeholder="/contacto" />
+                        </FormField>
+                      </div>
+                    </>
+                  ) : editModal.item.type === 'footer' ? (
+                    <>
+                      <FormField label="Texto del pie de página">
+                        <Textarea
+                          name="text"
+                          defaultValue={String(editModal.item.content.text ?? editModal.item.content.body ?? '')}
+                        />
+                      </FormField>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <FormField label="Dirección">
+                          <Input name="address" defaultValue={String(editModal.item.content.address ?? '')} />
+                        </FormField>
+                        <FormField label="Horario">
+                          <Input name="hours" defaultValue={String(editModal.item.content.hours ?? '')} />
+                        </FormField>
+                        <FormField label="Instagram">
+                          <Input name="instagram" defaultValue={String(editModal.item.content.instagram ?? '')} />
+                        </FormField>
+                        <FormField label="WhatsApp visible">
+                          <Input name="footerWhatsapp" defaultValue={String(editModal.item.content.footerWhatsapp ?? '')} />
+                        </FormField>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <FormField label="Título">
+                        <Input name="title" defaultValue={String(editModal.item.content.title ?? '')} />
+                      </FormField>
+                      <FormField label="Descripción">
+                        <Textarea name="body" defaultValue={String(editModal.item.content.body ?? '')} />
+                      </FormField>
+                      <FormField label="Imagen">
+                        <Input name="imageUrl" defaultValue={String(editModal.item.content.imageUrl ?? '')} />
+                      </FormField>
+                      <ImagePreview
+                        src={String(editModal.item.content.imageUrl ?? '') || undefined}
+                        alt={`Vista previa ${editModal.item.type}`}
+                        label="Vista previa"
+                        className="h-32 w-full max-w-xs"
+                        imgClassName="h-24 w-full object-cover"
+                      />
+                    </>
+                  )}
+                  <label className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
+                    <Checkbox type="checkbox" name="isVisible" defaultChecked={editModal.item.isVisible} /> Visible
+                  </label>
+                </>
+              )
             ) : null}
 
             {editModal.type === 'appointment' ? (
@@ -966,7 +1176,10 @@ export function EditEntityModal({
               <Button
                 type="submit"
                 isLoading={savingKey === `edit-${editModal.type}-${editModal.item.id}`}
-                disabled={editModal.type === 'appointment' && appointmentRescheduleEnabled && !appointmentSlot}
+                disabled={
+                  (editModal.type === 'appointment' && appointmentRescheduleEnabled && !appointmentSlot)
+                  || isSystemTenantRole
+                }
               >
                 Guardar cambios
               </Button>
@@ -1024,4 +1237,151 @@ function formatAvailabilityDateTime(value: string) {
 
 function getAppointmentSlotValue(slot: AppointmentAvailabilitySlot) {
   return `${slot.start}::${slot.staffId ?? 'unassigned'}`;
+}
+
+function countEditorLines(value: string) {
+  if (!value.trim()) {
+    return 0;
+  }
+
+  return value.replace(/\r\n/g, '\n').split('\n').length;
+}
+
+function getPreviewViewportStyle(viewport: 'desktop' | 'tablet' | 'mobile') {
+  if (viewport === 'mobile') {
+    return { width: '390px', maxWidth: '100%' };
+  }
+
+  if (viewport === 'tablet') {
+    return { width: '820px', maxWidth: '100%' };
+  }
+
+  return { width: '100%', maxWidth: '1280px' };
+}
+
+function buildCustomHtmlPreviewDocument(input: {
+  html: string;
+  css: string;
+  assets: SectionAssetRecord[];
+  sectionLabel: string;
+}) {
+  const resolvedHtml = resolveCustomHtmlPreviewAssets(input.html, input.assets).trim() || [
+    '<section class="preview-empty-state">',
+    '  <p>Aún no hay contenido HTML.</p>',
+    '  <span>Empieza a escribir en el editor para renderizar el bloque aquí.</span>',
+    '</section>',
+  ].join('');
+  const scopedCss = scopeCustomHtmlPreviewCss(input.css).replace(/<\/style/gi, '<\\/style');
+
+  return [
+    '<!doctype html>',
+    '<html lang="en">',
+    '  <head>',
+    '    <meta charset="utf-8" />',
+    '    <meta name="viewport" content="width=device-width, initial-scale=1" />',
+    `    <title>${escapePreviewText(input.sectionLabel)}</title>`,
+    '    <style>',
+    '      :root {',
+    '        color-scheme: light;',
+    '        --preview-bg: #f4f6fb;',
+    '        --preview-surface: rgba(255, 255, 255, 0.92);',
+    '        --preview-border: rgba(148, 163, 184, 0.32);',
+    '        --preview-ink: #0f172a;',
+    '        --preview-muted: #526075;',
+    '        --preview-brand: #0f4c81;',
+    '        --preview-soft: #dbeafe;',
+    '        --preview-shadow: 0 32px 80px rgba(15, 23, 42, 0.12);',
+    '      }',
+    '      * { box-sizing: border-box; }',
+    '      html, body { margin: 0; min-height: 100%; }',
+    '      body {',
+    "        font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;",
+    '        background:',
+    '          radial-gradient(circle at top, rgba(207, 230, 255, 0.95), transparent 34%),',
+    '          linear-gradient(180deg, #f8fbff 0%, var(--preview-bg) 100%);',
+    '        color: var(--preview-ink);',
+    '      }',
+    '      img { display: block; max-width: 100%; }',
+    '      a { color: inherit; }',
+    '      .preview-canvas {',
+    '        min-height: 100vh;',
+    '        padding: 24px;',
+    '      }',
+    '      [data-custom-html-preview] {',
+    '        position: relative;',
+    '        min-height: 320px;',
+    '      }',
+    '      .preview-empty-state {',
+        '        min-height: 260px;',
+        '        display: grid;',
+        '        place-items: center;',
+    '        gap: 8px;',
+    '        border: 1px dashed rgba(148, 163, 184, 0.45);',
+    '        border-radius: 24px;',
+    '        background: linear-gradient(180deg, rgba(248,250,252,0.96), rgba(241,245,249,0.88));',
+        '        text-align: center;',
+        '        color: var(--preview-muted);',
+        '        padding: 24px;',
+      '      }',
+      '      .preview-empty-state p { margin: 0; font-size: 1rem; font-weight: 600; color: var(--preview-ink); }',
+      '      .preview-empty-state span { font-size: 0.92rem; }',
+    '      @media (max-width: 720px) {',
+    '        .preview-canvas { padding: 14px; }',
+    '      }',
+    `      ${scopedCss}`,
+    '    </style>',
+    '  </head>',
+    '  <body>',
+    '    <div class="preview-canvas">',
+    `      <div data-custom-html-preview aria-label="${escapePreviewText(input.sectionLabel)}">${resolvedHtml}</div>`,
+    '    </div>',
+    '  </body>',
+    '</html>',
+  ].join('\n');
+}
+
+function scopeCustomHtmlPreviewCss(css: string) {
+  return css.replace(/&/g, '[data-custom-html-preview]');
+}
+
+function resolveCustomHtmlPreviewAssets(html: string, assets: SectionAssetRecord[]) {
+  return html.replace(/\{\{\s*asset:([a-zA-Z0-9._-]+)\s*\}\}/g, (_match, rawAlias) => {
+    const alias = normalizeAssetAlias(String(rawAlias));
+    const asset = assets.find((item) => normalizeAssetAlias(item.name) === alias);
+    const assetUrl = typeof asset?.url === 'string' && asset.url.trim() ? asset.url.trim() : null;
+
+    return assetUrl ?? buildMissingAssetPreviewDataUri(alias || 'missing-asset');
+  });
+}
+
+function buildMissingAssetPreviewDataUri(alias: string) {
+  const svg = [
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" fill="none">',
+    '  <rect width="1200" height="800" rx="48" fill="#E2E8F0" />',
+    '  <rect x="44" y="44" width="1112" height="712" rx="34" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="4" stroke-dasharray="16 14" />',
+    '  <circle cx="220" cy="240" r="74" fill="#DBEAFE" />',
+    '  <path d="M178 554 374 358l146 146 108-108 216 216H178Z" fill="#BFDBFE" />',
+    `  <text x="600" y="292" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#0F172A">${escapeSvgText(alias)}</text>`,
+    '  <text x="600" y="340" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#475569">Falta un asset para la vista previa</text>',
+    '  <text x="600" y="386" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" fill="#64748B">Súbelo o asígnalo en la librería de recursos inferior.</text>',
+    '</svg>',
+  ].join('');
+
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+function escapePreviewText(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeSvgText(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }

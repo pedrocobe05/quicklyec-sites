@@ -1,0 +1,142 @@
+<section class="doctor-hero">
+  <div class="doctor-hero__copy">
+    <span class="doctor-eyebrow">Private medical practice</span>
+    <h1>Calm, precise care for every stage of your health journey.</h1>
+    <p>
+      <em>Dr. Cristhian Medical Consulting</em> offers a modern consultation
+      experience built around clarity, prevention, and thoughtful follow-up in a
+      welcoming private clinic setting.
+    </p>
+    <div class="doctor-hero__actions">
+      <a href="/book" class="doctor-btn doctor-btn--primary">Book consultation</a>
+      <a href="/services" class="doctor-btn doctor-btn--secondary">Explore care options</a>
+    </div>
+  </div>
+  <div class="doctor-hero__visual">
+    <div class="doctor-hero__portrait">
+      <img src="{{asset:hero-doctor-portrait}}" alt="Dr. Cristhian welcoming a patient into the clinic" />
+    </div>
+    <div class="doctor-hero__details">
+      <img src="{{asset:hero-clinic-detail}}" alt="Clean and modern consultation room detail" />
+      <img src="{{asset:hero-consultation-detail}}" alt="Close-up of a patient consultation in progress" />
+    </div>
+    <article class="doctor-note">
+      <span class="doctor-eyebrow">What patients value</span>
+      <strong>Clear answers. No rushed appointments.</strong>
+      <p>Every visit is designed to feel focused, respectful, and easy to understand from the first conversation onward.</p>
+    </article>
+  </div>
+</section>
+
+& .doctor-hero {
+  display: grid;
+  gap: 1.1rem;
+  align-items: start;
+}
+@media (min-width: 980px) {
+  & .doctor-hero {
+    grid-template-columns: 1.06fr 0.94fr;
+  }
+}
+& .doctor-hero__copy,
+& .doctor-hero__portrait,
+& .doctor-note {
+  border-radius: 2rem;
+  border: 1px solid rgba(16, 65, 74, 0.1);
+  box-shadow: 0 28px 80px rgba(17, 53, 60, 0.1);
+}
+& .doctor-hero__copy {
+  padding: clamp(1.35rem, 2.8vw, 2.5rem);
+  background:
+    radial-gradient(circle at top left, rgba(76, 166, 162, 0.16), transparent 36%),
+    linear-gradient(180deg, rgba(255,255,255,0.98), rgba(240,248,247,0.98));
+}
+& .doctor-eyebrow {
+  display: inline-block;
+  margin-bottom: 1rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.34em;
+  color: #2f7c81;
+}
+& h1 {
+  margin: 0;
+  color: #12343a;
+  font-size: clamp(1.9rem, 3.2vw, 3.7rem);
+  line-height: 0.96;
+  max-width: 12ch;
+}
+& p {
+  margin: 1rem 0 0;
+  color: #4f676c;
+  font-size: 0.98rem;
+  line-height: 1.82;
+  max-width: 54ch;
+}
+& .doctor-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin-top: 1.35rem;
+}
+& .doctor-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3rem;
+  padding: 0 1.35rem;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+& .doctor-btn--primary {
+  background: #12343a;
+  color: #ffffff;
+}
+& .doctor-btn--secondary {
+  background: rgba(255,255,255,0.9);
+  border: 1px solid rgba(18,52,58,0.12);
+  color: #12343a;
+}
+& .doctor-hero__visual {
+  display: grid;
+  gap: 1rem;
+  width: 100%;
+  max-width: 52ch;
+  justify-self: start;
+}
+& .doctor-hero__portrait {
+  overflow: hidden;
+  min-height: 21rem;
+  background: #dbeceb;
+}
+& .doctor-hero__portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+& .doctor-hero__details {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+& .doctor-hero__details img {
+  width: 100%;
+  height: 9.2rem;
+  object-fit: cover;
+  display: block;
+  border-radius: 1.2rem;
+  border: 1px solid rgba(18,52,58,0.08);
+}
+& .doctor-note {
+  padding: 1.3rem;
+  background: linear-gradient(180deg, rgba(243,250,249,0.98), rgba(223,239,237,0.95));
+}
+& .doctor-note strong {
+  display: block;
+  color: #12343a;
+  font-size: 1.62rem;
+  line-height: 1.04;
+}

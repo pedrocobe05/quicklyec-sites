@@ -1,4 +1,5 @@
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 import { TypeOrmModuleAsyncOptions } from '@nestjs/typeorm';
 import { DataSourceOptions } from 'typeorm';
 import {
@@ -37,6 +38,15 @@ export function buildTypeOrmOptions(
   options: BuildTypeOrmOptionsOptions = {},
 ): DataSourceOptions {
   const { includeMigrations = false } = options;
+
+  const logger = new Logger('TypeOrmConfig');
+  try {
+    logger.log(
+      `DB host=${configService.get<string>('database.host')} port=${configService.get<number>('database.port')} name=${configService.get<string>('database.name')}`,
+    );
+  } catch (e) {
+    logger.error('Failed to log DB config', e as any);
+  }
 
   return {
     type: 'postgres',

@@ -90,6 +90,8 @@ interface TenantSummary {
   slug: string;
   status: string;
   plan: string;
+  subscriptionStartsAt?: string | null;
+  subscriptionEndsAt?: string | null;
 }
 
 interface TenantProfileResponse {
@@ -145,6 +147,13 @@ interface TenantProfileResponse {
     isPrimary: boolean;
   }[];
   effectivePermissions?: string[];
+  subscription?: {
+    today: string;
+    isPending: boolean;
+    isExpired: boolean;
+    isActive: boolean;
+    daysUntilExpiry: number | null;
+  } | null;
 }
 
 interface TenantMembershipRecord {
@@ -158,6 +167,15 @@ interface TenantMembershipRecord {
     email?: string;
   };
 }
+
+type TenantMembershipApiRecord = {
+  id: string;
+  roleId?: string | null;
+  role?: string;
+  roleDefinition?: { id: string; code: string; name: string } | null;
+  isActive: boolean;
+  user?: { fullName?: string; email?: string };
+};
 
 interface TenantRoleRecord {
   id: string;
@@ -245,6 +263,32 @@ interface ScheduleBlockRecord {
   endDateTime: string;
   reason: string;
   blockType: string;
+}
+
+function mapTenantMembershipRecord(membership: TenantMembershipApiRecord): TenantMembershipRecord {
+  return {
+    id: membership.id,
+    roleId: membership.roleId ?? membership.roleDefinition?.id ?? null,
+    role: membership.roleDefinition?.code ?? membership.role ?? '',
+    roleName: membership.roleDefinition?.name ?? membership.role ?? '',
+    isActive: membership.isActive,
+    user: membership.user,
+  };
+}
+
+function sortTenantMembershipRecords(memberships: TenantMembershipRecord[]) {
+  return [...memberships].sort((left, right) => {
+    const leftRole = left.roleName ?? left.role;
+    const rightRole = right.roleName ?? right.role;
+    const roleComparison = leftRole.localeCompare(rightRole, 'es', { sensitivity: 'base' });
+    if (roleComparison !== 0) {
+      return roleComparison;
+    }
+
+    const leftLabel = left.user?.fullName ?? left.user?.email ?? '';
+    const rightLabel = right.user?.fullName ?? right.user?.email ?? '';
+    return leftLabel.localeCompare(rightLabel, 'es', { sensitivity: 'base' });
+  });
 }
 
 interface AppointmentRecord {
@@ -803,6 +847,8 @@ export function TenantDetailPage() {
   async function loadData() {
     if (!token || !tenantId) return;
     const tenantData = (await getTenantProfile(token, tenantId)) as TenantProfileResponse;
+    const effectiveModules = new Set(tenantData.effectiveModules ?? []);
+    const canLoadModule = (module: string) => Boolean(user?.isPlatformAdmin) || effectiveModules.has(module);
     const [
       membershipsData,
       rolesData,
@@ -815,16 +861,16 @@ export function TenantDetailPage() {
       rulesData,
       blocksData,
     ] = await Promise.all([
-      getTenantMemberships(token, tenantId),
-      getTenantRoles(token, tenantId),
-      getPages(token, tenantId),
-      getSections(token, tenantId, undefined, 'global'),
-      getServices(token, tenantId),
-      getStaff(token, tenantId),
-      getAppointments(token, tenantId),
-      getCustomers(token, tenantId),
-      getAvailabilityRules(token, tenantId),
-      getScheduleBlocks(token, tenantId),
+      canLoadModule('users') ? getTenantMemberships(token, tenantId) : Promise.resolve([]),
+      canLoadModule('roles') ? getTenantRoles(token, tenantId) : Promise.resolve([]),
+      canLoadModule('site') ? getPages(token, tenantId) : Promise.resolve([]),
+      canLoadModule('site') ? getSections(token, tenantId, undefined, 'global') : Promise.resolve([]),
+      canLoadModule('services') ? getServices(token, tenantId) : Promise.resolve([]),
+      canLoadModule('staff') ? getStaff(token, tenantId) : Promise.resolve([]),
+      canLoadModule('appointments') ? getAppointments(token, tenantId) : Promise.resolve([]),
+      canLoadModule('customers') ? getCustomers(token, tenantId) : Promise.resolve([]),
+      canLoadModule('agenda') ? getAvailabilityRules(token, tenantId) : Promise.resolve([]),
+      canLoadModule('agenda') ? getScheduleBlocks(token, tenantId) : Promise.resolve([]),
     ]);
     const plansData = user?.isPlatformAdmin ? await getPlatformPlans(token) : [];
 
@@ -833,21 +879,7 @@ export function TenantDetailPage() {
     setTenantProfile(tenantData);
     setPlatformPlans(plansData as PlatformPlanRecord[]);
     setTenantMemberships(
-      (membershipsData as Array<{
-        id: string;
-        roleId?: string | null;
-        role?: string;
-        roleDefinition?: { id: string; code: string; name: string } | null;
-        isActive: boolean;
-        user?: { fullName?: string; email?: string };
-      }>).map((membership) => ({
-        id: membership.id,
-        roleId: membership.roleId ?? membership.roleDefinition?.id ?? null,
-        role: membership.roleDefinition?.code ?? membership.role ?? '',
-        roleName: membership.roleDefinition?.name ?? membership.role ?? '',
-        isActive: membership.isActive,
-        user: membership.user,
-      })),
+      sortTenantMembershipRecords((membershipsData as TenantMembershipApiRecord[]).map(mapTenantMembershipRecord)),
     );
     setTenantRoles(rolesData as TenantRoleRecord[]);
     setPages(typedPages);
@@ -866,13 +898,70 @@ export function TenantDetailPage() {
     setAvailabilityRules(rulesData as AvailabilityRuleRecord[]);
     setScheduleBlocks(blocksData as ScheduleBlockRecord[]);
 
-    if (nextPageId) {
+    if (nextPageId && canLoadModule('site')) {
       setSelectedPageId(nextPageId);
       const sectionsData = await getSections(token, tenantId, nextPageId);
       setSections(sectionsData as SectionRecord[]);
     } else {
+      setSelectedPageId('');
       setSections([]);
     }
+  }
+
+  async function refreshPagesList(preferredPageId?: string | null) {
+    if (!token || !tenantId) {
+      return { pages: [] as PageRecord[], resolvedPageId: '' };
+    }
+
+    const pagesData = await getPages(token, tenantId);
+    const typedPages = pagesData as PageRecord[];
+    setPages(typedPages);
+
+    const requestedPageId = preferredPageId ?? selectedPageId ?? selectedPage?.id ?? typedPages[0]?.id ?? '';
+    const resolvedPageId = requestedPageId && typedPages.some((page) => page.id === requestedPageId)
+      ? requestedPageId
+      : typedPages[0]?.id ?? '';
+
+    if (resolvedPageId !== selectedPageId) {
+      setSelectedPageId(resolvedPageId);
+    }
+
+    return { pages: typedPages, resolvedPageId };
+  }
+
+  async function refreshGlobalSectionsList() {
+    if (!token || !tenantId) return;
+    const globalSectionsData = await getSections(token, tenantId, undefined, 'global');
+    setGlobalSections(globalSectionsData as SectionRecord[]);
+  }
+
+  async function refreshMembershipsList() {
+    if (!token || !tenantId) return;
+
+    const membershipsData = await getTenantMemberships(token, tenantId);
+    setTenantMemberships(
+      sortTenantMembershipRecords((membershipsData as TenantMembershipApiRecord[]).map(mapTenantMembershipRecord)),
+    );
+  }
+
+  async function refreshRolesList() {
+    if (!token || !tenantId) return;
+
+    const rolesData = await getTenantRoles(token, tenantId);
+    setTenantRoles(rolesData as TenantRoleRecord[]);
+  }
+
+  async function refreshPageSectionsList(pageId?: string | null) {
+    if (!token || !tenantId) return;
+
+    const targetPageId = pageId ?? selectedPage?.id ?? selectedPageId;
+    if (!targetPageId) {
+      setSections([]);
+      return;
+    }
+
+    const sectionsData = await getSections(token, tenantId, targetPageId);
+    setSections(sectionsData as SectionRecord[]);
   }
 
   async function refreshAppointments(options?: { silent?: boolean }) {
@@ -1214,22 +1303,27 @@ export function TenantDetailPage() {
   async function handleEditSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!token || !tenantId || !editModal) return;
+    const currentEditModal = editModal;
     const form = new FormData(event.currentTarget);
 
-    await wrapAction(`edit-${editModal.type}-${editModal.item.id}`, async () => {
-      switch (editModal.type) {
-        case 'membership':
-          await updateTenantMembership(token, tenantId, editModal.item.id, {
-            fullName: String(form.get('fullName') ?? editModal.item.user?.fullName ?? ''),
-            email: String(form.get('email') ?? editModal.item.user?.email ?? ''),
-            roleId: String(form.get('roleId') ?? editModal.item.roleId ?? ''),
+    await wrapAction(`edit-${currentEditModal.type}-${currentEditModal.item.id}`, async () => {
+      switch (currentEditModal.type) {
+        case 'membership': {
+          await updateTenantMembership(token, tenantId, currentEditModal.item.id, {
+            fullName: String(form.get('fullName') ?? currentEditModal.item.user?.fullName ?? ''),
+            email: String(form.get('email') ?? currentEditModal.item.user?.email ?? ''),
+            roleId: String(form.get('roleId') ?? currentEditModal.item.roleId ?? ''),
             isActive: form.get('isActive') === 'on',
           });
+
+          // Re-fetch memberships to ensure role names/definitions are current
+          await refreshMembershipsList();
           break;
+        }
         case 'role':
-          await updateTenantRole(token, tenantId, editModal.item.id, {
-            name: String(form.get('name') ?? editModal.item.name),
-            description: String(form.get('description') ?? editModal.item.description ?? ''),
+          await updateTenantRole(token, tenantId, currentEditModal.item.id, {
+            name: String(form.get('name') ?? currentEditModal.item.name),
+            description: String(form.get('description') ?? currentEditModal.item.description ?? ''),
             permissions: form.getAll('permissions').map(String),
             isActive: form.get('isActive') === 'on',
           });
@@ -1238,24 +1332,24 @@ export function TenantDetailPage() {
           await createTenantDomain(token, {
             tenantId,
             domain: String(form.get('domain') ?? ''),
-            type: String(form.get('type') ?? editModal.item.type),
+            type: String(form.get('type') ?? currentEditModal.item.type),
             isPrimary: form.get('isPrimary') === 'on',
-            verificationStatus: String(form.get('verificationStatus') ?? editModal.item.verificationStatus),
+            verificationStatus: String(form.get('verificationStatus') ?? currentEditModal.item.verificationStatus),
           });
-          await deleteTenantDomain(token, tenantId, editModal.item.id);
+          await deleteTenantDomain(token, tenantId, currentEditModal.item.id);
           break;
         case 'service':
-          await updateService(token, tenantId, editModal.item.id, {
+          await updateService(token, tenantId, currentEditModal.item.id, {
             name: String(form.get('name') ?? ''),
             description: String(form.get('description') ?? ''),
-            durationMinutes: Number(form.get('durationMinutes') ?? editModal.item.durationMinutes),
+            durationMinutes: Number(form.get('durationMinutes') ?? currentEditModal.item.durationMinutes),
             price: form.get('price') ? Number(form.get('price')) : null,
             category: String(form.get('category') ?? ''),
             isActive: form.get('isActive') === 'on',
           });
           break;
         case 'staff':
-          await updateStaff(token, tenantId, editModal.item.id, {
+          await updateStaff(token, tenantId, currentEditModal.item.id, {
             name: String(form.get('name') ?? ''),
             bio: String(form.get('bio') ?? ''),
             email: String(form.get('email') ?? ''),
@@ -1265,18 +1359,18 @@ export function TenantDetailPage() {
           });
           break;
         case 'page':
-          await updatePage(token, tenantId, editModal.item.id, {
+          await updatePage(token, tenantId, currentEditModal.item.id, {
             title: String(form.get('title') ?? ''),
             slug: String(form.get('slug') ?? ''),
             isPublished: form.get('isPublished') === 'on',
             isHome: form.get('isHome') === 'on',
-            ogImageUrl: String(form.get('ogImageUrl') ?? editModal.item.ogImageUrl ?? ''),
+            ogImageUrl: String(form.get('ogImageUrl') ?? currentEditModal.item.ogImageUrl ?? ''),
           });
           break;
         case 'section': {
-          const nextAssets = parseSectionAssetsJson(form.get('assetsJson'), editModal.item.content.assets);
-          const previousAssets = Array.isArray(editModal.item.content.assets)
-            ? (editModal.item.content.assets as SectionAssetRecord[])
+          const nextAssets = parseSectionAssetsJson(form.get('assetsJson'), currentEditModal.item.content.assets);
+          const previousAssets = Array.isArray(currentEditModal.item.content.assets)
+            ? (currentEditModal.item.content.assets as SectionAssetRecord[])
             : [];
 
           const nextFileIds = new Set(
@@ -1303,56 +1397,56 @@ export function TenantDetailPage() {
             }
           }
 
-          await updateSection(token, tenantId, editModal.item.id, {
-            type: String(form.get('type') ?? editModal.item.type),
-            variant: String(form.get('variant') ?? editModal.item.variant),
-            position: Number(form.get('position') ?? editModal.item.position),
+          await updateSection(token, tenantId, currentEditModal.item.id, {
+            type: String(form.get('type') ?? currentEditModal.item.type),
+            variant: String(form.get('variant') ?? currentEditModal.item.variant),
+            position: Number(form.get('position') ?? currentEditModal.item.position),
             isVisible: form.get('isVisible') === 'on',
             content: {
-              ...editModal.item.content,
-              kicker: String(form.get('kicker') ?? String(editModal.item.content.kicker ?? '')),
-              title: String(form.get('title') ?? String(editModal.item.content.title ?? '')),
-              subtitle: String(form.get('subtitle') ?? String(editModal.item.content.subtitle ?? editModal.item.content.body ?? '')),
-              ctaLabel: String(form.get('ctaLabel') ?? String(editModal.item.content.ctaLabel ?? '')),
-              ctaUrl: String(form.get('ctaUrl') ?? String(editModal.item.content.ctaUrl ?? '')),
-              text: String(form.get('text') ?? String(editModal.item.content.text ?? editModal.item.content.body ?? '')),
-              address: String(form.get('address') ?? String(editModal.item.content.address ?? '')),
-              hours: String(form.get('hours') ?? String(editModal.item.content.hours ?? '')),
-              instagram: String(form.get('instagram') ?? String(editModal.item.content.instagram ?? '')),
-              footerWhatsapp: String(form.get('footerWhatsapp') ?? String(editModal.item.content.footerWhatsapp ?? '')),
-              body: String(form.get('body') ?? String(editModal.item.content.body ?? '')),
-              imageUrl: String(form.get('imageUrl') ?? String(editModal.item.content.imageUrl ?? '')),
-              html: String(form.get('html') ?? String(editModal.item.content.html ?? '')),
-              css: String(form.get('css') ?? String(editModal.item.content.css ?? '')),
+              ...currentEditModal.item.content,
+              kicker: String(form.get('kicker') ?? String(currentEditModal.item.content.kicker ?? '')),
+              title: String(form.get('title') ?? String(currentEditModal.item.content.title ?? '')),
+              subtitle: String(form.get('subtitle') ?? String(currentEditModal.item.content.subtitle ?? currentEditModal.item.content.body ?? '')),
+              ctaLabel: String(form.get('ctaLabel') ?? String(currentEditModal.item.content.ctaLabel ?? '')),
+              ctaUrl: String(form.get('ctaUrl') ?? String(currentEditModal.item.content.ctaUrl ?? '')),
+              text: String(form.get('text') ?? String(currentEditModal.item.content.text ?? currentEditModal.item.content.body ?? '')),
+              address: String(form.get('address') ?? String(currentEditModal.item.content.address ?? '')),
+              hours: String(form.get('hours') ?? String(currentEditModal.item.content.hours ?? '')),
+              instagram: String(form.get('instagram') ?? String(currentEditModal.item.content.instagram ?? '')),
+              footerWhatsapp: String(form.get('footerWhatsapp') ?? String(currentEditModal.item.content.footerWhatsapp ?? '')),
+              body: String(form.get('body') ?? String(currentEditModal.item.content.body ?? '')),
+              imageUrl: String(form.get('imageUrl') ?? String(currentEditModal.item.content.imageUrl ?? '')),
+              html: String(form.get('html') ?? String(currentEditModal.item.content.html ?? '')),
+              css: String(form.get('css') ?? String(currentEditModal.item.content.css ?? '')),
               assets: nextAssets,
             },
           });
           break;
         }
         case 'rule':
-          await updateAvailabilityRule(token, tenantId, editModal.item.id, {
+          await updateAvailabilityRule(token, tenantId, currentEditModal.item.id, {
             staffId: String(form.get('staffId') ?? '').trim() || undefined,
-            dayOfWeek: Number(form.get('dayOfWeek') ?? editModal.item.dayOfWeek),
+            dayOfWeek: Number(form.get('dayOfWeek') ?? currentEditModal.item.dayOfWeek),
             startTime: String(form.get('startTime') ?? ''),
             endTime: String(form.get('endTime') ?? ''),
-            slotIntervalMinutes: Number(form.get('slotIntervalMinutes') ?? editModal.item.slotIntervalMinutes),
+            slotIntervalMinutes: Number(form.get('slotIntervalMinutes') ?? currentEditModal.item.slotIntervalMinutes),
             isActive: form.get('isActive') === 'on',
           });
           break;
         case 'block':
-          await updateScheduleBlock(token, tenantId, editModal.item.id, {
+          await updateScheduleBlock(token, tenantId, currentEditModal.item.id, {
             staffId: String(form.get('staffId') ?? '').trim() || undefined,
             reason: String(form.get('reason') ?? ''),
-            blockType: String(form.get('blockType') ?? editModal.item.blockType),
-            startDateTime: toIsoDateTime(String(form.get('startDateTime') ?? editModal.item.startDateTime)),
-            endDateTime: toIsoDateTime(String(form.get('endDateTime') ?? editModal.item.endDateTime)),
+            blockType: String(form.get('blockType') ?? currentEditModal.item.blockType),
+            startDateTime: toIsoDateTime(String(form.get('startDateTime') ?? currentEditModal.item.startDateTime)),
+            endDateTime: toIsoDateTime(String(form.get('endDateTime') ?? currentEditModal.item.endDateTime)),
           });
           break;
         case 'appointment': {
           const paymentMethod = String(form.get('paymentMethod') ?? '').trim();
-          const status = String(form.get('status') ?? editModal.item.status) as AppointmentRecord['status'];
-          const notes = String(form.get('notes') ?? editModal.item.notes ?? '');
-          const internalNotes = String(form.get('internalNotes') ?? editModal.item.internalNotes ?? '');
+          const status = String(form.get('status') ?? currentEditModal.item.status) as AppointmentRecord['status'];
+          const notes = String(form.get('notes') ?? currentEditModal.item.notes ?? '');
+          const internalNotes = String(form.get('internalNotes') ?? currentEditModal.item.internalNotes ?? '');
           const basePayload: Record<string, unknown> = {
             ...(paymentMethod ? { paymentMethod: paymentMethod as 'cash' | 'transfer' | 'payphone' } : {}),
             notes,
@@ -1360,12 +1454,12 @@ export function TenantDetailPage() {
           };
 
           if (status === 'cancelled') {
-            await updateAppointmentStatus(token, tenantId, editModal.item.id, status);
+            await updateAppointmentStatus(token, tenantId, currentEditModal.item.id, status);
 
-            const notesChanged = notes !== String(editModal.item.notes ?? '');
-            const internalNotesChanged = internalNotes !== String(editModal.item.internalNotes ?? '');
+            const notesChanged = notes !== String(currentEditModal.item.notes ?? '');
+            const internalNotesChanged = internalNotes !== String(currentEditModal.item.internalNotes ?? '');
             if (paymentMethod || notesChanged || internalNotesChanged) {
-              await updateAppointment(token, tenantId, editModal.item.id, basePayload);
+              await updateAppointment(token, tenantId, currentEditModal.item.id, basePayload);
             }
             break;
           }
@@ -1376,7 +1470,7 @@ export function TenantDetailPage() {
           };
 
           if (editAppointmentRescheduleEnabled) {
-            const serviceId = String(editModal.item.service?.id ?? '').trim();
+            const serviceId = String(currentEditModal.item.service?.id ?? '').trim();
             const slotValue = String(form.get('appointmentSlot') ?? editAppointmentSlot).trim();
 
             if (!serviceId) {
@@ -1397,7 +1491,7 @@ export function TenantDetailPage() {
               tenantId,
               serviceId,
               editAppointmentDate,
-              String(editModal.item.staff?.id ?? '').trim() || undefined,
+              String(currentEditModal.item.staff?.id ?? '').trim() || undefined,
             );
 
             const slotIsAvailable = availability.some((slot) => {
@@ -1416,11 +1510,11 @@ export function TenantDetailPage() {
             payload.staffId = staffId ?? '';
           }
 
-          await updateAppointment(token, tenantId, editModal.item.id, payload);
+          await updateAppointment(token, tenantId, currentEditModal.item.id, payload);
           break;
         }
         case 'customer':
-          await updateCustomer(token, tenantId, editModal.item.id, {
+          await updateCustomer(token, tenantId, currentEditModal.item.id, {
             fullName: String(form.get('fullName') ?? ''),
             email: String(form.get('email') ?? ''),
             phone: String(form.get('phone') ?? ''),
@@ -1438,7 +1532,25 @@ export function TenantDetailPage() {
           break;
       }
 
-      await loadData();
+      if (currentEditModal.type === 'membership') {
+        // El estado local ya quedó sincronizado con la respuesta del PATCH.
+      } else if (currentEditModal.type === 'role') {
+        await Promise.all([
+          refreshRolesList(),
+          refreshMembershipsList(),
+        ]);
+      } else if (currentEditModal.type === 'page') {
+        await refreshPagesList(selectedPage?.id ?? currentEditModal.item.id);
+      } else if (currentEditModal.type === 'section') {
+        if (currentEditModal.item.scope === 'global') {
+          await refreshGlobalSectionsList();
+        } else {
+          await refreshPageSectionsList(currentEditModal.item.pageId ?? selectedPage?.id ?? selectedPageId);
+        }
+      } else {
+        await loadData();
+      }
+
       setEditModal(null);
     });
   }
@@ -1466,7 +1578,7 @@ export function TenantDetailPage() {
     await wrapAction(`upload-page-image-${page.id}`, async () => {
       const uploaded = await uploadTenantFile(token, tenantId, file, 'site', 'public');
       await updatePage(token, tenantId, page.id, { ogImageUrl: uploaded.reference });
-      await loadData();
+      await refreshPagesList(selectedPage?.id ?? page.id);
     });
   }
 
@@ -1498,7 +1610,11 @@ export function TenantDetailPage() {
             ],
           },
         });
-        await loadData();
+        if (section.scope === 'global') {
+          await refreshGlobalSectionsList();
+        } else {
+          await refreshPageSectionsList(section.pageId ?? selectedPage?.id ?? selectedPageId);
+        }
         return;
       }
 
@@ -1508,7 +1624,11 @@ export function TenantDetailPage() {
           imageUrl: uploaded.reference,
         },
       });
-      await loadData();
+      if (section.scope === 'global') {
+        await refreshGlobalSectionsList();
+      } else {
+        await refreshPageSectionsList(section.pageId ?? selectedPage?.id ?? selectedPageId);
+      }
     });
   }
 
@@ -1555,7 +1675,11 @@ export function TenantDetailPage() {
           assets: nextAssets,
         },
       });
-      await loadData();
+      if (section.scope === 'global') {
+        await refreshGlobalSectionsList();
+      } else {
+        await refreshPageSectionsList(section.pageId ?? selectedPage?.id ?? selectedPageId);
+      }
     });
   }
 
@@ -1622,7 +1746,7 @@ export function TenantDetailPage() {
             <Card>
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">General</h3>
-                <p className="mt-1 text-sm text-slate-500">Modifica aquí nombre, slug, plan y estado de la empresa.</p>
+                <p className="mt-1 text-sm text-slate-500">Modifica aquí nombre, slug, plan, estado y período de suscripción de la empresa.</p>
               </div>
               <form
                 className="mt-6 grid gap-4"
@@ -1635,6 +1759,8 @@ export function TenantDetailPage() {
                       slug: String(form.get('slug') ?? ''),
                       plan: String(form.get('plan') ?? ''),
                       status: String(form.get('status') ?? 'active'),
+                      subscriptionStartsAt: String(form.get('subscriptionStartsAt') ?? ''),
+                      subscriptionEndsAt: String(form.get('subscriptionEndsAt') ?? ''),
                     });
                     await loadData();
                   });
@@ -1670,6 +1796,29 @@ export function TenantDetailPage() {
                       <option value="inactive">Inactivo</option>
                     </Select>
                   </FormField>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField label="Inicio de suscripción">
+                    <Input
+                      name="subscriptionStartsAt"
+                      type="date"
+                      defaultValue={tenantProfile?.tenant.subscriptionStartsAt ?? ''}
+                    />
+                  </FormField>
+                  <FormField label="Fin de suscripción">
+                    <Input
+                      name="subscriptionEndsAt"
+                      type="date"
+                      defaultValue={tenantProfile?.tenant.subscriptionEndsAt ?? ''}
+                    />
+                  </FormField>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-600">
+                  {tenantProfile?.subscription?.isExpired
+                    ? 'La suscripción está caducada. El sitio público permanece deshabilitado hasta actualizar este período.'
+                    : tenantProfile?.subscription?.isPending
+                      ? 'La suscripción todavía no inicia. El sitio público se habilitará automáticamente cuando comience el período.'
+                      : 'Cuando la suscripción vence, el sitio público se deshabilita automáticamente y el sistema envía alertas por correo al admin del tenant.'}
                 </div>
                 <div className="flex justify-end">
                   <Button type="submit" isLoading={saving === 'tenant-general'} loadingLabel="Guardando...">
@@ -1798,6 +1947,11 @@ export function TenantDetailPage() {
                             <td className="px-4 py-3">
                               <p className="font-medium text-slate-900">{role.name}</p>
                               <p className="text-xs text-slate-500">{role.description || 'Sin descripción'}</p>
+                              {role.isSystem ? (
+                                <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                  Rol de sistema
+                                </p>
+                              ) : null}
                             </td>
                             <td className="px-4 py-3">{role.code}</td>
                             <td className="px-4 py-3">{role.permissions.length}</td>
@@ -1807,7 +1961,7 @@ export function TenantDetailPage() {
                                 <Button
                                   variant="secondary"
                                   className="h-9 px-4 text-xs font-semibold"
-                                  disabled={!can('roles.update')}
+                                  disabled={!can('roles.update') || role.isSystem}
                                   onClick={() => setEditModal({ type: 'role', item: role })}
                                 >
                                   Editar
@@ -1938,12 +2092,12 @@ export function TenantDetailPage() {
                     <Input name="user" defaultValue={tenantProfile?.settings?.mailConfig?.user ?? ''} />
                   </FormField>
                   <FormField label="Contraseña">
-                    <Input name="pass" type="password" defaultValue={tenantProfile?.settings?.mailConfig?.pass ?? ''} />
+                    <Input name="pass" type="password" defaultValue={tenantProfile?.settings?.mailConfig?.pass ?? ''} autoComplete="new-password" />
                   </FormField>
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <FormField label="Correo remitente">
-                    <Input name="fromEmail" type="email" defaultValue={tenantProfile?.settings?.mailConfig?.fromEmail ?? ''} />
+                    <Input name="fromEmail" type="email" defaultValue={tenantProfile?.settings?.mailConfig?.fromEmail ?? ''} autoComplete="off" />
                   </FormField>
                   <FormField label="Nombre remitente">
                     <Input name="fromName" defaultValue={tenantProfile?.settings?.mailConfig?.fromName ?? ''} />

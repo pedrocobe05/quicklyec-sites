@@ -35,6 +35,8 @@ import {
   normalizePlanCode,
   resolveTenantMembershipAccess,
 } from '../tenants/tenant-access.constants';
+import { TenantsService } from '../tenants/tenants.service';
+import { normalizeDateOnly } from '../tenants/subscription.utils';
 
 @Injectable()
 export class PlatformService {
@@ -66,6 +68,7 @@ export class PlatformService {
     @InjectRepository(AdminUserEntity)
     private readonly usersRepository: Repository<AdminUserEntity>,
     private readonly mailService: MailService,
+    private readonly tenantsService: TenantsService,
   ) {}
 
   private normalizeHost(host: string) {
@@ -83,6 +86,42 @@ export class PlatformService {
     }
 
     return normalizedLeft.every((value, index) => value === right[index]);
+  }
+
+  private normalizeSubscriptionDateInput(value?: string | null) {
+    try {
+      return normalizeDateOnly(value ?? null);
+    } catch {
+      throw new BadRequestException('Las fechas de suscripción deben usar el formato YYYY-MM-DD');
+    }
+  }
+
+  private applySubscriptionWindow(
+    tenant: TenantEntity,
+    input: { subscriptionStartsAt?: string | null; subscriptionEndsAt?: string | null },
+  ) {
+    const includesStartsAt = Object.prototype.hasOwnProperty.call(input, 'subscriptionStartsAt');
+    const includesEndsAt = Object.prototype.hasOwnProperty.call(input, 'subscriptionEndsAt');
+    const nextStartsAt = includesStartsAt
+      ? this.normalizeSubscriptionDateInput(input.subscriptionStartsAt)
+      : tenant.subscriptionStartsAt ?? null;
+    const nextEndsAt = includesEndsAt
+      ? this.normalizeSubscriptionDateInput(input.subscriptionEndsAt)
+      : tenant.subscriptionEndsAt ?? null;
+
+    if (nextStartsAt && nextEndsAt && nextStartsAt > nextEndsAt) {
+      throw new BadRequestException('La fecha de inicio de suscripción no puede ser mayor a la fecha de fin');
+    }
+
+    const subscriptionChanged =
+      nextStartsAt !== (tenant.subscriptionStartsAt ?? null)
+      || nextEndsAt !== (tenant.subscriptionEndsAt ?? null);
+
+    tenant.subscriptionStartsAt = nextStartsAt;
+    tenant.subscriptionEndsAt = nextEndsAt;
+    if (subscriptionChanged) {
+      tenant.subscriptionAlertState = null;
+    }
   }
 
   private async syncTenantMembershipAccess(tenantId: string, planCode: string) {
@@ -485,24 +524,25 @@ export class PlatformService {
       }
     }
 
+    const subscriptionStartsAt = this.normalizeSubscriptionDateInput(input.subscriptionStartsAt);
+    const subscriptionEndsAt = this.normalizeSubscriptionDateInput(input.subscriptionEndsAt);
+    if (subscriptionStartsAt && subscriptionEndsAt && subscriptionStartsAt > subscriptionEndsAt) {
+      throw new BadRequestException('La fecha de inicio de suscripción no puede ser mayor a la fecha de fin');
+    }
+
     const tenant = await this.tenantsRepository.save({
       name: input.name,
       slug,
       status: input.status ?? 'active',
       plan: plan.code,
+      subscriptionStartsAt,
+      subscriptionEndsAt,
+      subscriptionAlertState: null,
     });
     const planMetadata = getPlanMetadata(plan.code);
     const bookingEnabled = planMetadata.features.includes('online_booking');
 
-    await this.rolesRepository.save({
-      tenantId: tenant.id,
-      code: DEFAULT_TENANT_ROLE_DEFINITIONS[0].code,
-      name: DEFAULT_TENANT_ROLE_DEFINITIONS[0].name,
-      description: DEFAULT_TENANT_ROLE_DEFINITIONS[0].description,
-      isSystem: true,
-      isActive: true,
-      permissions: [...DEFAULT_TENANT_ROLE_DEFINITIONS[0].permissions],
-    });
+    await this.tenantsService.ensureSystemRoles(tenant.id);
 
     await this.domainsRepository.save({
       tenantId: tenant.id,
@@ -593,6 +633,11 @@ export class PlatformService {
       tenant.plan = normalizePlanCode(input.plan);
     }
 
+    this.applySubscriptionWindow(tenant, {
+      subscriptionStartsAt: input.subscriptionStartsAt,
+      subscriptionEndsAt: input.subscriptionEndsAt,
+    });
+
     const savedTenant = await this.tenantsRepository.save(tenant);
     if (input.plan !== undefined) {
       await this.syncTenantPlanCapabilities(savedTenant.id, savedTenant.plan);
@@ -626,6 +671,8 @@ export class PlatformService {
     if (!tenant) {
       throw new NotFoundException('Tenant not found');
     }
+
+    const systemRoles = await this.tenantsService.ensureSystemRoles(tenant.id);
 
     let user = await this.usersRepository.findOne({
       where: { email: input.email.toLowerCase().trim() },
@@ -664,13 +711,8 @@ export class PlatformService {
 
     const resolvedRole =
       defaultRole ??
-      (await this.rolesRepository.findOne({
-        where: {
-          tenantId: tenant.id,
-          code: DEFAULT_TENANT_ROLE_DEFINITIONS[0].code,
-          isActive: true,
-        },
-      }));
+      systemRoles.find((role) => role.code === DEFAULT_TENANT_ROLE_DEFINITIONS[0].code)
+      ?? null;
 
     if (!resolvedRole) {
       throw new BadRequestException('Default tenant role not found');

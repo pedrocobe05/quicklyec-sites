@@ -156,21 +156,41 @@ async function main() {
     slug: 'paolamendozanails',
     status: 'active',
     plan: 'basic',
+    subscriptionStartsAt: '2026-01-01',
+    subscriptionEndsAt: '2026-12-31',
+    subscriptionAlertState: null,
   });
 
-  let adminRole = await roleRepository.findOne({
-    where: { tenantId: tenant.id, code: DEFAULT_TENANT_ROLE_DEFINITIONS[0].code },
-  });
-  if (!adminRole) {
-    adminRole = await roleRepository.save({
-      tenantId: tenant.id,
-      code: DEFAULT_TENANT_ROLE_DEFINITIONS[0].code,
-      name: DEFAULT_TENANT_ROLE_DEFINITIONS[0].name,
-      description: DEFAULT_TENANT_ROLE_DEFINITIONS[0].description,
-      isSystem: true,
-      isActive: true,
-      permissions: [...DEFAULT_TENANT_ROLE_DEFINITIONS[0].permissions],
+  let adminRole = null as TenantRoleEntity | null;
+  for (const definition of DEFAULT_TENANT_ROLE_DEFINITIONS) {
+    let role = await roleRepository.findOne({
+      where: { tenantId: tenant.id, code: definition.code },
     });
+    if (!role) {
+      role = await roleRepository.save({
+        tenantId: tenant.id,
+        code: definition.code,
+        name: definition.name,
+        description: definition.description,
+        isSystem: true,
+        isActive: true,
+        permissions: [...definition.permissions],
+      });
+    } else {
+      role.name = definition.name;
+      role.description = definition.description;
+      role.isSystem = true;
+      role.isActive = true;
+      role.permissions = [...definition.permissions];
+      role = await roleRepository.save(role);
+    }
+
+    if (definition.code === DEFAULT_TENANT_ROLE_DEFINITIONS[0].code) {
+      adminRole = role;
+    }
+  }
+  if (!adminRole) {
+    throw new Error('Default admin role for demo tenant could not be created');
   }
 
   await domainRepository.save([
@@ -956,21 +976,41 @@ async function main() {
     slug: 'healthprimeclinic',
     status: 'active',
     plan: 'premium',
+    subscriptionStartsAt: '2026-01-01',
+    subscriptionEndsAt: '2026-12-31',
+    subscriptionAlertState: null,
   });
 
-  let healthPrimeAdminRole = await roleRepository.findOne({
-    where: { tenantId: healthPrimeTenant.id, code: DEFAULT_TENANT_ROLE_DEFINITIONS[0].code },
-  });
-  if (!healthPrimeAdminRole) {
-    healthPrimeAdminRole = await roleRepository.save({
-      tenantId: healthPrimeTenant.id,
-      code: DEFAULT_TENANT_ROLE_DEFINITIONS[0].code,
-      name: DEFAULT_TENANT_ROLE_DEFINITIONS[0].name,
-      description: DEFAULT_TENANT_ROLE_DEFINITIONS[0].description,
-      isSystem: true,
-      isActive: true,
-      permissions: [...DEFAULT_TENANT_ROLE_DEFINITIONS[0].permissions],
+  let healthPrimeAdminRole = null as TenantRoleEntity | null;
+  for (const definition of DEFAULT_TENANT_ROLE_DEFINITIONS) {
+    let role = await roleRepository.findOne({
+      where: { tenantId: healthPrimeTenant.id, code: definition.code },
     });
+    if (!role) {
+      role = await roleRepository.save({
+        tenantId: healthPrimeTenant.id,
+        code: definition.code,
+        name: definition.name,
+        description: definition.description,
+        isSystem: true,
+        isActive: true,
+        permissions: [...definition.permissions],
+      });
+    } else {
+      role.name = definition.name;
+      role.description = definition.description;
+      role.isSystem = true;
+      role.isActive = true;
+      role.permissions = [...definition.permissions];
+      role = await roleRepository.save(role);
+    }
+
+    if (definition.code === DEFAULT_TENANT_ROLE_DEFINITIONS[0].code) {
+      healthPrimeAdminRole = role;
+    }
+  }
+  if (!healthPrimeAdminRole) {
+    throw new Error('Default admin role for Health Prime tenant could not be created');
   }
 
   await domainRepository.save([

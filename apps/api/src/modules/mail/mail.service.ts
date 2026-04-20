@@ -62,6 +62,15 @@ export class MailService {
     });
   }
 
+  private formatDate(value: string, locale: MailLocale) {
+    return new Date(`${value}T00:00:00Z`).toLocaleDateString(locale === 'en' ? 'en-US' : 'es-EC', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      timeZone: 'UTC',
+    });
+  }
+
   async sendWelcomeEmail(input: {
     to: string;
     tenantId: string;
@@ -231,6 +240,92 @@ export class MailService {
           ${input.contactPhone ? `<p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Phone' : 'Teléfono'}:</strong> ${input.contactPhone}</p>` : ''}
           ${input.contactAddress ? `<p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Address' : 'Dirección'}:</strong> ${input.contactAddress}</p>` : ''}
           <p style="margin:0;">${locale === 'en' ? 'If you need to reschedule or have questions, reply to this email or contact the business.' : 'Si necesitas reprogramarla o tienes dudas, puedes responder este correo o comunicarte con el negocio.'}</p>
+        `,
+      }),
+    });
+  }
+
+  async sendTenantSubscriptionAlertEmail(input: {
+    to: string;
+    tenantId: string;
+    recipientName?: string | null;
+    tenantName: string;
+    subscriptionStartsAt?: string | null;
+    subscriptionEndsAt: string;
+    daysRemaining?: number | null;
+    expired: boolean;
+  }) {
+    const transporter = await this.createTransporter(input.tenantId);
+    if (!transporter) return;
+
+    const theme = await this.resolveTheme(input.tenantId);
+    const locale = await this.resolveTenantLocale(input.tenantId);
+    const adminUrl = this.configService.get<string>('app.adminUrl') ?? 'http://localhost:5173';
+    const formattedStartDate = input.subscriptionStartsAt
+      ? this.formatDate(input.subscriptionStartsAt, locale)
+      : null;
+    const formattedEndDate = this.formatDate(input.subscriptionEndsAt, locale);
+    const subject = input.expired
+      ? (locale === 'en'
+        ? `${input.tenantName} subscription expired`
+        : `La suscripción de ${input.tenantName} ha caducado`)
+      : (locale === 'en'
+        ? `${input.tenantName} subscription expires soon`
+        : `La suscripción de ${input.tenantName} está por caducar`);
+    const intro = input.expired
+      ? (locale === 'en'
+        ? `Hello ${input.recipientName ?? ''}, the subscription for ${input.tenantName} expired and the public site is now disabled.`
+        : `Hola ${input.recipientName ?? ''}, la suscripción de ${input.tenantName} ha caducado y el sitio público quedó deshabilitado.`)
+      : (locale === 'en'
+        ? `Hello ${input.recipientName ?? ''}, the subscription for ${input.tenantName} will expire in ${input.daysRemaining} day(s).`
+        : `Hola ${input.recipientName ?? ''}, la suscripción de ${input.tenantName} caduca en ${input.daysRemaining} día(s).`);
+
+    await transporter.sendMail({
+      from: `"${theme.fromName}" <${theme.fromEmail}>`,
+      to: input.to,
+      subject,
+      text: [
+        intro,
+        '',
+        `${locale === 'en' ? 'Tenant' : 'Tenant'}: ${input.tenantName}`,
+        formattedStartDate ? `${locale === 'en' ? 'Start date' : 'Fecha de inicio'}: ${formattedStartDate}` : null,
+        `${locale === 'en' ? 'End date' : 'Fecha de fin'}: ${formattedEndDate}`,
+        input.expired
+          ? (locale === 'en'
+            ? 'The public site stays disabled until the subscription window is updated.'
+            : 'El sitio público permanecerá deshabilitado hasta que actualices el período de suscripción.')
+          : (locale === 'en'
+            ? 'Review the tenant and renew the subscription before the end date to avoid service interruption.'
+            : 'Revisa el tenant y renueva la suscripción antes de la fecha final para evitar interrupciones del servicio.'),
+        `${locale === 'en' ? 'Admin panel' : 'Panel admin'}: ${adminUrl}`,
+      ].filter(Boolean).join('\n'),
+      html: this.renderEmailTemplate({
+        theme,
+        title: input.expired
+          ? (locale === 'en' ? 'Subscription expired' : 'Suscripción caducada')
+          : (locale === 'en' ? 'Subscription expiring soon' : 'Suscripción próxima a caducar'),
+        intro,
+        body: `
+          <p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Tenant' : 'Tenant'}:</strong> ${input.tenantName}</p>
+          ${formattedStartDate ? `<p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Start date' : 'Fecha de inicio'}:</strong> ${formattedStartDate}</p>` : ''}
+          <p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'End date' : 'Fecha de fin'}:</strong> ${formattedEndDate}</p>
+          ${!input.expired && typeof input.daysRemaining === 'number' ? `<p style="margin:0 0 10px 0;"><strong>${locale === 'en' ? 'Days remaining' : 'Días restantes'}:</strong> ${input.daysRemaining}</p>` : ''}
+          <p style="margin:0 0 14px 0;">
+            ${
+              input.expired
+                ? (locale === 'en'
+                  ? 'The public site has been disabled automatically until the subscription period is updated.'
+                  : 'El sitio público se deshabilitó automáticamente hasta que el período de suscripción sea actualizado.')
+                : (locale === 'en'
+                  ? 'Renew or extend the subscription period before the end date to avoid service interruption.'
+                  : 'Renueva o extiende el período de suscripción antes de la fecha final para evitar interrupciones del servicio.')
+            }
+          </p>
+          <p style="margin:0;">
+            <a href="${adminUrl}" style="color:${theme.accentColor};text-decoration:underline;">
+              ${locale === 'en' ? 'Open admin panel' : 'Abrir panel admin'}
+            </a>
+          </p>
         `,
       }),
     });

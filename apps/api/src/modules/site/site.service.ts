@@ -9,6 +9,7 @@ import { ServicesService } from 'src/modules/services/services.service';
 import { StaffService } from 'src/modules/staff/staff.service';
 import { TenantsService } from 'src/modules/tenants/tenants.service';
 import { getPlanAccessDefinition, getPlanMetadata, normalizePlanCode } from 'src/modules/tenants/tenant-access.constants';
+import { getTenantSubscriptionState } from 'src/modules/tenants/subscription.utils';
 import { FilesService } from 'src/modules/files/files.service';
 import { CreatePageDto } from './dto/create-page.dto';
 import { CreateSectionDto } from './dto/create-section.dto';
@@ -189,6 +190,17 @@ export class SiteService {
     };
   }
 
+  private ensureActivePublicSubscription(input: {
+    subscriptionStartsAt?: string | null;
+    subscriptionEndsAt?: string | null;
+    timeZone?: string | null;
+  }) {
+    const subscription = getTenantSubscriptionState(input);
+    if (!subscription.isActive) {
+      throw new NotFoundException('Public site is disabled');
+    }
+  }
+
   async getPublicSiteByHost(host: string, slug = '/') {
     const resolved = await this.tenantsService.resolveTenantByHost(host);
     const tenantId = resolved.tenant.id;
@@ -200,6 +212,12 @@ export class SiteService {
     if (!publicSiteEnabled) {
       throw new NotFoundException('Public site is disabled');
     }
+
+    this.ensureActivePublicSubscription({
+      subscriptionStartsAt: resolved.tenant.subscriptionStartsAt,
+      subscriptionEndsAt: resolved.tenant.subscriptionEndsAt,
+      timeZone: resolved.setting?.timezone,
+    });
 
     const pageSlug = slug === '/' ? 'home' : slug.replace(/^\//, '');
 
@@ -374,6 +392,11 @@ export class SiteService {
 
   async getRobotsTxt(host: string) {
     const resolved = await this.tenantsService.resolveTenantByHost(host);
+    this.ensureActivePublicSubscription({
+      subscriptionStartsAt: resolved.tenant.subscriptionStartsAt,
+      subscriptionEndsAt: resolved.tenant.subscriptionEndsAt,
+      timeZone: resolved.setting?.timezone,
+    });
     const shouldIndex = resolved.setting?.siteIndexingEnabled ?? true;
     const canonicalHost = resolved.setting?.canonicalDomain ?? resolved.domain.domain;
     const lines = ['User-agent: *'];
@@ -387,6 +410,11 @@ export class SiteService {
 
   async getSitemapXml(host: string) {
     const resolved = await this.tenantsService.resolveTenantByHost(host);
+    this.ensureActivePublicSubscription({
+      subscriptionStartsAt: resolved.tenant.subscriptionStartsAt,
+      subscriptionEndsAt: resolved.tenant.subscriptionEndsAt,
+      timeZone: resolved.setting?.timezone,
+    });
     const canonicalHost = resolved.setting?.canonicalDomain ?? resolved.domain.domain;
     const pages = await this.pagesRepository.find({
       where: { tenantId: resolved.tenant.id, isPublished: true, isIndexable: true },

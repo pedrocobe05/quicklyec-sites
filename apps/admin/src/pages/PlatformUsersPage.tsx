@@ -227,10 +227,10 @@ export function PlatformUsersPage() {
             <Input name="fullName" defaultValue={editing?.fullName ?? ''} />
           </FormField>
           <FormField label="Correo" required>
-            <Input name="email" type="email" defaultValue={editing?.email ?? ''} />
+            <Input name="email" type="email" defaultValue={editing?.email ?? ''} autoComplete="off" />
           </FormField>
           <FormField label="Contraseña" optional>
-            <Input name="password" type="password" placeholder={editing ? 'Dejar vacío para mantener' : 'Contraseña inicial'} />
+            <Input name="password" type="password" placeholder={editing ? 'Dejar vacío para mantener' : 'Contraseña inicial'} autoComplete="new-password" />
           </FormField>
           <FormField label="Rol">
             <Select name="platformRole" defaultValue={editing?.platformRole ?? roles[0]?.code ?? 'super_admin'}>

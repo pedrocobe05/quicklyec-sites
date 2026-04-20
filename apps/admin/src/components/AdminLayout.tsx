@@ -15,6 +15,7 @@ import { BrandMark } from '../shared/components/brand/BrandMark';
 import { ConfirmModal } from '../shared/components/modal/ConfirmModal';
 import { Button } from '../shared/components/ui/Button';
 import { cn } from '../shared/utils/cn';
+import HttpActivityOverlay from './HttpActivityOverlay';
 
 type NavItem = {
   to: string;
@@ -170,8 +171,7 @@ export function AdminLayout({
       })
     : null;
 
-  const [pendingHttpRequests, setPendingHttpRequests] = useState(0);
-  const [showHttpOverlay, setShowHttpOverlay] = useState(false);
+  // Http overlay handled by separate component to avoid re-rendering children
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
 
@@ -238,39 +238,7 @@ export function AdminLayout({
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
-    function handleHttpStart() {
-      setPendingHttpRequests((current) => current + 1);
-    }
-
-    function handleHttpEnd() {
-      setPendingHttpRequests((current) => Math.max(0, current - 1));
-    }
-
-    window.addEventListener('qs:http:start', handleHttpStart as EventListener);
-    window.addEventListener('qs:http:end', handleHttpEnd as EventListener);
-
-    return () => {
-      window.removeEventListener('qs:http:start', handleHttpStart as EventListener);
-      window.removeEventListener('qs:http:end', handleHttpEnd as EventListener);
-    };
-  }, []);
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    if (pendingHttpRequests > 0) {
-      timer = setTimeout(() => setShowHttpOverlay(true), 140);
-    } else {
-      timer = setTimeout(() => setShowHttpOverlay(false), 220);
-    }
-
-    return () => {
-      if (timer) {
-        clearTimeout(timer);
-      }
-    };
-  }, [pendingHttpRequests]);
+  
 
   useEffect(() => {
     setMobileSidebarOpen(false);
@@ -439,30 +407,7 @@ export function AdminLayout({
 
   return (
     <div className="quickly-page-shell isolate flex h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(255,203,48,0.08),_transparent_24%),linear-gradient(180deg,_#fbfaf6_0%,_#f3f5f9_100%)]">
-      {createPortal(
-        <div
-          className={cn(
-            'pointer-events-none fixed inset-x-0 top-0 z-[10040] flex justify-center px-4 transition-all duration-300',
-            showHttpOverlay ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0',
-          )}
-        >
-          <div className="mt-4 w-full max-w-md overflow-hidden rounded-[1.6rem] border border-[rgba(0,1,32,0.08)] bg-[linear-gradient(135deg,rgba(6,12,42,0.94),rgba(15,23,42,0.9))] px-4 py-3 text-white shadow-[0_24px_80px_rgba(0,1,32,0.22)] backdrop-blur-xl">
-            <div className="flex items-center gap-3">
-              <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10">
-                <span className="absolute inset-0 animate-ping rounded-full bg-[rgba(255,203,48,0.12)]" />
-                <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/80 border-r-transparent" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold tracking-[0.08em] text-white">Cargando...</p>
-              </div>
-            </div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-              <div className="h-full w-1/2 animate-pulse rounded-full bg-[linear-gradient(90deg,#ffcb30,#ffffff)]" />
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )}
+      <HttpActivityOverlay />
 
       <aside className="sidebar-professional fixed inset-y-0 left-0 z-20 hidden w-72 flex-col overflow-hidden border-r border-[rgba(0,64,145,0.12)] bg-[linear-gradient(180deg,#eef5ff_0%,#e4edf9_100%)] px-5 py-6 text-slate-700 shadow-[8px_0_28px_rgba(0,64,145,0.06)] lg:flex">
         {sidebar}

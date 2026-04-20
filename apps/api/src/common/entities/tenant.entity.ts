@@ -30,6 +30,15 @@ export class TenantEntity {
   @Column({ length: 24, default: 'starter' })
   plan!: string;
 
+  @Column({ type: 'date', nullable: true })
+  subscriptionStartsAt!: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  subscriptionEndsAt!: string | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  subscriptionAlertState!: Record<string, string> | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

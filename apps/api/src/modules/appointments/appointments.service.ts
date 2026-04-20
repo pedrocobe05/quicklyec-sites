@@ -237,37 +237,7 @@ export class AppointmentsService {
     return nowMinutes <= 20 * 60;
   }
 
-  private async reversePayphoneTransaction(input: {
-    tenantId: string;
-    transaction: PayphoneTransactionEntity;
-  }) {
-    const settings = await this.tenantSettingsRepository.findOne({
-      where: { tenantId: input.tenantId },
-    });
-    const token = String(settings?.payphoneToken ?? '').trim();
-    if (!token) {
-      throw new BadRequestException('No se pudo reversar el pago: falta configurar el token de Payphone para este tenant');
-    }
-
-    if (!input.transaction.payphoneTransactionId) {
-      throw new BadRequestException('No se pudo reversar el pago: la transacción de Payphone no está confirmada');
-    }
-
-    const timezone = settings?.timezone ?? AppointmentsService.DEFAULT_TIMEZONE;
-    const transactionDate = input.transaction.confirmedAt ?? input.transaction.createdAt;
-    if (!this.isPayphoneReverseWindowOpen(transactionDate, new Date(), timezone)) {
-      throw new BadRequestException('No se pudo reversar el pago: Payphone solo permite reversos el mismo día hasta las 20:00');
-    }
-
-    const response = await fetch('https://pay.payphonetodoesposible.com/api/Reverse', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ id: input.transaction.payphoneTransactionId }),
-    });
-    const raw = await response.text();
+  private parsePayphoneReverseResponse(raw: string) {
     let parsed: unknown = null;
     if (raw.trim()) {
       try {
@@ -289,16 +259,180 @@ export class AppointmentsService {
           ? responseError.message.trim()
           : null;
 
-    if (!response.ok || (parsedRecord && parsedRecord.success === false)) {
-      throw new BadRequestException(
-        responseMessage
-          ? `No se pudo reversar el pago: ${responseMessage}`
-          : `No se pudo reversar el pago con Payphone (HTTP ${response.status})`,
-      );
+    return {
+      parsed,
+      parsedRecord,
+      responseMessage,
+    };
+  }
+
+  private buildPayphoneReverseFailureMessage(input: {
+    status: number;
+    raw: string;
+    responseMessage: string | null;
+    method: 'id' | 'client';
+    usedCredentialSnapshot: boolean;
+  }) {
+    if (input.responseMessage) {
+      return `No se pudo reversar el pago: ${input.responseMessage}`;
     }
 
-    if (parsedRecord && parsedRecord.success !== true && responseMessage) {
-      throw new BadRequestException(`No se pudo reversar el pago: ${responseMessage}`);
+    const identifier =
+      input.method === 'id'
+        ? 'transactionId'
+        : 'clientTransactionId';
+    const trimmed = input.raw.trim();
+
+    if (!trimmed) {
+      return input.usedCredentialSnapshot
+        ? `Error en el servicio de Payphone al reversar por ${identifier} (HTTP ${input.status}). Si el problema continúa, puede ser una incidencia temporal del proveedor.`
+        : `Error en el servicio de Payphone al reversar por ${identifier} (HTTP ${input.status}). Payphone exige usar el mismo token con el que se creó la transacción; si el token del tenant cambió después del cobro, el reverso puede fallar.`;
+    }
+
+    if (/<!DOCTYPE|<html/i.test(trimmed)) {
+      return input.usedCredentialSnapshot
+        ? `Payphone respondió con error interno al reversar por ${identifier} (HTTP ${input.status}). Si el problema continúa, puede ser una incidencia temporal del proveedor.`
+        : `Payphone respondió con error interno al reversar por ${identifier} (HTTP ${input.status}). Revisa que el token actual del tenant siga siendo el mismo con el que se creó la transacción.`;
+    }
+
+    const snippet = trimmed.length > 280 ? `${trimmed.slice(0, 280)}…` : trimmed;
+    return `No se pudo reversar el pago con Payphone por ${identifier} (HTTP ${input.status}): ${snippet}`;
+  }
+
+  private normalizePayphoneReverseId(value: string) {
+    const trimmed = value.trim();
+    if (/^\d+$/.test(trimmed)) {
+      return Number(trimmed);
+    }
+
+    return trimmed;
+  }
+
+  private async requestPayphoneReverse(input: {
+    token: string;
+    method: 'id' | 'client';
+    value: string;
+    usedCredentialSnapshot: boolean;
+  }) {
+    const url =
+      input.method === 'id'
+        ? 'https://pay.payphonetodoesposible.com/api/Reverse'
+        : 'https://pay.payphonetodoesposible.com/api/Reverse/Client';
+    const body =
+      input.method === 'id'
+        ? { id: this.normalizePayphoneReverseId(input.value) }
+        : { clientId: input.value };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${input.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    const raw = await response.text();
+    const { parsed, parsedRecord, responseMessage } = this.parsePayphoneReverseResponse(raw);
+    const success =
+      response.ok
+      && (
+        parsed === true
+        || parsedRecord?.success === true
+        || (
+          parsedRecord == null
+          && responseMessage == null
+          && !raw.trim()
+        )
+      );
+
+    return {
+      success,
+      status: response.status,
+      raw,
+      parsed,
+      parsedRecord,
+      responseMessage,
+      failureMessage: this.buildPayphoneReverseFailureMessage({
+        status: response.status,
+        raw,
+        responseMessage,
+        method: input.method,
+        usedCredentialSnapshot: input.usedCredentialSnapshot,
+      }),
+    };
+  }
+
+  private async reversePayphoneTransaction(input: {
+    tenantId: string;
+    transaction: PayphoneTransactionEntity;
+  }) {
+    const settings = await this.tenantSettingsRepository.findOne({
+      where: { tenantId: input.tenantId },
+    });
+    const bookingPayload = input.transaction.bookingPayload as {
+      credentialSnapshot?: { token?: string | null };
+    } | null;
+    const credentialSnapshotToken = String(bookingPayload?.credentialSnapshot?.token ?? '').trim();
+    const token = credentialSnapshotToken || String(settings?.payphoneToken ?? '').trim();
+    if (!token) {
+      throw new BadRequestException('No se pudo reversar el pago: falta configurar el token de Payphone para este tenant');
+    }
+
+    if (!input.transaction.payphoneTransactionId) {
+      throw new BadRequestException('No se pudo reversar el pago: la transacción de Payphone no está confirmada');
+    }
+
+    const timezone = settings?.timezone ?? AppointmentsService.DEFAULT_TIMEZONE;
+    const transactionDate = input.transaction.confirmedAt ?? input.transaction.createdAt;
+    if (!this.isPayphoneReverseWindowOpen(transactionDate, new Date(), timezone)) {
+      throw new BadRequestException('No se pudo reversar el pago: Payphone solo permite reversos el mismo día hasta las 20:00');
+    }
+
+    const reverseById = await this.requestPayphoneReverse({
+      token,
+      method: 'id',
+      value: String(input.transaction.payphoneTransactionId),
+      usedCredentialSnapshot: Boolean(credentialSnapshotToken),
+    });
+
+    if (!reverseById.success) {
+      this.logger.warn({
+        event: 'payphone.reverse.failed_by_id',
+        tenantId: input.tenantId,
+        appointmentId: input.transaction.appointmentId,
+        payphoneTransactionId: input.transaction.payphoneTransactionId,
+        clientTransactionId: input.transaction.clientTransactionId,
+        httpStatus: reverseById.status,
+        usedCredentialSnapshot: Boolean(credentialSnapshotToken),
+        bodyPreview: reverseById.raw.slice(0, 800),
+      });
+
+      const reverseByClient = await this.requestPayphoneReverse({
+        token,
+        method: 'client',
+        value: input.transaction.clientTransactionId,
+        usedCredentialSnapshot: Boolean(credentialSnapshotToken),
+      });
+
+      if (!reverseByClient.success) {
+        this.logger.warn({
+          event: 'payphone.reverse.failed_by_client_id',
+          tenantId: input.tenantId,
+          appointmentId: input.transaction.appointmentId,
+          payphoneTransactionId: input.transaction.payphoneTransactionId,
+          clientTransactionId: input.transaction.clientTransactionId,
+          httpStatus: reverseByClient.status,
+          usedCredentialSnapshot: Boolean(credentialSnapshotToken),
+          bodyPreview: reverseByClient.raw.slice(0, 800),
+        });
+
+        const fallbackMessage =
+          reverseByClient.failureMessage === reverseById.failureMessage
+            ? reverseByClient.failureMessage
+            : `${reverseById.failureMessage} Intento alterno por clientTransactionId: ${reverseByClient.failureMessage}`;
+        throw new BadRequestException(fallbackMessage);
+      }
     }
 
     input.transaction.status = 'cancelled';

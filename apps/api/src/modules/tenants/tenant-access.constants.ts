@@ -62,15 +62,39 @@ export const TENANT_PERMISSION_CATALOG = [
 ] as const;
 
 export const ADMINISTRATOR_ROLE_CODE = 'administrator';
+export const STAFF_ROLE_CODE = 'staff';
+
+export const STAFF_ROLE_PERMISSIONS = [
+  'services.view',
+  'staff.view',
+  'agenda.view',
+  'agenda.create',
+  'agenda.update',
+  'agenda.delete',
+  'appointments.view',
+  'appointments.create',
+  'appointments.update',
+  'customers.view',
+  'customers.create',
+  'customers.update',
+] as const;
 
 export const DEFAULT_TENANT_ROLE_DEFINITIONS = [
   {
     code: ADMINISTRATOR_ROLE_CODE,
-    name: 'Administrador',
-    description: 'Acceso completo a la operación del tenant según lo permitido por el plan.',
+    name: 'Admin de tenant',
+    description: 'Acceso completo a la configuración y operación del tenant según lo permitido por el plan.',
     permissions: [...TENANT_PERMISSION_CATALOG],
   },
+  {
+    code: STAFF_ROLE_CODE,
+    name: 'Staff',
+    description: 'Acceso operativo a agenda, reservas y clientes, sin configuración administrativa.',
+    permissions: [...STAFF_ROLE_PERMISSIONS],
+  },
 ] as const;
+
+export const IMMUTABLE_SYSTEM_TENANT_ROLE_CODES = DEFAULT_TENANT_ROLE_DEFINITIONS.map((role) => role.code);
 
 export type PlanAccessDefinition = {
   code: string;

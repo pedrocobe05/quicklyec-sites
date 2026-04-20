@@ -123,13 +123,14 @@ export function LoginPage() {
             </div>
 
             {isResetMode ? (
-              <form className="space-y-5" onSubmit={handleResetPassword}>
+              <form className="space-y-5" onSubmit={handleResetPassword} autoComplete="off">
                 <FormField label="Nueva contraseña" required>
                   <Input
                     name="password"
                     type="password"
                     placeholder="Mínimo 8 caracteres"
                     className="h-12 rounded-2xl border-[#ddd6ca] bg-[#fcfbf8] px-4 focus:border-[var(--brand-gold-deep)] focus:ring-[rgba(255,203,48,0.18)]"
+                      autoComplete="new-password"
                   />
                 </FormField>
                 <FormField label="Confirmar contraseña" required>
@@ -138,6 +139,7 @@ export function LoginPage() {
                     type="password"
                     placeholder="Repite tu nueva contraseña"
                     className="h-12 rounded-2xl border-[#ddd6ca] bg-[#fcfbf8] px-4 focus:border-[var(--brand-gold-deep)] focus:ring-[rgba(255,203,48,0.18)]"
+                      autoComplete="new-password"
                   />
                 </FormField>
                 <Button
@@ -160,13 +162,14 @@ export function LoginPage() {
                 </button>
               </form>
             ) : (
-              <form className="space-y-5" onSubmit={handleSubmit}>
+              <form className="space-y-5" onSubmit={handleSubmit} autoComplete="off">
                 <FormField label="Correo" required>
                   <Input
                     name="email"
                     type="email"
                     placeholder="mail@example.com"
                     className="h-12 rounded-2xl border-[#ddd6ca] bg-[#fcfbf8] px-4 focus:border-[var(--brand-gold-deep)] focus:ring-[rgba(255,203,48,0.18)]"
+                    autoComplete="off"
                   />
                 </FormField>
                 <FormField label="Contraseña" required>
@@ -175,6 +178,7 @@ export function LoginPage() {
                     type="password"
                     placeholder="••••••••"
                     className="h-12 rounded-2xl border-[#ddd6ca] bg-[#fcfbf8] px-4 focus:border-[var(--brand-gold-deep)] focus:ring-[rgba(255,203,48,0.18)]"
+                    autoComplete="new-password"
                   />
                 </FormField>
                 <div className="flex justify-end">
@@ -207,7 +211,7 @@ export function LoginPage() {
         description="Te enviaremos un enlace seguro para crear una nueva contraseña."
         maxWidthClassName="max-w-lg"
       >
-        <form className="grid gap-4" onSubmit={handleForgotPassword}>
+        <form className="grid gap-4" onSubmit={handleForgotPassword} autoComplete="off">
           <FormField label="Correo" required>
             <Input
               name="email"

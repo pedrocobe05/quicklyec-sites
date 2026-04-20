@@ -10,6 +10,7 @@ import { ServicesService } from 'src/modules/services/services.service';
 import { SiteService } from 'src/modules/site/site.service';
 import { TenantsService } from 'src/modules/tenants/tenants.service';
 import { getPlanMetadata, normalizePlanCode } from 'src/modules/tenants/tenant-access.constants';
+import { getTenantSubscriptionState } from 'src/modules/tenants/subscription.utils';
 
 @ApiTags('Public')
 @Controller('public')
@@ -20,6 +21,17 @@ export class PublicController {
     private readonly servicesService: ServicesService,
     private readonly appointmentsService: AppointmentsService,
   ) {}
+
+  private ensureActivePublicSubscription(input: {
+    subscriptionStartsAt?: string | null;
+    subscriptionEndsAt?: string | null;
+    timeZone?: string | null;
+  }) {
+    const subscription = getTenantSubscriptionState(input);
+    if (!subscription.isActive) {
+      throw new NotFoundException('Public site is disabled');
+    }
+  }
 
   @Get('site')
   getSite(@Headers('host') headerHost: string, @Query('host') queryHost?: string, @Query('slug') slug?: string) {
@@ -32,6 +44,11 @@ export class PublicController {
     if (!(resolved.setting?.publicSiteEnabled ?? true)) {
       throw new NotFoundException('Public site is disabled');
     }
+    this.ensureActivePublicSubscription({
+      subscriptionStartsAt: resolved.tenant.subscriptionStartsAt,
+      subscriptionEndsAt: resolved.tenant.subscriptionEndsAt,
+      timeZone: resolved.setting?.timezone,
+    });
     return this.servicesService.findPublicByTenant(resolved.tenant.id);
   }
 
@@ -45,6 +62,11 @@ export class PublicController {
     @Query('staffId') staffId?: string,
   ) {
     const resolved = await this.tenantsService.resolveTenantByHost(queryHost ?? headerHost);
+    this.ensureActivePublicSubscription({
+      subscriptionStartsAt: resolved.tenant.subscriptionStartsAt,
+      subscriptionEndsAt: resolved.tenant.subscriptionEndsAt,
+      timeZone: resolved.setting?.timezone,
+    });
     const bookingEnabled = Boolean(
       (resolved.setting?.bookingEnabled ?? true)
       && getPlanMetadata(normalizePlanCode(resolved.tenant.plan)).features.includes('online_booking'),
@@ -69,6 +91,11 @@ export class PublicController {
     @Body() input: CreatePublicAppointmentDto,
   ) {
     const resolved = await this.tenantsService.resolveTenantByHost(queryHost ?? headerHost);
+    this.ensureActivePublicSubscription({
+      subscriptionStartsAt: resolved.tenant.subscriptionStartsAt,
+      subscriptionEndsAt: resolved.tenant.subscriptionEndsAt,
+      timeZone: resolved.setting?.timezone,
+    });
     const bookingEnabled = Boolean(
       (resolved.setting?.bookingEnabled ?? true)
       && getPlanMetadata(normalizePlanCode(resolved.tenant.plan)).features.includes('online_booking'),

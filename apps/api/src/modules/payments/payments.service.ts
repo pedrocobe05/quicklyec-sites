@@ -282,6 +282,7 @@ export class PaymentsService {
     const clientTransactionId = randomUUID();
     const paymentMethod = 'payphone';
     const responseUrl = this.buildResponseUrl(input.responseUrl);
+    const payphoneMode = String(settings?.payphoneMode ?? 'redirect').toLowerCase().trim() === 'box' ? 'box' : 'redirect';
 
     const transaction = this.payphoneTransactionsRepository.create({
       tenantId,
@@ -302,6 +303,11 @@ export class PaymentsService {
         startDateTime: input.startDateTime,
         customer: input.customer,
         notes: input.notes ?? null,
+        credentialSnapshot: {
+          token: settings?.payphoneToken ?? '',
+          storeId: settings?.payphoneStoreId ?? '',
+          payphoneMode,
+        },
       },
       prepareResponse: null,
       confirmResponse: null,
@@ -314,7 +320,6 @@ export class PaymentsService {
 
     const reference = this.truncatePayphoneReference(`Reserva ${service.name}`);
     const currency = settings?.currency ?? 'USD';
-    const payphoneMode = String(settings?.payphoneMode ?? 'redirect').toLowerCase().trim() === 'box' ? 'box' : 'redirect';
 
     if (payphoneMode === 'box') {
       if (!(settings?.payphoneToken ?? '').trim() || !(settings?.payphoneStoreId ?? '').trim()) {

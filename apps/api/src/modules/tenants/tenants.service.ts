@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -26,15 +26,18 @@ import { FilesService } from '../files/files.service';
 import {
   ADMINISTRATOR_ROLE_CODE,
   DEFAULT_TENANT_ROLE_DEFINITIONS,
+  IMMUTABLE_SYSTEM_TENANT_ROLE_CODES,
   getPlanAccessDefinition,
   getPlanMetadata,
   intersectTenantModules,
   normalizePlanCode,
   resolveTenantMembershipAccess,
 } from './tenant-access.constants';
+import { getTenantSubscriptionState } from './subscription.utils';
 
 @Injectable()
 export class TenantsService {
+  private readonly logger = new Logger(TenantsService.name);
   constructor(
     @InjectRepository(TenantEntity)
     private readonly tenantsRepository: Repository<TenantEntity>,
@@ -60,6 +63,15 @@ export class TenantsService {
 
   normalizeHost(host: string) {
     return host.toLowerCase().trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  }
+
+  private arraysAreEqual(left: string[] | null | undefined, right: readonly string[]) {
+    const normalizedLeft = left ?? [];
+    if (normalizedLeft.length !== right.length) {
+      return false;
+    }
+
+    return normalizedLeft.every((value, index) => value === right[index]);
   }
 
   private sanitizeCustomCss(css: string) {
@@ -122,6 +134,8 @@ export class TenantsService {
   }
 
   async getTenantProfile(tenantId: string, userId?: string) {
+    await this.ensureSystemRoles(tenantId);
+
     const tenant = await this.tenantsRepository.findOne({
       where: { id: tenantId },
     });
@@ -205,6 +219,11 @@ export class TenantsService {
       effectivePermissions: rolePermissions.filter((permission) =>
         effectiveModules.includes(permission.split('.')[0]),
       ),
+      subscription: getTenantSubscriptionState({
+        subscriptionStartsAt: tenant.subscriptionStartsAt,
+        subscriptionEndsAt: tenant.subscriptionEndsAt,
+        timeZone: settings?.timezone,
+      }),
     };
   }
 
@@ -395,18 +414,18 @@ export class TenantsService {
   }
 
   listMemberships(tenantId: string) {
-    return this.membershipsRepository.find({
+    return this.ensureSystemRoles(tenantId).then(() => this.membershipsRepository.find({
       where: { tenantId },
       relations: ['user', 'roleDefinition'],
       order: { role: 'ASC' },
-    });
+    }));
   }
 
   listRoles(tenantId: string) {
-    return this.rolesRepository.find({
+    return this.ensureSystemRoles(tenantId).then(() => this.rolesRepository.find({
       where: { tenantId },
       order: { isSystem: 'DESC', name: 'ASC' },
-    });
+    }));
   }
 
   async createRole(tenantId: string, input: CreateTenantRoleDto) {
@@ -435,6 +454,10 @@ export class TenantsService {
     const role = await this.rolesRepository.findOne({ where: { id: roleId, tenantId } });
     if (!role) {
       throw new NotFoundException('Role not found');
+    }
+
+    if (role.isSystem && IMMUTABLE_SYSTEM_TENANT_ROLE_CODES.some((code) => code === role.code)) {
+      throw new BadRequestException('Los roles de sistema tienen permisos fijos y no se pueden editar');
     }
 
     if (input.code && input.code.toLowerCase().trim() !== role.code) {
@@ -469,6 +492,8 @@ export class TenantsService {
   }
 
   async createMembership(tenantId: string, input: CreateTenantMembershipDto) {
+    await this.ensureSystemRoles(tenantId);
+
     const tenant = await this.tenantsRepository.findOne({ where: { id: tenantId } });
     if (!tenant) {
       throw new NotFoundException('Tenant not found');
@@ -493,20 +518,28 @@ export class TenantsService {
 
     let generatedPassword: string | null = null;
 
-    if (!user) {
-      generatedPassword = input.password?.trim() || this.createTemporaryPassword();
-      user = await this.usersRepository.save({
-        fullName: input.fullName.trim(),
-        email: input.email.toLowerCase().trim(),
-        passwordHash: await bcrypt.hash(generatedPassword, 10),
-        isActive: true,
-        isPlatformAdmin: false,
-        platformRole: 'tenant_admin',
-      });
-    } else {
-      user.fullName = input.fullName.trim();
-      user.email = input.email.toLowerCase().trim();
-      await this.usersRepository.save(user);
+    try {
+      if (!user) {
+        generatedPassword = input.password?.trim() || this.createTemporaryPassword();
+        this.logger.log(`Creating new user for email=${input.email}`);
+        user = await this.usersRepository.save({
+          fullName: input.fullName.trim(),
+          email: input.email.toLowerCase().trim(),
+          passwordHash: await bcrypt.hash(generatedPassword, 10),
+          isActive: true,
+          isPlatformAdmin: false,
+          platformRole: 'tenant_admin',
+        });
+        this.logger.log(`Created user ${user.id}`);
+      } else {
+        this.logger.log(`Updating existing user ${user.id}`);
+        user.fullName = input.fullName.trim();
+        user.email = input.email.toLowerCase().trim();
+        await this.usersRepository.save(user);
+      }
+    } catch (err) {
+      this.logger.error('Error creating/updating user for tenant membership', err as any);
+      throw err;
     }
 
     const existingMembership = await this.membershipsRepository.findOne({
@@ -516,14 +549,22 @@ export class TenantsService {
       throw new BadRequestException('User already belongs to this tenant');
     }
 
-    const membership = await this.membershipsRepository.save({
-      tenantId,
-      userId: user.id,
-      roleId: role.id,
-      role: role.code,
-      isActive: input.isActive ?? true,
-      ...resolveTenantMembershipAccess(tenant.plan, role.permissions),
-    });
+    let membership;
+    try {
+      this.logger.log(`Creating membership for tenant=${tenantId} user=${user.id} role=${role.code}`);
+      membership = await this.membershipsRepository.save({
+        tenantId,
+        userId: user.id,
+        roleId: role.id,
+        role: role.code,
+        isActive: input.isActive ?? true,
+        ...resolveTenantMembershipAccess(tenant.plan, role.permissions),
+      });
+      this.logger.log(`Created membership ${membership.id}`);
+    } catch (err) {
+      this.logger.error('Error creating membership', err as any);
+      throw err;
+    }
 
     if (generatedPassword) {
       await this.mailService.sendWelcomeEmail({
@@ -547,6 +588,8 @@ export class TenantsService {
   }
 
   async updateMembership(membershipId: string, tenantId: string, input: UpdateTenantMembershipDto) {
+    await this.ensureSystemRoles(tenantId);
+
     const membership = await this.membershipsRepository.findOne({
       where: { id: membershipId, tenantId },
       relations: ['user', 'roleDefinition'],
@@ -579,6 +622,7 @@ export class TenantsService {
     if (resolvedRole) {
       membership.roleId = resolvedRole.id;
       membership.role = resolvedRole.code;
+      membership.roleDefinition = resolvedRole;
     }
 
     Object.assign(membership, {
@@ -593,8 +637,20 @@ export class TenantsService {
       membership.permissions = access.permissions.length > 0 ? access.permissions : null;
     }
 
-    await this.usersRepository.save(membership.user);
-    return this.membershipsRepository.save(membership);
+    try {
+      this.logger.log(`Saving user ${membership.user.id} and membership ${membership.id}`);
+      await this.usersRepository.save(membership.user);
+      const savedMembership = await this.membershipsRepository.save(membership);
+      this.logger.log(`Saved membership ${savedMembership.id}`);
+
+      return this.membershipsRepository.findOne({
+        where: { id: membership.id },
+        relations: ['user', 'roleDefinition'],
+      });
+    } catch (err) {
+      this.logger.error('Error saving membership/user', err as any);
+      throw err;
+    }
   }
 
   async resetMembershipPassword(membershipId: string, tenantId: string) {
@@ -642,24 +698,51 @@ export class TenantsService {
   }
 
   async ensureDefaultRole(tenantId: string) {
-    const existing = await this.rolesRepository.findOne({
-      where: { tenantId, code: ADMINISTRATOR_ROLE_CODE },
-    });
+    const roles = await this.ensureSystemRoles(tenantId);
+    const adminRole = roles.find((role) => role.code === ADMINISTRATOR_ROLE_CODE);
 
-    if (existing) {
-      return existing;
+    if (!adminRole) {
+      throw new NotFoundException('Default tenant role not found');
     }
 
-    const definition = DEFAULT_TENANT_ROLE_DEFINITIONS[0];
-    return this.rolesRepository.save({
-      tenantId,
-      code: definition.code,
-      name: definition.name,
-      description: definition.description,
-      isSystem: true,
-      isActive: true,
-      permissions: [...definition.permissions],
+    return adminRole;
+  }
+
+  async ensureSystemRoles(tenantId: string) {
+    const existingRoles = await this.rolesRepository.find({
+      where: { tenantId },
     });
+    const savedRoles: TenantRoleEntity[] = [];
+
+    for (const definition of DEFAULT_TENANT_ROLE_DEFINITIONS) {
+      const existingRole = existingRoles.find((role) => role.code === definition.code);
+      const role = existingRole ?? this.rolesRepository.create({
+        tenantId,
+        code: definition.code,
+      });
+
+      const roleChanged =
+        !existingRole
+        || role.name !== definition.name
+        || role.description !== definition.description
+        || role.isSystem !== true
+        || role.isActive !== true
+        || !this.arraysAreEqual(role.permissions, definition.permissions);
+
+      if (!roleChanged) {
+        savedRoles.push(role);
+        continue;
+      }
+
+      role.name = definition.name;
+      role.description = definition.description;
+      role.isSystem = true;
+      role.isActive = true;
+      role.permissions = [...definition.permissions];
+      savedRoles.push(await this.rolesRepository.save(role));
+    }
+
+    return savedRoles;
   }
 
   private async resolveTenantPlanAccess(tenantId: string) {
