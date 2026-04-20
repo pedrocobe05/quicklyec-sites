@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 import {
   AdminUserEntity,
   SitePageEntity,
+  StaffEntity,
   TenantBrandingEntity,
   TenantDomainEntity,
   TenantEntity,
@@ -27,9 +28,11 @@ import {
   ADMINISTRATOR_ROLE_CODE,
   DEFAULT_TENANT_ROLE_DEFINITIONS,
   IMMUTABLE_SYSTEM_TENANT_ROLE_CODES,
+  STAFF_ROLE_CODE,
   getPlanAccessDefinition,
   getPlanMetadata,
   intersectTenantModules,
+  mergeStoredPlanModulesWithCanonical,
   normalizePlanCode,
   resolveTenantMembershipAccess,
 } from './tenant-access.constants';
@@ -57,9 +60,47 @@ export class TenantsService {
     private readonly rolesRepository: Repository<TenantRoleEntity>,
     @InjectRepository(SubscriptionPlanEntity)
     private readonly plansRepository: Repository<SubscriptionPlanEntity>,
+    @InjectRepository(StaffEntity)
+    private readonly staffRepository: Repository<StaffEntity>,
     private readonly mailService: MailService,
     private readonly filesService: FilesService,
   ) {}
+
+  private async assertLinkedStaffIdForTenant(
+    tenantId: string,
+    linkedStaffId: string | null | undefined,
+    options?: { exceptMembershipId?: string },
+  ): Promise<string> {
+    const trimmed = typeof linkedStaffId === 'string' ? linkedStaffId.trim() : '';
+    if (!trimmed) {
+      throw new BadRequestException('El rol Staff requiere vincular un profesional de la empresa.');
+    }
+    const staff = await this.staffRepository.findOne({ where: { id: trimmed, tenantId } });
+    if (!staff) {
+      throw new BadRequestException('Profesional no encontrado en esta empresa.');
+    }
+    const existing = await this.membershipsRepository.findOne({
+      where: { tenantId, linkedStaffId: staff.id },
+    });
+    if (existing && existing.id !== options?.exceptMembershipId) {
+      throw new BadRequestException('Ese profesional ya tiene un usuario del panel vinculado en esta empresa.');
+    }
+    return staff.id;
+  }
+
+  /** Índice único (tenantId, linkedStaffId): carrera entre peticiones o bypass de validación. */
+  private rethrowIfMembershipLinkedStaffUniqueConflict(err: unknown): never {
+    if (err instanceof QueryFailedError) {
+      const d = err.driverError as { code?: string; detail?: string; constraint?: string } | undefined;
+      if (d?.code === '23505') {
+        const hint = `${d.detail ?? ''} ${d.constraint ?? ''} ${err.message}`;
+        if (hint.includes('linkedStaff') || hint.includes('linked_staff')) {
+          throw new BadRequestException('Ese profesional ya tiene un usuario del panel vinculado en esta empresa.');
+        }
+      }
+    }
+    throw err;
+  }
 
   normalizeHost(host: string) {
     return host.toLowerCase().trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
@@ -143,7 +184,7 @@ export class TenantsService {
       throw new NotFoundException('Tenant not found');
     }
 
-    const [settings, branding, domains, planDefinition, membership] = await Promise.all([
+    const [settings, branding, domains, planDefinition, membership, settingsViewer] = await Promise.all([
       this.settingsRepository.findOne({ where: { tenantId } }),
       this.brandingRepository.findOne({ where: { tenantId } }),
       this.domainsRepository.find({ where: { tenantId }, order: { isPrimary: 'DESC', domain: 'ASC' } }),
@@ -154,26 +195,34 @@ export class TenantsService {
             relations: ['roleDefinition'],
           })
         : Promise.resolve(null),
+      userId
+        ? this.usersRepository.findOne({ where: { id: userId }, select: ['id', 'isPlatformAdmin'] })
+        : Promise.resolve(null),
     ]);
+    const viewerIsPlatformAdmin = Boolean(settingsViewer?.isPlatformAdmin);
 
     const normalizedPlanCode = normalizePlanCode(tenant.plan);
     const fallbackPlanDefinition = getPlanAccessDefinition(normalizedPlanCode);
-    const planModules = planDefinition?.tenantModules?.length
-      ? planDefinition.tenantModules
-      : fallbackPlanDefinition.modules;
-    const rolePermissions = membership?.roleDefinition?.permissions ?? [];
+    const planModules = mergeStoredPlanModulesWithCanonical(
+      planDefinition?.tenantModules?.length ? planDefinition.tenantModules : undefined,
+      normalizedPlanCode,
+    );
+    const rolePermissions = membership?.roleDefinition?.permissions ?? membership?.permissions ?? [];
     const effectiveModules = membership ? intersectTenantModules(planModules, rolePermissions) : planModules;
     const [resolvedLogoUrl, resolvedFaviconUrl] = await Promise.all([
       this.filesService.resolveStoredReference(branding?.logoUrl, tenantId),
       this.filesService.resolveStoredReference(branding?.faviconUrl, tenantId),
     ]);
 
+    const settingsPayload =
+      settings && !viewerIsPlatformAdmin ? { ...settings, mailConfig: null } : settings;
+
     return {
       tenant: {
         ...tenant,
         plan: normalizedPlanCode,
       },
-      settings,
+      settings: settingsPayload,
       branding: branding
         ? {
             ...branding,
@@ -204,6 +253,7 @@ export class TenantsService {
         ? {
             id: membership.id,
             roleId: membership.roleId,
+            linkedStaffId: membership.linkedStaffId,
             role: membership.roleDefinition
               ? {
                   id: membership.roleDefinition.id,
@@ -413,12 +463,34 @@ export class TenantsService {
     return { success: true };
   }
 
+  /**
+   * Usuarios de consola no pueden pertenecer a dos empresas; los de plataforma no se asignan como miembros.
+   */
+  async assertUserCanJoinTenantAsMember(user: AdminUserEntity, tenantId: string) {
+    if (user.isPlatformAdmin) {
+      throw new BadRequestException('Los usuarios de plataforma no se agregan como miembros de empresa.');
+    }
+    if (user.tenantId && user.tenantId !== tenantId) {
+      throw new BadRequestException('Este usuario ya está asignado a otra empresa.');
+    }
+    const otherMemberships = await this.membershipsRepository.find({ where: { userId: user.id } });
+    if (otherMemberships.some((m) => m.tenantId !== tenantId)) {
+      throw new BadRequestException('Este usuario ya pertenece a otra empresa.');
+    }
+  }
+
+  /** Usuarios de consola del tenant (excluye cuentas de super admin de plataforma). */
   listMemberships(tenantId: string) {
-    return this.ensureSystemRoles(tenantId).then(() => this.membershipsRepository.find({
-      where: { tenantId },
-      relations: ['user', 'roleDefinition'],
-      order: { role: 'ASC' },
-    }));
+    return this.ensureSystemRoles(tenantId).then(() =>
+      this.membershipsRepository
+        .createQueryBuilder('m')
+        .innerJoinAndSelect('m.user', 'u')
+        .leftJoinAndSelect('m.roleDefinition', 'rd')
+        .where('m.tenantId = :tenantId', { tenantId })
+        .andWhere('u.isPlatformAdmin = :isPlatformAdmin', { isPlatformAdmin: false })
+        .orderBy('m.role', 'ASC')
+        .getMany(),
+    );
   }
 
   listRoles(tenantId: string) {
@@ -504,9 +576,13 @@ export class TenantsService {
 
     const adminUsersLimit = plan.limits.admin_users;
     if (typeof adminUsersLimit === 'number') {
-      const membershipsCount = await this.membershipsRepository.count({
-        where: { tenantId, isActive: true },
-      });
+      const membershipsCount = await this.membershipsRepository
+        .createQueryBuilder('m')
+        .innerJoin('m.user', 'u')
+        .where('m.tenantId = :tenantId', { tenantId })
+        .andWhere('m.isActive = :active', { active: true })
+        .andWhere('u.isPlatformAdmin = :ipa', { ipa: false })
+        .getCount();
       if (membershipsCount >= adminUsersLimit) {
         throw new BadRequestException('This subscription plan reached the maximum number of users');
       }
@@ -529,9 +605,11 @@ export class TenantsService {
           isActive: true,
           isPlatformAdmin: false,
           platformRole: 'tenant_admin',
+          tenantId,
         });
         this.logger.log(`Created user ${user.id}`);
       } else {
+        await this.assertUserCanJoinTenantAsMember(user, tenantId);
         this.logger.log(`Updating existing user ${user.id}`);
         user.fullName = input.fullName.trim();
         user.email = input.email.toLowerCase().trim();
@@ -549,6 +627,11 @@ export class TenantsService {
       throw new BadRequestException('User already belongs to this tenant');
     }
 
+    let linkedStaffId: string | null = null;
+    if (role.code === STAFF_ROLE_CODE) {
+      linkedStaffId = await this.assertLinkedStaffIdForTenant(tenantId, input.linkedStaffId);
+    }
+
     let membership;
     try {
       this.logger.log(`Creating membership for tenant=${tenantId} user=${user.id} role=${role.code}`);
@@ -557,13 +640,19 @@ export class TenantsService {
         userId: user.id,
         roleId: role.id,
         role: role.code,
+        linkedStaffId,
         isActive: input.isActive ?? true,
         ...resolveTenantMembershipAccess(tenant.plan, role.permissions),
       });
       this.logger.log(`Created membership ${membership.id}`);
     } catch (err) {
       this.logger.error('Error creating membership', err as any);
-      throw err;
+      this.rethrowIfMembershipLinkedStaffUniqueConflict(err);
+    }
+
+    if (!user.isPlatformAdmin) {
+      await this.usersRepository.update({ id: user.id }, { tenantId });
+      user.tenantId = tenantId;
     }
 
     if (generatedPassword) {
@@ -582,6 +671,7 @@ export class TenantsService {
         id: user.id,
         fullName: user.fullName,
         email: user.email,
+        tenantId: user.tenantId,
       },
       generatedPassword,
     };
@@ -615,14 +705,27 @@ export class TenantsService {
       membership.user.fullName = input.fullName;
     }
 
-    const resolvedRole = input.roleId
-      ? await this.getTenantRoleOrThrow(tenantId, input.roleId)
+    const trimmedRoleId = typeof input.roleId === 'string' ? input.roleId.trim() : '';
+    const resolvedRole = trimmedRoleId
+      ? await this.getTenantRoleOrThrow(tenantId, trimmedRoleId)
       : membership.roleDefinition;
 
     if (resolvedRole) {
       membership.roleId = resolvedRole.id;
       membership.role = resolvedRole.code;
       membership.roleDefinition = resolvedRole;
+    }
+
+    const effectiveCode =
+      membership.roleDefinition?.code ?? membership.role;
+    if (effectiveCode === STAFF_ROLE_CODE) {
+      const raw =
+        input.linkedStaffId !== undefined ? input.linkedStaffId : membership.linkedStaffId;
+      membership.linkedStaffId = await this.assertLinkedStaffIdForTenant(tenantId, raw, {
+        exceptMembershipId: membership.id,
+      });
+    } else {
+      membership.linkedStaffId = null;
     }
 
     Object.assign(membership, {
@@ -649,7 +752,7 @@ export class TenantsService {
       });
     } catch (err) {
       this.logger.error('Error saving membership/user', err as any);
-      throw err;
+      this.rethrowIfMembershipLinkedStaffUniqueConflict(err);
     }
   }
 

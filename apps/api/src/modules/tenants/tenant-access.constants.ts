@@ -64,6 +64,10 @@ export const TENANT_PERMISSION_CATALOG = [
 export const ADMINISTRATOR_ROLE_CODE = 'administrator';
 export const STAFF_ROLE_CODE = 'staff';
 
+/**
+ * Rol operativo: agenda, reservas y clientes filtrados al `linkedStaffId`.
+ * `services.view` y `staff.view` (solo lectura) permiten cargar servicios y la ficha propia en el panel al crear reservas.
+ */
 export const STAFF_ROLE_PERMISSIONS = [
   'services.view',
   'staff.view',
@@ -110,7 +114,10 @@ export const PLAN_ACCESS_DEFINITIONS: Record<string, PlanAccessDefinition> = {
     code: 'basic',
     name: 'Básico',
     description: 'Presencia digital inicial con landing profesional y contacto directo.',
-    modules: ['site', 'branding', 'domains', 'settings', 'services'],
+    // Misma cobertura de módulos que Pro: el administrador del tenant ya tiene todos los permisos
+    // del catálogo; effectiveModules = intersección(plan, rol). Sin staff/agenda/etc. aquí el menú
+    // operativo quedaba solo en «Servicios» aunque el rol fuera «Administrador».
+    modules: ['site', 'branding', 'domains', 'settings', 'services', 'staff', 'agenda', 'appointments', 'customers', 'users', 'roles'],
     features: ['whatsapp_cta', 'hosting_included', 'quickly_subdomain'],
     limits: {
       max_pages: 3,
@@ -171,6 +178,22 @@ export function normalizePlanCode(planCode?: string | null) {
 
 export function getPlanAccessDefinition(planCode?: string | null) {
   return PLAN_ACCESS_DEFINITIONS[normalizePlanCode(planCode)] ?? PLAN_ACCESS_DEFINITIONS.basic;
+}
+
+/**
+ * Une `tenantModules` persistidos con la lista canónica del plan en código.
+ * Evita que planes guardados antes de ampliar módulos (agenda, reservas, clientes, etc.)
+ * sigan recortando el menú y `effectiveModules` frente a roles actualizados.
+ */
+export function mergeStoredPlanModulesWithCanonical(
+  storedModules: string[] | null | undefined,
+  planCode?: string | null,
+): string[] {
+  const canonical = getPlanAccessDefinition(planCode).modules;
+  if (!storedModules?.length) {
+    return [...canonical];
+  }
+  return Array.from(new Set([...storedModules, ...canonical]));
 }
 
 export function deriveModulesFromPermissions(permissions: string[]) {

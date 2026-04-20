@@ -15,7 +15,7 @@ Eso significa:
 
 ## Plan Básico
 
-Precio: `$10/mes`
+Precio: `$9.99/mes`
 
 Enfoque:
 
@@ -66,7 +66,7 @@ Sugerencias futuras opcionales:
 
 ## Plan Pro
 
-Precio: `$20/mes`
+Precio: `$14.99/mes`
 
 Enfoque:
 
@@ -93,7 +93,7 @@ Capacidades esperadas:
 
 ## Plan Premium
 
-Precio: `$30/mes`
+Precio: `$19.99/mes`
 
 Enfoque:
 

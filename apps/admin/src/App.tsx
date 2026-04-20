@@ -27,8 +27,12 @@ function TenantTabRedirect({ tab }: { tab: string }) {
   if (!token) return <Navigate to="/login" replace />;
   if (user?.isPlatformAdmin) return <Navigate to="/platform/tenants" replace />;
 
-  const tenantId = user?.memberships?.[0]?.tenant?.id;
-  return tenantId ? <Navigate to={`/platform/tenants/${tenantId}?tab=${tab}`} replace /> : <Navigate to="/" replace />;
+  const qs = new URLSearchParams();
+  if (tab && tab !== 'general') {
+    qs.set('tab', tab);
+  }
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return <Navigate to={`/app${suffix}`} replace />;
 }
 
 export default function App() {
@@ -41,7 +45,11 @@ export default function App() {
       <Route path="/platform/roles" element={<PlatformRolesPage />} />
       <Route path="/platform/tenants" element={<PlatformTenantsPage />} />
       <Route path="/platform/tenants/:tenantId" element={<TenantDetailPage />} />
+      <Route path="/app" element={<TenantDetailPage />} />
       <Route path="/platform/settings" element={<PlatformSettingsPage />} />
+      <Route path="/users" element={<TenantTabRedirect tab="users" />} />
+      <Route path="/roles" element={<TenantTabRedirect tab="roles" />} />
+      <Route path="/email" element={<TenantTabRedirect tab="email" />} />
       <Route path="/site" element={<TenantTabRedirect tab="site" />} />
       <Route path="/branding" element={<TenantTabRedirect tab="branding" />} />
       <Route path="/services" element={<TenantTabRedirect tab="services" />} />

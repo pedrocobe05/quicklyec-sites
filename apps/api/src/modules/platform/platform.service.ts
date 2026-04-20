@@ -405,6 +405,7 @@ export class PlatformService {
       isActive: input.isActive ?? true,
       isPlatformAdmin: true,
       platformRole: role.code,
+      tenantId: null,
     });
   }
 
@@ -689,10 +690,14 @@ export class PlatformService {
         isActive: true,
         isPlatformAdmin: false,
         platformRole: 'tenant_admin',
+        tenantId: tenant.id,
       });
-    } else if (input.fullName && user.fullName !== input.fullName) {
-      user.fullName = input.fullName;
-      await this.usersRepository.save(user);
+    } else {
+      await this.tenantsService.assertUserCanJoinTenantAsMember(user, tenant.id);
+      if (input.fullName && user.fullName !== input.fullName) {
+        user.fullName = input.fullName;
+        await this.usersRepository.save(user);
+      }
     }
 
     const existingMembership = await this.membershipsRepository.findOne({
@@ -727,6 +732,11 @@ export class PlatformService {
       ...resolveTenantMembershipAccess(tenant.plan, resolvedRole.permissions),
     });
 
+    if (!user.isPlatformAdmin) {
+      await this.usersRepository.update({ id: user.id }, { tenantId: tenant.id });
+      user.tenantId = tenant.id;
+    }
+
     if (generatedPassword) {
       await this.mailService.sendWelcomeEmail({
         to: user.email,
@@ -743,6 +753,7 @@ export class PlatformService {
         id: user.id,
         fullName: user.fullName,
         email: user.email,
+        tenantId: user.tenantId,
       },
       generatedPassword,
     };

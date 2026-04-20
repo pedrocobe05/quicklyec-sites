@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Idempotent } from 'src/core/decorators/idempotent.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/jwt-auth.guard';
@@ -7,6 +7,7 @@ import { TenantMembershipGuard } from 'src/modules/auth/tenant-membership.guard'
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { ServicesService } from './services.service';
+import { assertNotTenantOperationalStaff, type RequestWithTenantMembership } from '../auth/tenant-staff-scope.util';
 
 @ApiTags('Services')
 @TenantModuleAccess('services')
@@ -25,7 +26,8 @@ export class ServicesController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @Post()
   @Idempotent()
-  create(@Body() input: CreateServiceDto) {
+  create(@Body() input: CreateServiceDto, @Req() req: RequestWithTenantMembership) {
+    assertNotTenantOperationalStaff(req, 'Solo el administrador de la empresa puede gestionar el catálogo de servicios.');
     return this.servicesService.create(input);
   }
 
@@ -37,7 +39,9 @@ export class ServicesController {
     @Param('serviceId') serviceId: string,
     @Query('tenantId') tenantId: string,
     @Body() input: UpdateServiceDto,
+    @Req() req: RequestWithTenantMembership,
   ) {
+    assertNotTenantOperationalStaff(req, 'Solo el administrador de la empresa puede gestionar el catálogo de servicios.');
     return this.servicesService.update(serviceId, tenantId, input);
   }
 
@@ -45,7 +49,8 @@ export class ServicesController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @Delete(':serviceId')
   @Idempotent()
-  remove(@Param('serviceId') serviceId: string, @Query('tenantId') tenantId: string) {
+  remove(@Param('serviceId') serviceId: string, @Query('tenantId') tenantId: string, @Req() req: RequestWithTenantMembership) {
+    assertNotTenantOperationalStaff(req, 'Solo el administrador de la empresa puede gestionar el catálogo de servicios.');
     return this.servicesService.remove(serviceId, tenantId);
   }
 }

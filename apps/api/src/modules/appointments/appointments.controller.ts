@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Idempotent } from 'src/core/decorators/idempotent.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/jwt-auth.guard';
@@ -9,6 +9,7 @@ import { CreatePublicAppointmentDto } from './dto/create-public-appointment.dto'
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { UpdateAppointmentStatusDto } from './dto/update-appointment-status.dto';
 import { AppointmentsService } from './appointments.service';
+import { getStaffScopeIdOrThrow, type RequestWithTenantMembership } from '../auth/tenant-staff-scope.util';
 
 @ApiTags('Appointments')
 @TenantModuleAccess('appointments')
@@ -19,8 +20,9 @@ export class AppointmentsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @Get()
-  listAdmin(@Query('tenantId') tenantId: string) {
-    return this.appointmentsService.listByTenant(tenantId);
+  listAdmin(@Query('tenantId') tenantId: string, @Req() req: RequestWithTenantMembership) {
+    const scope = getStaffScopeIdOrThrow(req);
+    return this.appointmentsService.listByTenant(tenantId, scope);
   }
 
   @ApiBearerAuth()
@@ -30,8 +32,10 @@ export class AppointmentsController {
   createAdmin(
     @Query('tenantId') tenantId: string,
     @Body() input: CreateAppointmentDto,
+    @Req() req: RequestWithTenantMembership,
   ) {
-    return this.appointmentsService.createAdminAppointment(tenantId, input);
+    const scope = getStaffScopeIdOrThrow(req);
+    return this.appointmentsService.createAdminAppointment(tenantId, input, scope);
   }
 
   @ApiBearerAuth()
@@ -42,8 +46,10 @@ export class AppointmentsController {
     @Param('appointmentId') appointmentId: string,
     @Query('tenantId') tenantId: string,
     @Body() input: UpdateAppointmentStatusDto,
+    @Req() req: RequestWithTenantMembership,
   ) {
-    return this.appointmentsService.updateStatus(appointmentId, tenantId, input.status);
+    const scope = getStaffScopeIdOrThrow(req);
+    return this.appointmentsService.updateStatus(appointmentId, tenantId, input.status, scope);
   }
 
   @ApiBearerAuth()
@@ -53,8 +59,10 @@ export class AppointmentsController {
   reversePayphone(
     @Param('appointmentId') appointmentId: string,
     @Query('tenantId') tenantId: string,
+    @Req() req: RequestWithTenantMembership,
   ) {
-    return this.appointmentsService.reversePayphonePayment(appointmentId, tenantId);
+    const scope = getStaffScopeIdOrThrow(req);
+    return this.appointmentsService.reversePayphonePayment(appointmentId, tenantId, scope);
   }
 
   @ApiBearerAuth()
@@ -65,8 +73,10 @@ export class AppointmentsController {
     @Param('appointmentId') appointmentId: string,
     @Query('tenantId') tenantId: string,
     @Body() input: UpdateAppointmentDto,
+    @Req() req: RequestWithTenantMembership,
   ) {
-    return this.appointmentsService.updateAppointment(appointmentId, tenantId, input);
+    const scope = getStaffScopeIdOrThrow(req);
+    return this.appointmentsService.updateAppointment(appointmentId, tenantId, input, scope);
   }
 
   @Get('availability')

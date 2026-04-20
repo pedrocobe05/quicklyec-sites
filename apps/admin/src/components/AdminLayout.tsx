@@ -1,5 +1,4 @@
 import { PropsWithChildren, useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   HiBars3,
@@ -21,17 +20,30 @@ type NavItem = {
   to: string;
   label: string;
   module?: string;
-  matchPath?: string;
+};
+
+/** Ítem ya resuelto a ruta de React Router (puede limpiar query en tenant). */
+type SidebarNavItem = {
+  to: string | { pathname: string; search?: string };
+  label: string;
+  module?: string;
+  matchPath: string;
 };
 
 type NavGroup = {
   id: string;
   title: string;
-  items: NavItem[];
+  items: SidebarNavItem[];
 };
 
 const baseNavItems: NavItem[] = [
   { to: '/', label: 'Inicio' },
+  { to: '/branding', label: 'Marca', module: 'branding' },
+  { to: '/site', label: 'Sitio web', module: 'site' },
+  { to: '/domains', label: 'Dominios', module: 'domains' },
+  { to: '/users', label: 'Usuarios', module: 'users' },
+  { to: '/roles', label: 'Roles', module: 'roles' },
+  { to: '/email', label: 'Correo', module: 'settings' },
   { to: '/services', label: 'Servicios', module: 'services' },
   { to: '/staff', label: 'Equipo', module: 'staff' },
   { to: '/appointments', label: 'Reservas', module: 'appointments' },
@@ -107,6 +119,22 @@ const sectionMeta: Record<string, { title: string; description: string }> = {
     title: 'Configuración',
     description: 'SEO, contacto y ajustes generales del sitio.',
   },
+  '/users': {
+    title: 'Usuarios',
+    description: 'Usuarios con acceso administrativo a esta empresa.',
+  },
+  '/roles': {
+    title: 'Roles',
+    description: 'Roles y permisos dentro de la empresa.',
+  },
+  '/email': {
+    title: 'Correo',
+    description: 'Configuración de envío de correos.',
+  },
+  '/general': {
+    title: 'General',
+    description: 'Resumen y datos generales de la empresa.',
+  },
 };
 
 interface AdminLayoutProps extends PropsWithChildren {
@@ -117,10 +145,15 @@ interface AdminLayoutProps extends PropsWithChildren {
   currentPath?: string;
 }
 
+/** Stable default so `?? []` in parents does not churn referential equality every render. */
+const EMPTY_MODULES: string[] = [];
+
 function GroupIcon({ id }: { id: string }) {
   const iconClass = 'h-4 w-4';
   const icons: Record<string, JSX.Element> = {
     general: <HiHome className={iconClass} />,
+    presence: <HiSquares2X2 className={iconClass} />,
+    administration: <HiUsers className={iconClass} />,
     operations: <HiRectangleStack className={iconClass} />,
     site: <HiSquares2X2 className={iconClass} />,
     platform: <HiUsers className={iconClass} />,
@@ -132,6 +165,10 @@ function GroupIcon({ id }: { id: string }) {
       {icons[id] ?? <HiDocumentText className={iconClass} />}
     </span>
   );
+}
+
+function logicalNavPath(item: SidebarNavItem): string {
+  return item.matchPath;
 }
 
 function Chevron({ open }: { open: boolean }) {
@@ -153,7 +190,7 @@ function Chevron({ open }: { open: boolean }) {
 
 export function AdminLayout({
   children,
-  availableModules = [],
+  availableModules = EMPTY_MODULES,
   isPlatformAdmin = false,
   activeTenant = null,
   tenantRoutePrefix = '',
@@ -177,23 +214,28 @@ export function AdminLayout({
 
   const canSeePlatform = isPlatformAdmin || parsedUser?.isPlatformAdmin;
   const resolvedPath = currentPath ?? location.pathname;
-  const filteredItems = useMemo(
-    () =>
-      canSeePlatform
-        ? platformNavItems
-        : baseNavItems.filter((item) => !item.module || availableModules.includes(item.module)),
-    [availableModules, canSeePlatform],
-  );
-  const resolvePath = (path: string) => {
+  const modulesKey = [...availableModules].sort().join('|');
+  const filteredItems = useMemo(() => {
+    if (canSeePlatform) {
+      return platformNavItems;
+    }
+    const allow = new Set(modulesKey.length > 0 ? modulesKey.split('|') : []);
+    return baseNavItems.filter((item) => !item.module || allow.has(item.module));
+  }, [canSeePlatform, modulesKey]);
+
+  /** Destino del NavLink; en consola tenant, «Inicio» limpia `?tab=`; `/settings` abre tab general. */
+  const resolveNavTo = (path: string): string | { pathname: string; search?: string } => {
     if (path.startsWith('/platform')) {
       return path;
     }
-
     if (!tenantRoutePrefix) {
       return path;
     }
-
-    return path === '/' ? '/' : `${tenantRoutePrefix}?tab=${path.slice(1)}`;
+    if (path === '/') {
+      return { pathname: tenantRoutePrefix, search: '' };
+    }
+    const tab = path === '/settings' ? 'general' : path.slice(1);
+    return `${tenantRoutePrefix}?tab=${tab}`;
   };
 
   const navigationGroups: NavGroup[] = useMemo(
@@ -203,10 +245,18 @@ export function AdminLayout({
           {
             id: 'platform',
             title: 'Plataforma',
-            items: filteredItems.map((item) => ({ ...item, to: item.to, matchPath: item.to })),
+            items: filteredItems.map((item) => ({
+              ...item,
+              to: item.to,
+              matchPath: item.to,
+            })),
           },
         ];
       }
+
+      const presencePaths = ['/branding', '/site', '/domains'];
+      const adminPaths = ['/users', '/roles', '/email'];
+      const operationsPaths = ['/services', '/staff', '/appointments', '/customers', '/agenda'];
 
       return [
         {
@@ -214,16 +264,40 @@ export function AdminLayout({
           title: 'General',
           items: filteredItems
             .filter((item) => item.to === '/')
-            .map((item) => ({ ...item, to: resolvePath(item.to), matchPath: item.to })),
+            .map((item) => ({ ...item, to: resolveNavTo('/'), matchPath: '/' })),
+        },
+        {
+          id: 'presence',
+          title: 'Presencia',
+          items: filteredItems
+            .filter((item) => presencePaths.includes(item.to))
+            .map((item) => ({
+              ...item,
+              to: resolveNavTo(item.to),
+              matchPath: item.to,
+            })),
+        },
+        {
+          id: 'administration',
+          title: 'Administración',
+          items: filteredItems
+            .filter((item) => adminPaths.includes(item.to))
+            .map((item) => ({
+              ...item,
+              to: resolveNavTo(item.to),
+              matchPath: item.to,
+            })),
         },
         {
           id: 'operations',
           title: 'Operación',
           items: filteredItems
-            .filter((item) =>
-              ['/services', '/staff', '/appointments', '/customers', '/agenda'].includes(item.to),
-            )
-            .map((item) => ({ ...item, to: resolvePath(item.to), matchPath: item.to })),
+            .filter((item) => operationsPaths.includes(item.to))
+            .map((item) => ({
+              ...item,
+              to: resolveNavTo(item.to),
+              matchPath: item.to,
+            })),
         },
       ].filter((group) => group.items.length > 0);
     },
@@ -236,9 +310,24 @@ export function AdminLayout({
   const currentPage = sectionMeta[normalizedResolvedPath] ?? sectionMeta['/'];
   const tenantLabel = activeTenant?.name ?? (canSeePlatform ? 'Plataforma global' : 'Sin empresa activa');
 
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams('');
+  const currentTab = tenantRoutePrefix ? (searchParams.get('tab') ?? 'general') : searchParams.get('tab');
 
-  
+  const isTenantNavItemActive = (matchPath: string) => {
+    if (!tenantRoutePrefix) {
+      return matchPath === '/'
+        ? normalizedResolvedPath === '/'
+        : normalizedResolvedPath.startsWith(matchPath);
+    }
+
+    if (matchPath === '/') {
+      return currentTab === 'general';
+    }
+
+    return matchPath.slice(1) === currentTab;
+  };
+
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setMobileSidebarOpen(false);
@@ -246,31 +335,55 @@ export function AdminLayout({
 
   useEffect(() => {
     setOpenGroups((current) => {
+      // Initialize openGroups only when empty to avoid overwriting user's
+      // manual toggles when the parent re-renders (tenant page updates).
+      const hasCurrent = Object.keys(current).length > 0;
+
+      // When viewing tenant-scoped routes, keep all groups open by default,
+      // but only set this once on initial mount.
+      if (tenantRoutePrefix && !hasCurrent) {
+        return Object.fromEntries(navigationGroups.map((group) => [group.id, true]));
+      }
+
       const next = Object.fromEntries(
         navigationGroups.map((group) => [group.id, current[group.id] ?? false]),
       );
-      const currentKeys = Object.keys(current);
-      const nextKeys = Object.keys(next);
 
-      if (
-        currentKeys.length === nextKeys.length &&
-        nextKeys.every((key) => current[key] === next[key])
-      ) {
-        return current;
+      if (!hasCurrent) {
+        return next;
       }
 
-      return next;
+      const groupIds = new Set(navigationGroups.map((g) => g.id));
+      let changed = false;
+      const merged: Record<string, boolean> = { ...current };
+
+      Object.keys(merged).forEach((id) => {
+        if (!groupIds.has(id)) {
+          delete merged[id];
+          changed = true;
+        }
+      });
+
+      navigationGroups.forEach((group) => {
+        if (merged[group.id] === undefined) {
+          merged[group.id] = Boolean(tenantRoutePrefix);
+          changed = true;
+        }
+      });
+
+      return changed ? merged : current;
     });
-  }, [navigationGroups]);
+  }, [navigationGroups, tenantRoutePrefix]);
 
   useEffect(() => {
     const activeGroupIds = navigationGroups
       .filter((group) =>
-        group.items.some((item) =>
-          (item.matchPath ?? item.to) === '/'
+        group.items.some((item) => {
+          const p = logicalNavPath(item);
+          return p === '/'
             ? normalizedResolvedPath === '/'
-            : normalizedResolvedPath.startsWith(item.matchPath ?? item.to),
-        ),
+            : normalizedResolvedPath.startsWith(p);
+        }),
       )
       .map((group) => group.id);
 
@@ -330,14 +443,11 @@ export function AdminLayout({
                 <div className="space-y-0.5 pl-8 pt-0.5">
                   {group.items.map((item) => (
                     <NavLink
-                      key={item.to}
+                      key={item.matchPath}
                       to={item.to}
                       onClick={() => setMobileSidebarOpen(false)}
                       className={() => {
-                        const matchPath = item.matchPath ?? item.to;
-                        const isActive = matchPath === '/'
-                          ? normalizedResolvedPath === '/'
-                          : normalizedResolvedPath.startsWith(matchPath);
+                        const isActive = isTenantNavItemActive(item.matchPath);
 
                         return cn(
                           'group block rounded-lg px-3 py-2 text-[0.9rem] transition-all duration-200',
@@ -348,10 +458,7 @@ export function AdminLayout({
                       }}
                     >
                       {(() => {
-                        const matchPath = item.matchPath ?? item.to;
-                        const isActive = matchPath === '/'
-                          ? normalizedResolvedPath === '/'
-                          : normalizedResolvedPath.startsWith(matchPath);
+                        const isActive = isTenantNavItemActive(item.matchPath);
 
                         return (
                           <div className="flex items-center gap-2.5">
@@ -402,7 +509,7 @@ export function AdminLayout({
         </div>
       </>
     ),
-    [navigationGroups, normalizedResolvedPath, openGroups, parsedUser?.email, parsedUser?.fullName, tenantLabel],
+    [currentTab, navigationGroups, normalizedResolvedPath, openGroups, parsedUser?.email, parsedUser?.fullName, tenantLabel, tenantRoutePrefix],
   );
 
   return (

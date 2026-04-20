@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsBoolean, IsEmail, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+
+function emptyToUndefined(value: unknown) {
+  if (value === '' || value === null || value === undefined) {
+    return undefined;
+  }
+  return typeof value === 'string' ? value.trim() : value;
+}
 
 export class CreateTenantMembershipDto {
   @ApiProperty()
@@ -19,8 +27,16 @@ export class CreateTenantMembershipDto {
   password?: string;
 
   @ApiProperty()
-  @IsString()
+  @Transform(({ value }) => emptyToUndefined(value))
+  @IsUUID()
   roleId!: string;
+
+  /** Obligatorio si el rol es `staff`: id del profesional en esta empresa. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => emptyToUndefined(value))
+  @IsUUID()
+  linkedStaffId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

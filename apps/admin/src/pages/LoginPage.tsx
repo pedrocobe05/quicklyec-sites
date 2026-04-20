@@ -26,6 +26,17 @@ export function LoginPage() {
   );
 
   if (token) {
+    try {
+      const u = JSON.parse(localStorage.getItem('qs_user') ?? 'null') as {
+        isPlatformAdmin?: boolean;
+        memberships?: Array<{ tenant?: { id?: string } }>;
+      } | null;
+      if (u && !u.isPlatformAdmin && u.memberships?.[0]?.tenant?.id) {
+        return <Navigate to="/app" replace />;
+      }
+    } catch {
+      /* ignore */
+    }
     return <Navigate to="/" replace />;
   }
 
@@ -42,7 +53,12 @@ export function LoginPage() {
       localStorage.setItem('qs_refresh_token', response.refreshToken);
       localStorage.setItem('qs_user', JSON.stringify(response.user));
       notify('Sesión iniciada correctamente.', 'success');
-      navigate('/');
+      const loggedUser = response.user as { isPlatformAdmin?: boolean; memberships?: Array<{ tenant?: { id?: string } }> };
+      if (!loggedUser?.isPlatformAdmin && loggedUser?.memberships?.[0]?.tenant?.id) {
+        navigate('/app');
+      } else {
+        navigate('/');
+      }
     } catch (err) {
       notify((err as Error).message, 'error');
     } finally {

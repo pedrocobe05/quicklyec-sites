@@ -34,6 +34,10 @@ export class AdminUserEntity {
   @Column({ length: 40, default: 'tenant_admin' })
   platformRole!: string;
 
+  /** Empresa de consola para usuarios no globales; null en super admins de plataforma. */
+  @Column({ type: 'uuid', nullable: true })
+  tenantId!: string | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

@@ -48,9 +48,12 @@ export class StaffService {
     return Promise.all(staff.map((member) => this.resolveStaffAvatar(member)));
   }
 
-  async findAdminByTenant(tenantId: string) {
+  /**
+   * @param scopedStaffId Si viene (usuario consola con rol `staff`), solo ese profesional del tenant.
+   */
+  async findAdminByTenant(tenantId: string, scopedStaffId?: string) {
     const staff = await this.staffRepository.find({
-      where: { tenantId },
+      where: scopedStaffId ? { tenantId, id: scopedStaffId } : { tenantId },
       relations: { staffServices: { service: true } },
       order: { name: 'ASC' },
     });

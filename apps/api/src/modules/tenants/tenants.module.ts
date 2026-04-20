@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   AdminUserEntity,
   SitePageEntity,
+  StaffEntity,
   TenantBrandingEntity,
   TenantDomainEntity,
   TenantEntity,
@@ -30,6 +31,7 @@ import { FilesModule } from '../files/files.module';
       TenantRoleEntity,
       AdminUserEntity,
       SubscriptionPlanEntity,
+      StaffEntity,
     ]),
   ],
   controllers: [TenantsController],

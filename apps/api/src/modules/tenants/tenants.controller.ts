@@ -1,7 +1,8 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Idempotent } from 'src/core/decorators/idempotent.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/jwt-auth.guard';
+import { PlatformAdminGuard } from 'src/modules/auth/platform-admin.guard';
 import { TenantModuleAccess } from 'src/modules/auth/tenant-module-access.decorator';
 import { TenantMembershipGuard } from 'src/modules/auth/tenant-membership.guard';
 import { CreateTenantDomainDto } from './dto/create-tenant-domain.dto';
@@ -50,12 +51,21 @@ export class TenantsController {
   @TenantModuleAccess('settings')
   @Patch('settings')
   @Idempotent()
-  updateSettings(@Query('tenantId') tenantId: string, @Body() input: UpdateTenantSettingsDto) {
+  updateSettings(
+    @Req() req: { user?: { isPlatformAdmin?: boolean } },
+    @Query('tenantId') tenantId: string,
+    @Body() input: UpdateTenantSettingsDto,
+  ) {
+    if (input.mailConfig !== undefined && !req.user?.isPlatformAdmin) {
+      throw new ForbiddenException(
+        'Solo los administradores de plataforma pueden configurar el servidor de correo (SMTP).',
+      );
+    }
     return this.tenantsService.updateTenantSettings(tenantId, input);
   }
 
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard, TenantMembershipGuard)
+  @UseGuards(JwtAuthGuard, TenantMembershipGuard, PlatformAdminGuard)
   @TenantModuleAccess('settings')
   @Post('test-email')
   @Idempotent()

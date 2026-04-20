@@ -1,26 +1,7 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
+import { OmitType, PartialType } from '@nestjs/swagger';
+import { CreateTenantMembershipDto } from './create-tenant-membership.dto';
 
-export class UpdateTenantMembershipDto {
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  @MaxLength(160)
-  fullName?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsEmail()
-  @MaxLength(255)
-  email?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  roleId?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
-}
+/** PATCH: mismos campos que alta de usuario, sin contraseña; hereda validación (p. ej. `linkedStaffId` para rol staff). */
+export class UpdateTenantMembershipDto extends PartialType(
+  OmitType(CreateTenantMembershipDto, ['password'] as const),
+) {}

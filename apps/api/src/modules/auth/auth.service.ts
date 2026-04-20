@@ -87,9 +87,11 @@ export class AuthService {
         email: user.email,
         isPlatformAdmin: user.isPlatformAdmin,
         platformRole: user.platformRole,
+        tenantId: user.tenantId,
         memberships: memberships.map((membership) => ({
           id: membership.id,
           roleId: membership.roleId,
+          linkedStaffId: membership.linkedStaffId ?? null,
           role: membership.roleDefinition
             ? {
                 id: membership.roleDefinition.id,

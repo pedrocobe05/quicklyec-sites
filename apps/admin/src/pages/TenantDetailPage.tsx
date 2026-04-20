@@ -1,6 +1,6 @@
 import { SITE_SECTION_CATALOG } from '@quickly-sites/shared';
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AdminLayout } from '../components/AdminLayout';
 import { EditEntityModal, type EditModalState } from '../features/dashboard/components/EditEntityModal';
 import { BrandingSettingsSection } from '../features/tenant/components/BrandingSettingsSection';
@@ -147,6 +147,12 @@ interface TenantProfileResponse {
     isPrimary: boolean;
   }[];
   effectivePermissions?: string[];
+  membership?: {
+    id?: string;
+    roleId?: string | null;
+    linkedStaffId?: string | null;
+    role?: { id?: string; code?: string; name?: string; permissions?: string[] } | null;
+  } | null;
   subscription?: {
     today: string;
     isPending: boolean;
@@ -159,6 +165,7 @@ interface TenantProfileResponse {
 interface TenantMembershipRecord {
   id: string;
   roleId?: string | null;
+  linkedStaffId?: string | null;
   role: string;
   roleName?: string | null;
   isActive: boolean;
@@ -171,6 +178,7 @@ interface TenantMembershipRecord {
 type TenantMembershipApiRecord = {
   id: string;
   roleId?: string | null;
+  linkedStaffId?: string | null;
   role?: string;
   roleDefinition?: { id: string; code: string; name: string } | null;
   isActive: boolean;
@@ -265,15 +273,37 @@ interface ScheduleBlockRecord {
   blockType: string;
 }
 
+/** Códigos de cuenta de consola (`admin_users.platformRole`), no roles de empresa (`tenant_roles`). */
+const PLATFORM_ACCOUNT_ROLE_CODES = new Set(['tenant_admin', 'super_admin']);
+
 function mapTenantMembershipRecord(membership: TenantMembershipApiRecord): TenantMembershipRecord {
+  const def = membership.roleDefinition;
+  const rawCode = def?.code ?? membership.role ?? '';
+  const rawName = def?.name ?? '';
+  const legacyCode =
+    !def && rawCode && PLATFORM_ACCOUNT_ROLE_CODES.has(rawCode) ? '' : rawCode;
+  const roleName =
+    rawName
+    || (!legacyCode ? '' : legacyCode);
   return {
     id: membership.id,
-    roleId: membership.roleId ?? membership.roleDefinition?.id ?? null,
-    role: membership.roleDefinition?.code ?? membership.role ?? '',
-    roleName: membership.roleDefinition?.name ?? membership.role ?? '',
+    roleId: membership.roleId ?? def?.id ?? null,
+    linkedStaffId: membership.linkedStaffId ?? null,
+    role: legacyCode,
+    roleName,
     isActive: membership.isActive,
     user: membership.user,
   };
+}
+
+function tenantMembershipRoleLabel(membership: TenantMembershipRecord): string {
+  if (membership.roleName && !PLATFORM_ACCOUNT_ROLE_CODES.has(membership.roleName)) {
+    return membership.roleName;
+  }
+  if (membership.role && !PLATFORM_ACCOUNT_ROLE_CODES.has(membership.role)) {
+    return membership.roleName || membership.role;
+  }
+  return '—';
 }
 
 function sortTenantMembershipRecords(memberships: TenantMembershipRecord[]) {
@@ -499,11 +529,38 @@ function parseSectionAssetsJson(rawValue: FormDataEntryValue | null, fallback: u
 }
 
 export function TenantDetailPage() {
-  const { tenantId } = useParams();
+  const { tenantId: tenantIdFromRoute } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const token = localStorage.getItem('qs_access_token');
-  const user = JSON.parse(localStorage.getItem('qs_user') ?? 'null') as { isPlatformAdmin?: boolean } | null;
+  const user = JSON.parse(localStorage.getItem('qs_user') ?? 'null') as {
+    isPlatformAdmin?: boolean;
+    memberships?: Array<{
+      tenant?: { id?: string; name?: string; slug?: string };
+      role?: { code?: string; name?: string; permissions?: string[] } | null;
+    }>;
+  } | null;
+
+  const sessionTenantId = user?.memberships?.[0]?.tenant?.id;
+  const tenantId = user?.isPlatformAdmin ? (tenantIdFromRoute ?? '') : (sessionTenantId ?? '');
+
   const { notify } = useNotification();
+
+  useEffect(() => {
+    if (!token || !user) return;
+    if (user.isPlatformAdmin && location.pathname === '/app') {
+      navigate('/platform/tenants', { replace: true });
+    }
+  }, [token, user, location.pathname, navigate]);
+
+  useEffect(() => {
+    if (!token || user?.isPlatformAdmin) return;
+    if (location.pathname.startsWith('/platform/tenants/')) {
+      navigate(`/app${location.search}`, { replace: true });
+    }
+  }, [token, user?.isPlatformAdmin, location.pathname, location.search, navigate]);
+
   const [tenantProfile, setTenantProfile] = useState<TenantProfileResponse | null>(null);
   const [tenantMemberships, setTenantMemberships] = useState<TenantMembershipRecord[]>([]);
   const [platformPlans, setPlatformPlans] = useState<PlatformPlanRecord[]>([]);
@@ -511,6 +568,7 @@ export function TenantDetailPage() {
   const [pages, setPages] = useState<PageRecord[]>([]);
   const [globalSections, setGlobalSections] = useState<SectionRecord[]>([]);
   const [sections, setSections] = useState<SectionRecord[]>([]);
+  const sectionsLoadingRef = useRef(false);
   const [services, setServices] = useState<ServiceRecord[]>([]);
   const [staff, setStaff] = useState<StaffRecord[]>([]);
   const [appointments, setAppointments] = useState<AppointmentRecord[]>([]);
@@ -584,6 +642,26 @@ export function TenantDetailPage() {
     ].filter((option) => option.enabled);
   }, [tenantProfile?.settings?.cashPaymentEnabled, tenantProfile?.settings?.transferPaymentEnabled, tenantProfile?.settings?.payphonePaymentEnabled]);
 
+  /** Un profesional (`staff`) solo puede tener un usuario con rol Staff vinculado por empresa. */
+  const staffAvailableForNewMembershipLink = useMemo(
+    () => staff.filter((member) => !tenantMemberships.some((m) => m.linkedStaffId === member.id)),
+    [staff, tenantMemberships],
+  );
+
+  const membershipStaffLinkOptions = useMemo(() => {
+    const base = staff.map((member) => ({ id: member.id, name: member.name }));
+    if (editModal?.type !== 'membership') {
+      return base;
+    }
+    const currentId = editModal.item.id;
+    return staff
+      .filter(
+        (member) =>
+          !tenantMemberships.some((m) => m.linkedStaffId === member.id && m.id !== currentId),
+      )
+      .map((member) => ({ id: member.id, name: member.name }));
+  }, [editModal, staff, tenantMemberships]);
+
   const activeTab = useMemo<TenantTab>(() => {
     const requested = searchParams.get('tab');
     const validTabs: TenantTab[] = [
@@ -630,27 +708,85 @@ export function TenantDetailPage() {
   const can = (permission: string) => Boolean(user?.isPlatformAdmin) || effectivePermissions.includes(permission);
   const canAccessServices = can('services.view');
   const canAccessStaff = can('staff.view');
-  const canAccessRestrictedConfiguration = Boolean(user?.isPlatformAdmin);
+  /** Rol de empresa en el tenant actual (API); fallback a sesión por si el perfil aún no cargó. */
+  const membershipRoleCode =
+    tenantProfile?.membership?.role?.code ?? user?.memberships?.[0]?.role?.code;
+  const isTenantAdministrator = Boolean(!user?.isPlatformAdmin && membershipRoleCode === 'administrator');
+  const isStaffTenantRole = membershipRoleCode === 'staff';
+  /** Consola como profesional vinculado: la vista Agenda solo aplica a este `staff`. */
+  const myAgendaStaffId = tenantProfile?.membership?.linkedStaffId ?? null;
+  const agendaUiScopedToStaff = Boolean(isStaffTenantRole && myAgendaStaffId);
+  const canAccessRestrictedConfiguration = Boolean(user?.isPlatformAdmin) || isTenantAdministrator;
+
+  /** Presencia (marca, sitio, dominios, SEO): solo plataforma. Consola tenant no muestra ese menú. SMTP: solo plataforma (`settings`). */
+  const layoutAvailableModules = useMemo(() => {
+    const mods = tenantProfile?.effectiveModules ?? [];
+    if (user?.isPlatformAdmin) {
+      return mods;
+    }
+    const presence = new Set(['site', 'branding', 'domains', 'seo']);
+    let filtered = mods.filter((m) => m !== 'settings' && !presence.has(m));
+    /** Misma regla que `visibleTabs`: servicios/equipo no van en el menú lateral para rol staff ni sin permiso de vista. */
+    const showServicesNav = effectivePermissions.includes('services.view') && !isStaffTenantRole;
+    const showStaffNav = effectivePermissions.includes('staff.view') && !isStaffTenantRole;
+    if (!showServicesNav) {
+      filtered = filtered.filter((m) => m !== 'services');
+    }
+    if (!showStaffNav) {
+      filtered = filtered.filter((m) => m !== 'staff');
+    }
+    return filtered;
+  }, [tenantProfile?.effectiveModules, user?.isPlatformAdmin, effectivePermissions, isStaffTenantRole]);
 
   const visibleTabs = useMemo(() => {
     return [
-      { id: 'general', label: 'General', visible: canAccessRestrictedConfiguration },
-      { id: 'users', label: 'Usuarios', visible: can('users.view') },
-      { id: 'roles', label: 'Roles', visible: can('roles.view') },
-      { id: 'branding', label: 'Marca', visible: can('branding.view') || can('seo.view') || can('settings.view') },
-      { id: 'email', label: 'Correo', visible: canAccessRestrictedConfiguration && (can('settings.update') || can('branding.update')) },
-      { id: 'domains', label: 'Dominios', visible: canAccessRestrictedConfiguration && can('domains.view') },
-      { id: 'site', label: 'Sitio', visible: canAccessRestrictedConfiguration && can('site.view') },
-      { id: 'services', label: 'Servicios', visible: can('services.view') },
-      { id: 'staff', label: 'Staff', visible: can('staff.view') },
+      /** Staff: resumen de empresa; sin esto el tab por defecto «general» se consideraba inválido y el efecto redirigía a otra pestaña. */
+      { id: 'general', label: 'Inicio', visible: isStaffTenantRole || canAccessRestrictedConfiguration },
+      { id: 'users', label: 'Usuarios', visible: can('users.view') && !isStaffTenantRole },
+      { id: 'roles', label: 'Roles', visible: can('roles.view') && !isStaffTenantRole },
+      {
+        id: 'branding',
+        label: 'Marca',
+        visible:
+          Boolean(user?.isPlatformAdmin) &&
+          canAccessRestrictedConfiguration &&
+          (can('branding.view') || can('seo.view') || can('settings.view')),
+      },
+      {
+        id: 'email',
+        label: 'Correo',
+        visible: Boolean(user?.isPlatformAdmin),
+      },
+      {
+        id: 'domains',
+        label: 'Dominios',
+        visible: Boolean(user?.isPlatformAdmin) && canAccessRestrictedConfiguration && can('domains.view'),
+      },
+      {
+        id: 'site',
+        label: 'Sitio',
+        visible: Boolean(user?.isPlatformAdmin) && canAccessRestrictedConfiguration && can('site.view'),
+      },
+      { id: 'services', label: 'Servicios', visible: can('services.view') && !isStaffTenantRole },
+      { id: 'staff', label: 'Staff', visible: can('staff.view') && !isStaffTenantRole },
       { id: 'agenda', label: 'Agenda', visible: can('agenda.view') },
       { id: 'appointments', label: 'Reservas', visible: can('appointments.view') },
       { id: 'customers', label: 'Clientes', visible: can('customers.view') },
     ].filter((tab) => tab.visible) as Array<{ id: TenantTab; label: string; visible: boolean }>;
-  }, [canAccessRestrictedConfiguration, effectivePermissions, user?.isPlatformAdmin]);
+  }, [
+    canAccessRestrictedConfiguration,
+    effectivePermissions,
+    user?.isPlatformAdmin,
+    tenantProfile?.membership?.role?.code,
+    isStaffTenantRole,
+  ]);
   const showInternalTabSwitcher = Boolean(user?.isPlatformAdmin);
 
-  const tenantRoutePrefix = tenantId ? `/platform/tenants/${tenantId}` : '';
+  const tenantRoutePrefix = tenantId
+    ? user?.isPlatformAdmin
+      ? `/platform/tenants/${tenantId}`
+      : '/app'
+    : '';
 
   const selectedPage = useMemo(
     () => pages.find((page) => page.id === selectedPageId) ?? pages[0] ?? null,
@@ -694,7 +830,9 @@ export function TenantDetailPage() {
       [
         membership.user?.fullName ?? '',
         membership.user?.email ?? '',
-        membership.roleName ?? membership.role,
+        tenantMembershipRoleLabel(membership),
+        membership.roleName ?? '',
+        membership.role ?? '',
         membership.isActive ? 'activo' : 'inactivo',
       ].some((value) => String(value).toLowerCase().includes(query)),
     );
@@ -705,14 +843,20 @@ export function TenantDetailPage() {
     Math.min(membershipsPage, membershipsPageCount) * tablePageSize,
   );
 
+  const myAgendaStaffName = useMemo(
+    () => (myAgendaStaffId ? staff.find((m) => m.id === myAgendaStaffId)?.name ?? null : null),
+    [staff, myAgendaStaffId],
+  );
+
   const filteredRules = useMemo(() => {
     const query = rulesSearch.trim().toLowerCase();
+    const staffKey = agendaUiScopedToStaff && myAgendaStaffId ? myAgendaStaffId : rulesStaffFilter;
     return availabilityRules.filter((rule) =>
-      (!rulesStaffFilter
+      (!staffKey
         ? true
-        : rulesStaffFilter === '__general__'
+        : staffKey === '__general__'
           ? !rule.staffId
-          : rule.staffId === rulesStaffFilter)
+          : rule.staffId === staffKey)
       && (
         !query
         || [
@@ -725,7 +869,7 @@ export function TenantDetailPage() {
         ].some((value) => String(value).toLowerCase().includes(query))
       )
     );
-  }, [availabilityRules, rulesSearch, rulesStaffFilter]);
+  }, [availabilityRules, rulesSearch, rulesStaffFilter, agendaUiScopedToStaff, myAgendaStaffId]);
   const rulesPageCount = Math.max(1, Math.ceil(filteredRules.length / tablePageSize));
   const visibleRules = filteredRules.slice(
     (Math.min(rulesPage, rulesPageCount) - 1) * tablePageSize,
@@ -734,12 +878,13 @@ export function TenantDetailPage() {
 
   const filteredBlocks = useMemo(() => {
     const query = blocksSearch.trim().toLowerCase();
+    const staffKey = agendaUiScopedToStaff && myAgendaStaffId ? myAgendaStaffId : blocksStaffFilter;
     return scheduleBlocks.filter((block) =>
-      (!blocksStaffFilter
+      (!staffKey
         ? true
-        : blocksStaffFilter === '__general__'
+        : staffKey === '__general__'
           ? !block.staffId
-          : block.staffId === blocksStaffFilter)
+          : block.staffId === staffKey)
       && (
         !query
         || [
@@ -751,7 +896,7 @@ export function TenantDetailPage() {
         ].some((value) => String(value).toLowerCase().includes(query))
       )
     );
-  }, [blocksSearch, scheduleBlocks, blocksStaffFilter]);
+  }, [blocksSearch, scheduleBlocks, blocksStaffFilter, agendaUiScopedToStaff, myAgendaStaffId]);
   const blocksPageCount = Math.max(1, Math.ceil(filteredBlocks.length / tablePageSize));
   const visibleBlocks = filteredBlocks.slice(
     (Math.min(blocksPage, blocksPageCount) - 1) * tablePageSize,
@@ -825,9 +970,15 @@ export function TenantDetailPage() {
   }, [blocksSearch, blocksStaffFilter]);
 
   useEffect(() => {
+    if (agendaUiScopedToStaff && myAgendaStaffId) {
+      setAgendaStaffFilter(myAgendaStaffId);
+      setRulesStaffFilter(myAgendaStaffId);
+      setBlocksStaffFilter(myAgendaStaffId);
+      return;
+    }
     setRulesStaffFilter(agendaStaffFilter);
     setBlocksStaffFilter(agendaStaffFilter);
-  }, [agendaStaffFilter]);
+  }, [agendaStaffFilter, agendaUiScopedToStaff, myAgendaStaffId]);
 
   useEffect(() => {
     setAppointmentsPage(1);
@@ -848,7 +999,13 @@ export function TenantDetailPage() {
     if (!token || !tenantId) return;
     const tenantData = (await getTenantProfile(token, tenantId)) as TenantProfileResponse;
     const effectiveModules = new Set(tenantData.effectiveModules ?? []);
-    const canLoadModule = (module: string) => Boolean(user?.isPlatformAdmin) || effectiveModules.has(module);
+    const presenceModules = new Set(['site', 'branding', 'domains']);
+    const canLoadModule = (module: string) => {
+      if (!user?.isPlatformAdmin && presenceModules.has(module)) {
+        return false;
+      }
+      return Boolean(user?.isPlatformAdmin) || effectiveModules.has(module);
+    };
     const [
       membershipsData,
       rolesData,
@@ -900,8 +1057,10 @@ export function TenantDetailPage() {
 
     if (nextPageId && canLoadModule('site')) {
       setSelectedPageId(nextPageId);
-      const sectionsData = await getSections(token, tenantId, nextPageId);
-      setSections(sectionsData as SectionRecord[]);
+      // Avoid fetching sections here directly. The effect that watches
+      // `selectedPage?.id` will load them — fetching here + in the effect
+      // caused duplicated requests and occasional rate limits (429).
+      setSections([]);
     } else {
       setSelectedPageId('');
       setSections([]);
@@ -960,8 +1119,14 @@ export function TenantDetailPage() {
       return;
     }
 
-    const sectionsData = await getSections(token, tenantId, targetPageId);
-    setSections(sectionsData as SectionRecord[]);
+    if (sectionsLoadingRef.current) return;
+    sectionsLoadingRef.current = true;
+    try {
+      const sectionsData = await getSections(token, tenantId, targetPageId);
+      setSections(sectionsData as SectionRecord[]);
+    } finally {
+      sectionsLoadingRef.current = false;
+    }
   }
 
   async function refreshAppointments(options?: { silent?: boolean }) {
@@ -1258,9 +1423,14 @@ export function TenantDetailPage() {
 
   useEffect(() => {
     if (!token || !tenantId || !selectedPage?.id) return;
+    if (sectionsLoadingRef.current) return;
+    sectionsLoadingRef.current = true;
     getSections(token, tenantId, selectedPage.id)
       .then((data) => setSections(data as SectionRecord[]))
-      .catch((err: Error) => notify(err.message, 'error'));
+      .catch((err: Error) => notify(err.message, 'error'))
+      .finally(() => {
+        sectionsLoadingRef.current = false;
+      });
   }, [selectedPage?.id, tenantId, token]);
 
   useEffect(() => {
@@ -1309,10 +1479,25 @@ export function TenantDetailPage() {
     await wrapAction(`edit-${currentEditModal.type}-${currentEditModal.item.id}`, async () => {
       switch (currentEditModal.type) {
         case 'membership': {
+          const rawRoleId = String(form.get('roleId') ?? '').trim();
+          const resolvedRoleId =
+            rawRoleId
+            || currentEditModal.item.roleId
+            || tenantRoles.find((role) => role.code === currentEditModal.item.role)?.id
+            || '';
+          if (!resolvedRoleId) {
+            throw new Error('Selecciona un rol de empresa válido.');
+          }
+          const resolvedRole = tenantRoles.find((role) => role.id === resolvedRoleId);
+          const linkedStaffRaw = String(form.get('linkedStaffId') ?? '').trim();
+          if (resolvedRole?.code === 'staff' && !linkedStaffRaw) {
+            throw new Error('Selecciona el profesional vinculado para el rol Staff.');
+          }
           await updateTenantMembership(token, tenantId, currentEditModal.item.id, {
             fullName: String(form.get('fullName') ?? currentEditModal.item.user?.fullName ?? ''),
             email: String(form.get('email') ?? currentEditModal.item.user?.email ?? ''),
-            roleId: String(form.get('roleId') ?? currentEditModal.item.roleId ?? ''),
+            roleId: resolvedRoleId,
+            ...(linkedStaffRaw ? { linkedStaffId: linkedStaffRaw } : {}),
             isActive: form.get('isActive') === 'on',
           });
 
@@ -1423,9 +1608,13 @@ export function TenantDetailPage() {
           });
           break;
         }
-        case 'rule':
+        case 'rule': {
+          const ruleStaffId =
+            agendaUiScopedToStaff && myAgendaStaffId
+              ? myAgendaStaffId
+              : String(form.get('staffId') ?? '').trim() || undefined;
           await updateAvailabilityRule(token, tenantId, currentEditModal.item.id, {
-            staffId: String(form.get('staffId') ?? '').trim() || undefined,
+            staffId: ruleStaffId,
             dayOfWeek: Number(form.get('dayOfWeek') ?? currentEditModal.item.dayOfWeek),
             startTime: String(form.get('startTime') ?? ''),
             endTime: String(form.get('endTime') ?? ''),
@@ -1433,15 +1622,21 @@ export function TenantDetailPage() {
             isActive: form.get('isActive') === 'on',
           });
           break;
-        case 'block':
+        }
+        case 'block': {
+          const blockStaffId =
+            agendaUiScopedToStaff && myAgendaStaffId
+              ? myAgendaStaffId
+              : String(form.get('staffId') ?? '').trim() || undefined;
           await updateScheduleBlock(token, tenantId, currentEditModal.item.id, {
-            staffId: String(form.get('staffId') ?? '').trim() || undefined,
+            staffId: blockStaffId,
             reason: String(form.get('reason') ?? ''),
             blockType: String(form.get('blockType') ?? currentEditModal.item.blockType),
             startDateTime: toIsoDateTime(String(form.get('startDateTime') ?? currentEditModal.item.startDateTime)),
             endDateTime: toIsoDateTime(String(form.get('endDateTime') ?? currentEditModal.item.endDateTime)),
           });
           break;
+        }
         case 'appointment': {
           const paymentMethod = String(form.get('paymentMethod') ?? '').trim();
           const status = String(form.get('status') ?? currentEditModal.item.status) as AppointmentRecord['status'];
@@ -1702,7 +1897,7 @@ export function TenantDetailPage() {
   return (
     <AdminLayout
       isPlatformAdmin={Boolean(user?.isPlatformAdmin)}
-      availableModules={tenantProfile?.effectiveModules ?? []}
+      availableModules={layoutAvailableModules}
       activeTenant={tenantProfile?.tenant ?? null}
       tenantRoutePrefix={tenantRoutePrefix}
       currentPath={currentLayoutPath}
@@ -1742,7 +1937,7 @@ export function TenantDetailPage() {
             </Card>
           ) : null}
 
-          {activeTab === 'general' ? (
+          {activeTab === 'general' && user?.isPlatformAdmin ? (
             <Card>
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">General</h3>
@@ -1829,6 +2024,37 @@ export function TenantDetailPage() {
             </Card>
           ) : null}
 
+          {activeTab === 'general' && !user?.isPlatformAdmin ? (
+            <Card>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Resumen</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Vista general de tu empresa. Los datos sensibles de plan y facturación los gestiona el equipo de plataforma.
+                </p>
+              </div>
+              <dl className="mt-6 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs uppercase tracking-[0.2em] text-slate-400">Empresa</dt>
+                  <dd className="mt-1 text-sm font-medium text-slate-900">{tenantProfile?.tenant.name ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-[0.2em] text-slate-400">Estado</dt>
+                  <dd className="mt-1 text-sm font-medium text-slate-900">{tenantProfile?.tenant.status ?? '—'}</dd>
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="text-xs uppercase tracking-[0.2em] text-slate-400">Suscripción</dt>
+                  <dd className="mt-1 text-sm text-slate-600">
+                    {tenantProfile?.subscription?.isExpired
+                      ? 'La suscripción está caducada.'
+                      : tenantProfile?.subscription?.isPending
+                        ? 'El período de suscripción aún no ha comenzado.'
+                        : 'Activa.'}
+                  </dd>
+                </div>
+              </dl>
+            </Card>
+          ) : null}
+
           {activeTab === 'users' ? (
             <Card>
               <div className="flex items-center justify-between">
@@ -1861,7 +2087,8 @@ export function TenantDetailPage() {
                         <p className="font-medium text-slate-900">{membership.user?.fullName ?? 'Sin nombre'}</p>
                         <p className="text-sm text-slate-500">{membership.user?.email ?? 'Sin correo'}</p>
                         <p className="mt-2 text-sm text-slate-600">
-                          Rol: <span className="font-medium text-slate-900">{membership.roleName ?? membership.role}</span>
+                          Rol:{' '}
+                          <span className="font-medium text-slate-900">{tenantMembershipRoleLabel(membership)}</span>
                         </p>
                         <p className="mt-2 text-xs uppercase tracking-[0.22em] text-slate-400">
                           {membership.isActive ? 'Activo' : 'Inactivo'}
@@ -2360,19 +2587,29 @@ export function TenantDetailPage() {
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <h3 className="text-lg font-semibold text-slate-900">Vista de agenda</h3>
-                    <p className="mt-1 text-sm text-slate-500">Filtra reglas y bloqueos por profesional para operar la agenda de forma más clara.</p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {agendaUiScopedToStaff
+                        ? `Solo ves la agenda vinculada a tu usuario${myAgendaStaffName ? ` (${myAgendaStaffName})` : ''}.`
+                        : 'Filtra reglas y bloqueos por profesional para operar la agenda de forma más clara.'}
+                    </p>
                   </div>
-                  <div className="w-full max-w-sm">
-                    <Select value={agendaStaffFilter} onChange={(event) => setAgendaStaffFilter(event.target.value)}>
-                      <option value="">Todos los profesionales</option>
-                      <option value="__general__">Solo elementos generales</option>
-                      {staff.map((member) => (
-                        <option key={member.id} value={member.id}>
-                          {member.name}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
+                  {!agendaUiScopedToStaff ? (
+                    <div className="w-full max-w-sm">
+                      <Select value={agendaStaffFilter} onChange={(event) => setAgendaStaffFilter(event.target.value)}>
+                        <option value="">Todos los profesionales</option>
+                        <option value="__general__">Solo elementos generales</option>
+                        {staff.map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {member.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                  ) : (
+                    <p className="text-sm font-medium text-slate-800">
+                      Profesional: {myAgendaStaffName ?? '—'}
+                    </p>
+                  )}
                 </div>
               </Card>
               <div className="grid gap-6 xl:grid-cols-2">
@@ -2385,15 +2622,21 @@ export function TenantDetailPage() {
                       {filteredRules.length} regla{filteredRules.length === 1 ? '' : 's'}
                     </p>
                     <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                      <Select value={rulesStaffFilter} onChange={(event) => setRulesStaffFilter(event.target.value)} className="min-w-[220px]">
-                        <option value="">Todos los profesionales</option>
-                        <option value="__general__">Reglas generales</option>
-                        {staff.map((member) => (
-                          <option key={member.id} value={member.id}>
-                            {member.name}
-                          </option>
-                        ))}
-                      </Select>
+                      {!agendaUiScopedToStaff ? (
+                        <Select value={rulesStaffFilter} onChange={(event) => setRulesStaffFilter(event.target.value)} className="min-w-[220px]">
+                          <option value="">Todos los profesionales</option>
+                          <option value="__general__">Reglas generales</option>
+                          {staff.map((member) => (
+                            <option key={member.id} value={member.id}>
+                              {member.name}
+                            </option>
+                          ))}
+                        </Select>
+                      ) : (
+                        <span className="min-w-[220px] text-sm text-slate-700">
+                          Profesional: <span className="font-semibold text-slate-900">{myAgendaStaffName ?? '—'}</span>
+                        </span>
+                      )}
                       <Input
                         value={rulesSearch}
                         onChange={(event) => setRulesSearch(event.target.value)}
@@ -2411,9 +2654,12 @@ export function TenantDetailPage() {
                       const formElement = event.currentTarget;
                       const form = new FormData(formElement);
                       wrapAction('rule', async () => {
+                        const staffField = agendaUiScopedToStaff && myAgendaStaffId
+                          ? myAgendaStaffId
+                          : String(form.get('staffId') ?? '').trim() || undefined;
                         await createAvailabilityRule(token, {
                           tenantId,
-                          staffId: String(form.get('staffId') ?? '').trim() || undefined,
+                          staffId: staffField,
                           dayOfWeek: Number(form.get('dayOfWeek') ?? 0),
                           startTime: String(form.get('startTime') ?? ''),
                           endTime: String(form.get('endTime') ?? ''),
@@ -2427,9 +2673,16 @@ export function TenantDetailPage() {
                   >
                     <div className="grid gap-3 md:grid-cols-5">
                       <FormField label="Profesional">
-                        <Select name="staffId" defaultValue="">
-                          <option value="">Todos / general</option>
-                          {staff.map((member) => (
+                        <Select
+                          name="staffId"
+                          defaultValue={agendaUiScopedToStaff && myAgendaStaffId ? myAgendaStaffId : ''}
+                          disabled={agendaUiScopedToStaff}
+                        >
+                          {!agendaUiScopedToStaff ? <option value="">Todos / general</option> : null}
+                          {(agendaUiScopedToStaff && myAgendaStaffId
+                            ? staff.filter((m) => m.id === myAgendaStaffId)
+                            : staff
+                          ).map((member) => (
                             <option key={member.id} value={member.id}>
                               {member.name}
                             </option>
@@ -2484,15 +2737,21 @@ export function TenantDetailPage() {
                       {filteredBlocks.length} bloqueo{filteredBlocks.length === 1 ? '' : 's'}
                     </p>
                     <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                      <Select value={blocksStaffFilter} onChange={(event) => setBlocksStaffFilter(event.target.value)} className="min-w-[220px]">
-                        <option value="">Todos los profesionales</option>
-                        <option value="__general__">Bloqueos generales</option>
-                        {staff.map((member) => (
-                          <option key={member.id} value={member.id}>
-                            {member.name}
-                          </option>
-                        ))}
-                      </Select>
+                      {!agendaUiScopedToStaff ? (
+                        <Select value={blocksStaffFilter} onChange={(event) => setBlocksStaffFilter(event.target.value)} className="min-w-[220px]">
+                          <option value="">Todos los profesionales</option>
+                          <option value="__general__">Bloqueos generales</option>
+                          {staff.map((member) => (
+                            <option key={member.id} value={member.id}>
+                              {member.name}
+                            </option>
+                          ))}
+                        </Select>
+                      ) : (
+                        <span className="min-w-[220px] text-sm text-slate-700">
+                          Profesional: <span className="font-semibold text-slate-900">{myAgendaStaffName ?? '—'}</span>
+                        </span>
+                      )}
                       <Input
                         value={blocksSearch}
                         onChange={(event) => setBlocksSearch(event.target.value)}
@@ -2510,9 +2769,12 @@ export function TenantDetailPage() {
                       const formElement = event.currentTarget;
                       const form = new FormData(formElement);
                       wrapAction('block', async () => {
+                        const staffField = agendaUiScopedToStaff && myAgendaStaffId
+                          ? myAgendaStaffId
+                          : String(form.get('staffId') ?? '').trim() || undefined;
                         await createScheduleBlock(token, {
                           tenantId,
-                          staffId: String(form.get('staffId') ?? '').trim() || undefined,
+                          staffId: staffField,
                           startDateTime: toIsoDateTime(String(form.get('startDateTime') ?? '')),
                           endDateTime: toIsoDateTime(String(form.get('endDateTime') ?? '')),
                           reason: String(form.get('reason') ?? ''),
@@ -2524,9 +2786,16 @@ export function TenantDetailPage() {
                     }}
                   >
                     <FormField label="Profesional">
-                      <Select name="staffId" defaultValue="">
-                        <option value="">Todos / general</option>
-                        {staff.map((member) => (
+                      <Select
+                        name="staffId"
+                        defaultValue={agendaUiScopedToStaff && myAgendaStaffId ? myAgendaStaffId : ''}
+                        disabled={agendaUiScopedToStaff}
+                      >
+                        {!agendaUiScopedToStaff ? <option value="">Todos / general</option> : null}
+                        {(agendaUiScopedToStaff && myAgendaStaffId
+                          ? staff.filter((m) => m.id === myAgendaStaffId)
+                          : staff
+                        ).map((member) => (
                           <option key={member.id} value={member.id}>
                             {member.name}
                           </option>
@@ -3066,6 +3335,7 @@ export function TenantDetailPage() {
         onCloseGeneratedPassword={() => setGeneratedPassword(null)}
         days={days}
         tenantRoles={tenantRoles}
+        staffLinkOptions={membershipStaffLinkOptions}
         planOptions={platformPlans}
         rolePermissionGroups={tenantPermissionGroups.map((group) => ({
           module: group.module,
@@ -3075,6 +3345,7 @@ export function TenantDetailPage() {
         sectionTypeOptions={sectionTypeOptions}
         services={services.map((service) => ({ id: service.id, name: service.name }))}
         staffOptions={staff.map((member) => ({ id: member.id, name: member.name }))}
+        lockAgendaStaffId={agendaUiScopedToStaff ? myAgendaStaffId : null}
         appointmentRescheduleEnabled={editAppointmentRescheduleEnabled}
         onAppointmentRescheduleEnabledChange={handleEditAppointmentRescheduleChange}
         appointmentDate={editAppointmentDate}
@@ -3097,10 +3368,21 @@ export function TenantDetailPage() {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
             wrapAction('tenant-membership', async () => {
+              const rawRoleId = String(form.get('roleId') ?? '').trim();
+              const resolvedRoleId = rawRoleId || tenantRoles[0]?.id || '';
+              if (!resolvedRoleId) {
+                throw new Error('No hay roles de empresa cargados. Actualiza la página e inténtalo de nuevo.');
+              }
+              const createRole = tenantRoles.find((role) => role.id === resolvedRoleId);
+              const linkedStaffRaw = String(form.get('linkedStaffId') ?? '').trim();
+              if (createRole?.code === 'staff' && !linkedStaffRaw) {
+                throw new Error('Selecciona el profesional vinculado para el rol Staff.');
+              }
               const result = (await createTenantMembership(token, tenantId, {
                 fullName: String(form.get('fullName') ?? ''),
                 email: String(form.get('email') ?? ''),
-                roleId: String(form.get('roleId') ?? ''),
+                roleId: resolvedRoleId,
+                ...(linkedStaffRaw ? { linkedStaffId: linkedStaffRaw } : {}),
                 isActive: form.get('isActive') === 'on',
               })) as { generatedPassword?: string | null };
               if (result.generatedPassword) {
@@ -3121,6 +3403,7 @@ export function TenantDetailPage() {
           </div>
           <FormField label="Rol">
             <Select
+              key={tenantRoles.map((role) => role.id).join(',') || 'tenant-roles'}
               name="roleId"
               defaultValue={tenantRoles[0]?.id ?? ''}
               disabled={tenantRoles.length === 0}
@@ -3132,6 +3415,31 @@ export function TenantDetailPage() {
               ))}
             </Select>
           </FormField>
+          <FormField label="Profesional vinculado (obligatorio si el rol es Staff)">
+            <Select
+              name="linkedStaffId"
+              defaultValue=""
+              disabled={staffAvailableForNewMembershipLink.length === 0}
+            >
+              <option value="">—</option>
+              {staffAvailableForNewMembershipLink.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.name}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+          {staff.length === 0 ? (
+            <p className="text-sm text-slate-600">
+              Crea primero al profesional en la pestaña Equipo; luego podrás darle acceso con rol Staff y vincularlo.
+            </p>
+          ) : null}
+          {staff.length > 0 && staffAvailableForNewMembershipLink.length === 0 ? (
+            <p className="text-sm text-slate-600">
+              Todos los profesionales del equipo ya tienen un usuario vinculado. Para dar acceso a alguien nuevo,
+              añade primero su ficha en Equipo.
+            </p>
+          ) : null}
           <label className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
             <Checkbox type="checkbox" name="isActive" defaultChecked /> Activo
           </label>

@@ -1,10 +1,11 @@
-import { Body, Controller, Delete, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/modules/auth/jwt-auth.guard';
 import { TenantModuleAccess } from 'src/modules/auth/tenant-module-access.decorator';
 import { TenantMembershipGuard } from 'src/modules/auth/tenant-membership.guard';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomersService } from './customers.service';
+import { getStaffScopeIdOrThrow, type RequestWithTenantMembership } from '../auth/tenant-staff-scope.util';
 
 @ApiTags('Customers')
 @ApiBearerAuth()
@@ -20,10 +21,7 @@ export class CustomersController {
   }
 
   @Get(':customerId')
-  findOne(
-    @Param('customerId') customerId: string,
-    @Query('tenantId') tenantId: string,
-  ) {
+  findOne(@Param('customerId') customerId: string, @Query('tenantId') tenantId: string) {
     return this.customersService.findOne(customerId, tenantId);
   }
 
@@ -40,7 +38,9 @@ export class CustomersController {
   remove(
     @Param('customerId') customerId: string,
     @Query('tenantId') tenantId: string,
+    @Req() req: RequestWithTenantMembership,
   ) {
-    return this.customersService.remove(customerId, tenantId);
+    const scope = getStaffScopeIdOrThrow(req);
+    return this.customersService.remove(customerId, tenantId, scope);
   }
 }

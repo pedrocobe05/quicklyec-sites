@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Idempotent } from 'src/core/decorators/idempotent.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/jwt-auth.guard';
@@ -7,6 +7,11 @@ import { TenantMembershipGuard } from 'src/modules/auth/tenant-membership.guard'
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 import { StaffService } from './staff.service';
+import {
+  assertNotTenantOperationalStaff,
+  getStaffScopeIdOrThrow,
+  type RequestWithTenantMembership,
+} from '../auth/tenant-staff-scope.util';
 
 @ApiTags('Staff')
 @TenantModuleAccess('staff')
@@ -17,15 +22,17 @@ export class StaffController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @Get()
-  listAdmin(@Query('tenantId') tenantId: string) {
-    return this.staffService.findAdminByTenant(tenantId);
+  listAdmin(@Query('tenantId') tenantId: string, @Req() req: RequestWithTenantMembership) {
+    const scope = getStaffScopeIdOrThrow(req);
+    return this.staffService.findAdminByTenant(tenantId, scope);
   }
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @Post()
   @Idempotent()
-  create(@Body() input: CreateStaffDto) {
+  create(@Body() input: CreateStaffDto, @Req() req: RequestWithTenantMembership) {
+    assertNotTenantOperationalStaff(req, 'Solo el administrador de la empresa puede gestionar el equipo.');
     return this.staffService.create(input);
   }
 
@@ -37,7 +44,9 @@ export class StaffController {
     @Param('staffId') staffId: string,
     @Query('tenantId') tenantId: string,
     @Body() input: UpdateStaffDto,
+    @Req() req: RequestWithTenantMembership,
   ) {
+    assertNotTenantOperationalStaff(req, 'Solo el administrador de la empresa puede gestionar el equipo.');
     return this.staffService.update(staffId, tenantId, input);
   }
 
@@ -45,7 +54,8 @@ export class StaffController {
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @Delete(':staffId')
   @Idempotent()
-  remove(@Param('staffId') staffId: string, @Query('tenantId') tenantId: string) {
+  remove(@Param('staffId') staffId: string, @Query('tenantId') tenantId: string, @Req() req: RequestWithTenantMembership) {
+    assertNotTenantOperationalStaff(req, 'Solo el administrador de la empresa puede gestionar el equipo.');
     return this.staffService.remove(staffId, tenantId);
   }
 }

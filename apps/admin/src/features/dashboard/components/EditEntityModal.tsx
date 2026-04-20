@@ -28,6 +28,7 @@ type TenantMembershipRecord = {
   id: string;
   role: string;
   roleId?: string | null;
+  linkedStaffId?: string | null;
   roleName?: string | null;
   isActive: boolean;
   user?: { fullName?: string; email?: string };
@@ -131,6 +132,8 @@ interface EditEntityModalProps {
   onCloseGeneratedPassword: () => void;
   days: string[];
   tenantRoles?: TenantRoleRecord[];
+  /** Profesionales del tenant para vincular usuarios con rol Staff. */
+  staffLinkOptions?: Array<{ id: string; name: string }>;
   planOptions?: PlatformPlanRecord[];
   rolePermissionGroups?: Array<{
     module: string;
@@ -149,6 +152,8 @@ interface EditEntityModalProps {
   onAppointmentSlotChange?: (value: string) => void;
   appointmentAvailabilityLoading?: boolean;
   appointmentAvailabilityMessage?: string | null;
+  /** Si se define, edición de reglas/bloqueos de agenda queda fijada a ese profesional (rol staff en consola). */
+  lockAgendaStaffId?: string | null;
 }
 
 export function EditEntityModal({
@@ -161,6 +166,7 @@ export function EditEntityModal({
   onCloseGeneratedPassword,
   days,
   tenantRoles = [],
+  staffLinkOptions = [],
   planOptions = [],
   rolePermissionGroups = [],
   sectionTypeOptions = [],
@@ -175,6 +181,7 @@ export function EditEntityModal({
   onAppointmentSlotChange,
   appointmentAvailabilityLoading = false,
   appointmentAvailabilityMessage = null,
+  lockAgendaStaffId = null,
 }: EditEntityModalProps) {
   const [sectionAssets, setSectionAssets] = useState<SectionAssetRecord[]>([]);
   const [customHtmlSource, setCustomHtmlSource] = useState('');
@@ -247,6 +254,19 @@ export function EditEntityModal({
     [customCssSource, customHtmlSource, editModal, sectionAssets],
   );
 
+  const membershipRoleSelectValue = useMemo(() => {
+    if (editModal?.type !== 'membership') {
+      return '';
+    }
+    const { item } = editModal;
+    return (
+      item.roleId
+      ?? tenantRoles.find((role) => role.code === item.role)?.id
+      ?? tenantRoles[0]?.id
+      ?? ''
+    );
+  }, [editModal, tenantRoles]);
+
   return (
     <>
       <Modal
@@ -292,10 +312,30 @@ export function EditEntityModal({
                   <Input name="email" type="email" defaultValue={editModal.item.user?.email ?? ''} />
                 </FormField>
                 <FormField label="Rol" required>
-                  <Select name="roleId" defaultValue={editModal.item.roleId ?? ''}>
+                  <Select
+                    key={`${editModal.item.id}-${membershipRoleSelectValue}-${tenantRoles.map((r) => r.id).join(',')}`}
+                    name="roleId"
+                    defaultValue={membershipRoleSelectValue}
+                    disabled={tenantRoles.length === 0}
+                  >
                     {tenantRoles.map((role) => (
                       <option key={role.id} value={role.id}>
                         {role.name}
+                      </option>
+                    ))}
+                  </Select>
+                </FormField>
+                <FormField label="Profesional vinculado (obligatorio si el rol es Staff)">
+                  <Select
+                    key={`${editModal.item.id}-linked-${editModal.item.linkedStaffId ?? ''}`}
+                    name="linkedStaffId"
+                    defaultValue={editModal.item.linkedStaffId ?? ''}
+                    disabled={staffLinkOptions.length === 0}
+                  >
+                    <option value="">—</option>
+                    {staffLinkOptions.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.name}
                       </option>
                     ))}
                   </Select>
@@ -469,9 +509,16 @@ export function EditEntityModal({
             {editModal.type === 'rule' ? (
               <>
                 <FormField label="Profesional">
-                  <Select name="staffId" defaultValue={editModal.item.staffId ?? ''}>
-                    <option value="">Todos / general</option>
-                    {staffOptions.map((staff) => (
+                  <Select
+                    name="staffId"
+                    defaultValue={lockAgendaStaffId ?? editModal.item.staffId ?? ''}
+                    disabled={Boolean(lockAgendaStaffId)}
+                  >
+                    {!lockAgendaStaffId ? <option value="">Todos / general</option> : null}
+                    {(lockAgendaStaffId
+                      ? staffOptions.filter((s) => s.id === lockAgendaStaffId)
+                      : staffOptions
+                    ).map((staff) => (
                       <option key={staff.id} value={staff.id}>
                         {staff.name}
                       </option>
@@ -509,9 +556,16 @@ export function EditEntityModal({
             {editModal.type === 'block' ? (
               <>
                 <FormField label="Profesional">
-                  <Select name="staffId" defaultValue={editModal.item.staffId ?? ''}>
-                    <option value="">Todos / general</option>
-                    {staffOptions.map((staff) => (
+                  <Select
+                    name="staffId"
+                    defaultValue={lockAgendaStaffId ?? editModal.item.staffId ?? ''}
+                    disabled={Boolean(lockAgendaStaffId)}
+                  >
+                    {!lockAgendaStaffId ? <option value="">Todos / general</option> : null}
+                    {(lockAgendaStaffId
+                      ? staffOptions.filter((s) => s.id === lockAgendaStaffId)
+                      : staffOptions
+                    ).map((staff) => (
                       <option key={staff.id} value={staff.id}>
                         {staff.name}
                       </option>

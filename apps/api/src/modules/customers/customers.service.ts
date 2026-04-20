@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CustomerEntity } from 'src/common/entities';
@@ -11,6 +11,7 @@ export class CustomersService {
     private readonly customersRepository: Repository<CustomerEntity>,
   ) {}
 
+  /** Clientes son por tenant; todo el staff del tenant ve el mismo listado. */
   listByTenant(tenantId: string) {
     return this.customersRepository.find({
       where: { tenantId },
@@ -44,7 +45,10 @@ export class CustomersService {
     return this.customersRepository.save(customer);
   }
 
-  async remove(customerId: string, tenantId: string) {
+  async remove(customerId: string, tenantId: string, staffScopeId?: string) {
+    if (staffScopeId) {
+      throw new ForbiddenException('No tienes permiso para eliminar clientes.');
+    }
     const customer = await this.findOne(customerId, tenantId);
     await this.customersRepository.remove(customer);
     return { success: true };

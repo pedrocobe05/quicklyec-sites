@@ -20,6 +20,13 @@ export class TenantMembershipEntity {
   @Column('uuid', { nullable: true })
   roleId!: string | null;
 
+  /**
+   * Rol `staff`: id del profesional (`staff`). Solo columna FK (la relación ManyToOne duplicaba el mismo
+   * `linkedStaffId` y TypeORM podía no persistir el valor).
+   */
+  @Column('uuid', { nullable: true })
+  linkedStaffId!: string | null;
+
   @Column({ default: true })
   isActive!: boolean;
 

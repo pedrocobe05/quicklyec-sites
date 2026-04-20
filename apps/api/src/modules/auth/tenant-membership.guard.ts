@@ -6,22 +6,11 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { Request } from 'express';
 import { DataSource } from 'typeorm';
 import { SubscriptionPlanEntity, TenantEntity, TenantMembershipEntity } from 'src/common/entities';
+import type { RequestWithTenantMembership } from './tenant-staff-scope.util';
 import { TENANT_MODULE_ACCESS_KEY } from './tenant-module-access.decorator';
-import { getPlanAccessDefinition, intersectTenantModules, normalizePlanCode } from '../tenants/tenant-access.constants';
-
-type TenantAwareRequest = Request & {
-  user?: {
-    sub: string;
-    email: string;
-    isPlatformAdmin?: boolean;
-  };
-  query: Record<string, string | undefined>;
-  params: Record<string, string | undefined>;
-  body?: Record<string, unknown>;
-};
+import { intersectTenantModules, mergeStoredPlanModulesWithCanonical, normalizePlanCode } from '../tenants/tenant-access.constants';
 
 @Injectable()
 export class TenantMembershipGuard implements CanActivate {
@@ -31,15 +20,19 @@ export class TenantMembershipGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext) {
-    const request = context.switchToHttp().getRequest<TenantAwareRequest>();
+    const request = context.switchToHttp().getRequest<RequestWithTenantMembership>();
     const requiredModule = this.reflector.getAllAndOverride<string>(TENANT_MODULE_ACCESS_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
     const tenantId =
-      request.query.tenantId ??
-      request.params.tenantId ??
-      (typeof request.body?.tenantId === 'string' ? request.body.tenantId : undefined);
+      typeof request.query?.tenantId === 'string'
+        ? request.query.tenantId
+        : typeof request.params?.tenantId === 'string'
+          ? request.params.tenantId
+          : typeof request.body?.tenantId === 'string'
+            ? request.body.tenantId
+            : undefined;
 
     if (!request.user?.sub) {
       throw new ForbiddenException('Authenticated user not found');
@@ -66,6 +59,8 @@ export class TenantMembershipGuard implements CanActivate {
       throw new ForbiddenException('User does not belong to this tenant');
     }
 
+    request.tenantMembership = membership;
+
     if (!requiredModule) {
       return true;
     }
@@ -82,10 +77,11 @@ export class TenantMembershipGuard implements CanActivate {
     const planRecord = await this.dataSource.getRepository(SubscriptionPlanEntity).findOne({
       where: { code: normalizedPlanCode, isActive: true },
     });
-    const planModules = planRecord?.tenantModules?.length
-      ? planRecord.tenantModules
-      : getPlanAccessDefinition(normalizedPlanCode).modules;
-    const rolePermissions = membership.roleDefinition?.permissions ?? [];
+    const planModules = mergeStoredPlanModulesWithCanonical(
+      planRecord?.tenantModules?.length ? planRecord.tenantModules : undefined,
+      normalizedPlanCode,
+    );
+    const rolePermissions = membership.roleDefinition?.permissions ?? membership.permissions ?? [];
     const effectiveModules = intersectTenantModules(planModules, rolePermissions);
 
     if (!effectiveModules.includes(requiredModule)) {

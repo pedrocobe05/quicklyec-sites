@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { AvailabilityRuleEntity, ScheduleBlockEntity } from 'src/common/entities';
@@ -91,17 +91,22 @@ export class AgendaService {
     }
   }
 
-  listAvailabilityRules(tenantId: string) {
+  listAvailabilityRules(tenantId: string, staffScopeId?: string) {
     return this.availabilityRulesRepository.find({
-      where: { tenantId },
+      where: staffScopeId ? { tenantId, staffId: staffScopeId } : { tenantId },
       relations: { staff: true },
       order: { dayOfWeek: 'ASC', startTime: 'ASC' },
     });
   }
 
-  async createAvailabilityRule(input: CreateAvailabilityRuleDto) {
+  async createAvailabilityRule(input: CreateAvailabilityRuleDto, staffScopeId?: string) {
     this.validateTimeRange(input.startTime, input.endTime);
-    const staffId = this.normalizeStaffId(input.staffId);
+    const staffId = staffScopeId
+      ? staffScopeId
+      : this.normalizeStaffId(input.staffId);
+    if (staffScopeId && input.staffId && this.normalizeStaffId(input.staffId) !== staffScopeId) {
+      throw new ForbiddenException('Solo puedes crear reglas para tu propia agenda.');
+    }
     await this.ensureNoDuplicateRule({
       tenantId: input.tenantId,
       staffId,
@@ -129,7 +134,7 @@ export class AgendaService {
     });
   }
 
-  async updateAvailabilityRule(ruleId: string, tenantId: string, input: UpdateAvailabilityRuleDto) {
+  async updateAvailabilityRule(ruleId: string, tenantId: string, input: UpdateAvailabilityRuleDto, staffScopeId?: string) {
     const rule = await this.availabilityRulesRepository.findOne({
       where: { id: ruleId, tenantId },
     });
@@ -137,7 +142,15 @@ export class AgendaService {
       throw new NotFoundException('Availability rule not found');
     }
 
-    const nextStaffId = input.staffId !== undefined ? this.normalizeStaffId(input.staffId) : rule.staffId;
+    if (staffScopeId && rule.staffId !== staffScopeId) {
+      throw new ForbiddenException('No puedes editar la agenda de otro profesional.');
+    }
+
+    const nextStaffId = staffScopeId
+      ?? (input.staffId !== undefined ? this.normalizeStaffId(input.staffId) : rule.staffId);
+    if (staffScopeId && nextStaffId !== staffScopeId) {
+      throw new ForbiddenException('No puedes reasignar la regla a otro profesional.');
+    }
     const nextDayOfWeek = input.dayOfWeek ?? rule.dayOfWeek;
     const nextStartTime = input.startTime ?? rule.startTime;
     const nextEndTime = input.endTime ?? rule.endTime;
@@ -174,29 +187,36 @@ export class AgendaService {
     return this.availabilityRulesRepository.save(rule);
   }
 
-  async removeAvailabilityRule(ruleId: string, tenantId: string) {
+  async removeAvailabilityRule(ruleId: string, tenantId: string, staffScopeId?: string) {
     const rule = await this.availabilityRulesRepository.findOne({
       where: { id: ruleId, tenantId },
     });
     if (!rule) {
       throw new NotFoundException('Availability rule not found');
     }
+    if (staffScopeId && rule.staffId !== staffScopeId) {
+      throw new ForbiddenException('No puedes eliminar reglas de otro profesional.');
+    }
     await this.availabilityRulesRepository.remove(rule);
     return { success: true };
   }
 
-  listScheduleBlocks(tenantId: string) {
+  listScheduleBlocks(tenantId: string, staffScopeId?: string) {
     return this.scheduleBlocksRepository.find({
-      where: { tenantId },
+      where: staffScopeId ? { tenantId, staffId: staffScopeId } : { tenantId },
       relations: { staff: true },
       order: { startDateTime: 'DESC' },
     });
   }
 
-  createScheduleBlock(input: CreateScheduleBlockDto) {
+  createScheduleBlock(input: CreateScheduleBlockDto, staffScopeId?: string) {
+    const staffId = staffScopeId ?? (input.staffId ?? null);
+    if (staffScopeId && input.staffId && this.normalizeStaffId(input.staffId) !== staffScopeId) {
+      throw new ForbiddenException('Solo puedes crear bloqueos para tu propia agenda.');
+    }
     return this.scheduleBlocksRepository.save({
       tenantId: input.tenantId,
-      staffId: input.staffId ?? null,
+      staffId,
       startDateTime: new Date(input.startDateTime),
       endDateTime: new Date(input.endDateTime),
       reason: input.reason,
@@ -204,7 +224,7 @@ export class AgendaService {
     });
   }
 
-  async updateScheduleBlock(blockId: string, tenantId: string, input: UpdateScheduleBlockDto) {
+  async updateScheduleBlock(blockId: string, tenantId: string, input: UpdateScheduleBlockDto, staffScopeId?: string) {
     const block = await this.scheduleBlocksRepository.findOne({
       where: { id: blockId, tenantId },
     });
@@ -212,8 +232,17 @@ export class AgendaService {
       throw new NotFoundException('Schedule block not found');
     }
 
+    if (staffScopeId && block.staffId !== staffScopeId) {
+      throw new ForbiddenException('No puedes editar bloqueos de otro profesional.');
+    }
+
+    const nextStaff = input.staffId !== undefined ? input.staffId ?? null : block.staffId;
+    if (staffScopeId && nextStaff !== staffScopeId) {
+      throw new ForbiddenException('No puedes reasignar el bloqueo a otro profesional.');
+    }
+
     Object.assign(block, {
-      staffId: input.staffId ?? block.staffId,
+      staffId: staffScopeId ?? (input.staffId ?? block.staffId),
       startDateTime: input.startDateTime ? new Date(input.startDateTime) : block.startDateTime,
       endDateTime: input.endDateTime ? new Date(input.endDateTime) : block.endDateTime,
       reason: input.reason ?? block.reason,
@@ -223,12 +252,15 @@ export class AgendaService {
     return this.scheduleBlocksRepository.save(block);
   }
 
-  async removeScheduleBlock(blockId: string, tenantId: string) {
+  async removeScheduleBlock(blockId: string, tenantId: string, staffScopeId?: string) {
     const block = await this.scheduleBlocksRepository.findOne({
       where: { id: blockId, tenantId },
     });
     if (!block) {
       throw new NotFoundException('Schedule block not found');
+    }
+    if (staffScopeId && block.staffId !== staffScopeId) {
+      throw new ForbiddenException('No puedes eliminar bloqueos de otro profesional.');
     }
     await this.scheduleBlocksRepository.remove(block);
     return { success: true };

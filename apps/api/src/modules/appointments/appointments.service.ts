@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
 import {
@@ -25,6 +25,19 @@ interface AvailabilityQuery {
 }
 
 type PaymentMethod = 'cash' | 'transfer' | 'payphone';
+
+function assertAppointmentStaffScope(
+  appointment: AppointmentEntity,
+  staffScopeId: string | undefined,
+  message = 'No puedes gestionar reservas de otros profesionales.',
+) {
+  if (!staffScopeId) {
+    return;
+  }
+  if (appointment.staffId !== staffScopeId) {
+    throw new ForbiddenException(message);
+  }
+}
 
 export interface AvailabilitySlot {
   start: string;
@@ -972,7 +985,7 @@ export class AppointmentsService {
     };
   }
 
-  async createAdminAppointment(tenantId: string, input: CreateAppointmentDto) {
+  async createAdminAppointment(tenantId: string, input: CreateAppointmentDto, staffScopeId?: string) {
     const service = await this.servicesService.findOne(input.serviceId);
     if (service.tenantId !== tenantId) {
       throw new NotFoundException('Service not found');
@@ -990,18 +1003,23 @@ export class AppointmentsService {
     });
     const paymentMethod = this.resolvePaymentMethod(settings, input.paymentMethod);
 
+    const resolvedStaffId = staffScopeId ?? (input.staffId ?? null);
+    if (staffScopeId && input.staffId && input.staffId !== staffScopeId) {
+      throw new ForbiddenException('No puedes asignar reservas a otro profesional.');
+    }
+
     await this.ensureAppointmentSlotAvailable({
       tenantId,
       serviceId: service.id,
       startDateTime,
       endDateTime,
-      staffId: input.staffId ?? null,
+      staffId: resolvedStaffId,
     });
 
     const created = await this.persistAppointmentAndNotify({
       tenantId,
       serviceId: service.id,
-      staffId: input.staffId ?? null,
+      staffId: resolvedStaffId,
       paymentMethod,
       startDateTime,
       endDateTime,
@@ -1019,15 +1037,15 @@ export class AppointmentsService {
     };
   }
 
-  listByTenant(tenantId: string) {
+  listByTenant(tenantId: string, staffScopeId?: string) {
     return this.appointmentsRepository.find({
-      where: { tenantId },
+      where: staffScopeId ? { tenantId, staffId: staffScopeId } : { tenantId },
       relations: ['customer', 'service', 'staff'],
       order: { startDateTime: 'DESC' },
     });
   }
 
-  async updateStatus(appointmentId: string, tenantId: string, status: AppointmentEntity['status']) {
+  async updateStatus(appointmentId: string, tenantId: string, status: AppointmentEntity['status'], staffScopeId?: string) {
     const appointment = await this.appointmentsRepository.findOne({
       where: { id: appointmentId, tenantId },
       relations: ['customer', 'service', 'staff', 'tenant'],
@@ -1036,6 +1054,8 @@ export class AppointmentsService {
     if (!appointment) {
       throw new NotFoundException('Appointment not found');
     }
+
+    assertAppointmentStaffScope(appointment, staffScopeId);
 
     if (appointment.status === 'completed' && status !== 'completed') {
       throw new BadRequestException('No se puede modificar una reserva completada');
@@ -1066,7 +1086,7 @@ export class AppointmentsService {
     return saved;
   }
 
-  async updateAppointment(appointmentId: string, tenantId: string, input: UpdateAppointmentDto) {
+  async updateAppointment(appointmentId: string, tenantId: string, input: UpdateAppointmentDto, staffScopeId?: string) {
     const appointment = await this.appointmentsRepository.findOne({
       where: { id: appointmentId, tenantId },
       relations: ['customer', 'service', 'staff', 'tenant'],
@@ -1075,6 +1095,8 @@ export class AppointmentsService {
     if (!appointment) {
       throw new NotFoundException('Appointment not found');
     }
+
+    assertAppointmentStaffScope(appointment, staffScopeId);
 
     if (appointment.status === 'completed' && input.status && input.status !== 'completed') {
       throw new BadRequestException('No se puede modificar una reserva completada');
@@ -1104,7 +1126,12 @@ export class AppointmentsService {
     }
 
     if (input.staffId !== undefined) {
-      appointment.staffId = input.staffId || null;
+      if (staffScopeId && (input.staffId || null) !== staffScopeId) {
+        throw new ForbiddenException('No puedes reasignar la reserva a otro profesional.');
+      }
+      appointment.staffId = staffScopeId ?? (input.staffId || null);
+    } else if (staffScopeId) {
+      appointment.staffId = staffScopeId;
     }
 
     if (input.paymentMethod !== undefined) {
@@ -1171,7 +1198,7 @@ export class AppointmentsService {
     return saved;
   }
 
-  async reversePayphonePayment(appointmentId: string, tenantId: string) {
+  async reversePayphonePayment(appointmentId: string, tenantId: string, staffScopeId?: string) {
     const appointment = await this.appointmentsRepository.findOne({
       where: { id: appointmentId, tenantId },
       relations: ['customer', 'service', 'staff', 'tenant'],
@@ -1180,6 +1207,8 @@ export class AppointmentsService {
     if (!appointment) {
       throw new NotFoundException('Appointment not found');
     }
+
+    assertAppointmentStaffScope(appointment, staffScopeId);
 
     if (appointment.status === 'completed') {
       throw new BadRequestException('No se puede reversar una reserva completada');

@@ -60,6 +60,10 @@ export function WelcomePage() {
     return <Navigate to="/login" replace />;
   }
 
+  if (user && !user.isPlatformAdmin && user.memberships?.[0]?.tenant?.id) {
+    return <Navigate to="/app" replace />;
+  }
+
   const memberships = user?.memberships ?? [];
   const firstTenant = memberships[0]?.tenant;
   const welcomeModules = user?.isPlatformAdmin
@@ -75,7 +79,7 @@ export function WelcomePage() {
       activeTenant={firstTenant?.id && firstTenant?.name && firstTenant?.slug
         ? { id: firstTenant.id, name: firstTenant.name, slug: firstTenant.slug }
         : null}
-      tenantRoutePrefix={firstTenant?.id ? `/platform/tenants/${firstTenant.id}` : ''}
+      tenantRoutePrefix={firstTenant?.id ? '/app' : ''}
       currentPath="/"
     >
       <section className="grid gap-6">
