@@ -64,10 +64,12 @@ import { Card } from '../shared/components/ui/Card';
 import { Checkbox } from '../shared/components/ui/Checkbox';
 import { DataTable, DataTablePagination, DataTableShell, DataTableToolbar } from '../shared/components/ui/DataTable';
 import { FormField } from '../shared/components/forms/FormField';
+import { SearchableSelect } from '../shared/components/forms/SearchableSelect';
 import { Input } from '../shared/components/ui/Input';
 import { Select } from '../shared/components/ui/Select';
 import { Textarea } from '../shared/components/ui/Textarea';
 import { Skeleton } from '../shared/components/ui/Skeleton';
+import { cn } from '../shared/utils/cn';
 import { useNotification } from '../shared/notifications/use-notification';
 
 type TenantTab =
@@ -327,10 +329,11 @@ interface AppointmentRecord {
   paymentMethod?: 'cash' | 'transfer' | 'payphone' | null;
   createdAt?: string;
   startDateTime: string;
+  endDateTime?: string;
   notes?: string | null;
   internalNotes?: string | null;
   customer?: { fullName?: string; phone?: string | null } | null;
-  service?: { id?: string; name?: string } | null;
+  service?: { id?: string; name?: string; durationMinutes?: number } | null;
   staff?: { id?: string; name?: string } | null;
 }
 
@@ -475,6 +478,157 @@ function formatRelativeUpdate(value: Date | null) {
   return `Actualizado ${value.toLocaleString()}`;
 }
 
+const APPOINTMENTS_CALENDAR_START_HOUR = 6;
+const APPOINTMENTS_CALENDAR_END_HOUR = 22;
+const APPOINTMENTS_CALENDAR_TOTAL_HOURS = APPOINTMENTS_CALENDAR_END_HOUR - APPOINTMENTS_CALENDAR_START_HOUR;
+const APPOINTMENTS_CALENDAR_HOUR_HEIGHT = 36;
+const appointmentsCalendarDayLabels = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
+
+type AppointmentsCalendarView = 'day' | 'three_days' | 'week';
+
+type CalendarAppointmentLayout = {
+  appointment: AppointmentRecord;
+  start: Date;
+  end: Date;
+  dayIndex: number;
+  top: number;
+  height: number;
+  column: number;
+  columns: number;
+};
+
+function startOfIsoWeek(value: Date) {
+  const result = new Date(value);
+  result.setHours(0, 0, 0, 0);
+  const day = result.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  result.setDate(result.getDate() + diff);
+  return result;
+}
+
+function addDays(value: Date, daysToAdd: number) {
+  const result = new Date(value);
+  result.setDate(result.getDate() + daysToAdd);
+  return result;
+}
+
+function formatDateInputValue(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatAppointmentsCalendarRangeLabel(rangeStart: Date, rangeEnd: Date) {
+  const sameMonth = rangeStart.getMonth() === rangeEnd.getMonth() && rangeStart.getFullYear() === rangeEnd.getFullYear();
+  const sameDay = isSameLocalDate(rangeStart, rangeEnd);
+  const startLabel = rangeStart.toLocaleDateString('es-EC', {
+    day: 'numeric',
+    month: 'short',
+  });
+  if (sameDay) {
+    return `${startLabel} ${rangeStart.getFullYear()}`;
+  }
+  const endLabel = rangeEnd.toLocaleDateString('es-EC', {
+    day: 'numeric',
+    month: sameMonth ? undefined : 'short',
+    year: rangeStart.getFullYear() === rangeEnd.getFullYear() ? undefined : 'numeric',
+  });
+  return `${startLabel} - ${endLabel} ${rangeEnd.getFullYear()}`;
+}
+
+function formatAppointmentsCalendarDayLabel(value: Date) {
+  return value.toLocaleDateString('es-EC', {
+    day: 'numeric',
+    month: 'short',
+  });
+}
+
+function formatAppointmentsCalendarHourLabel(hour: number) {
+  return `${String(hour).padStart(2, '0')}:00`;
+}
+
+function formatAppointmentsCalendarEventTime(value: Date) {
+  return value.toLocaleTimeString('es-EC', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+function isSameLocalDate(left: Date, right: Date) {
+  return left.getFullYear() === right.getFullYear()
+    && left.getMonth() === right.getMonth()
+    && left.getDate() === right.getDate();
+}
+
+function getAppointmentEventClasses(status: AppointmentRecord['status']) {
+  const variants: Record<AppointmentRecord['status'], string> = {
+    pending: 'border-amber-300 bg-amber-100/95 text-amber-950',
+    confirmed: 'border-sky-300 bg-sky-100/95 text-sky-950',
+    completed: 'border-emerald-300 bg-emerald-100/90 text-emerald-950',
+    cancelled: 'border-rose-200 bg-rose-50/85 text-rose-700',
+    no_show: 'border-slate-300 bg-slate-200/90 text-slate-700',
+  };
+
+  return variants[status];
+}
+
+function layoutAppointmentsByDay(
+  appointments: Array<Omit<CalendarAppointmentLayout, 'column' | 'columns'>>,
+) {
+  const sorted = [...appointments].sort((left, right) => (
+    left.start.getTime() - right.start.getTime() || left.end.getTime() - right.end.getTime()
+  ));
+  const laidOut: CalendarAppointmentLayout[] = [];
+  let cluster: CalendarAppointmentLayout[] = [];
+  let clusterEnd = -Infinity;
+  let clusterColumns = 1;
+  let active: CalendarAppointmentLayout[] = [];
+
+  const flushCluster = () => {
+    cluster.forEach((item) => {
+      item.columns = Math.max(clusterColumns, 1);
+      laidOut.push(item);
+    });
+    cluster = [];
+    active = [];
+    clusterColumns = 1;
+    clusterEnd = -Infinity;
+  };
+
+  sorted.forEach((item) => {
+    const startTime = item.start.getTime();
+    if (cluster.length > 0 && startTime >= clusterEnd) {
+      flushCluster();
+    }
+
+    active = active.filter((entry) => entry.end.getTime() > startTime);
+    const usedColumns = new Set(active.map((entry) => entry.column));
+    let nextColumn = 0;
+    while (usedColumns.has(nextColumn)) {
+      nextColumn += 1;
+    }
+
+    const laidOutItem: CalendarAppointmentLayout = {
+      ...item,
+      column: nextColumn,
+      columns: 1,
+    };
+
+    cluster.push(laidOutItem);
+    active.push(laidOutItem);
+    clusterEnd = Math.max(clusterEnd, item.end.getTime());
+    clusterColumns = Math.max(clusterColumns, active.length);
+  });
+
+  if (cluster.length > 0) {
+    flushCluster();
+  }
+
+  return laidOut;
+}
+
 function normalizeAssetName(name: string) {
   return name
     .normalize('NFD')
@@ -587,6 +741,7 @@ export function TenantDetailPage() {
   const [createRoleOpen, setCreateRoleOpen] = useState(false);
   const [createAppointmentOpen, setCreateAppointmentOpen] = useState(false);
   const [createAppointmentCustomerMode, setCreateAppointmentCustomerMode] = useState<'existing' | 'new'>('existing');
+  const [createAppointmentCustomerId, setCreateAppointmentCustomerId] = useState('');
   const [createAppointmentServiceId, setCreateAppointmentServiceId] = useState('');
   const [createAppointmentStaffId, setCreateAppointmentStaffId] = useState('');
   const [createAppointmentDate, setCreateAppointmentDate] = useState('');
@@ -613,25 +768,52 @@ export function TenantDetailPage() {
   const [blocksPage, setBlocksPage] = useState(1);
   const [blocksStaffFilter, setBlocksStaffFilter] = useState('');
   const [agendaStaffFilter, setAgendaStaffFilter] = useState('');
+  const [appointmentsStaffFilter, setAppointmentsStaffFilter] = useState('');
   const [appointmentsSearch, setAppointmentsSearch] = useState('');
   const [appointmentsPage, setAppointmentsPage] = useState(1);
   const [appointmentsSort, setAppointmentsSort] = useState<'nearest' | 'created_desc'>('nearest');
+  const [appointmentsCalendarView, setAppointmentsCalendarView] = useState<AppointmentsCalendarView>('week');
+  const [appointmentsCalendarFocusDate, setAppointmentsCalendarFocusDate] = useState(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  });
   const [customersSearch, setCustomersSearch] = useState('');
   const [customersPage, setCustomersPage] = useState(1);
   const createAppointmentAvailabilityLockRef = useRef(false);
   const editAppointmentAvailabilityLockRef = useRef(false);
+  const createAppointmentScopedStaffId = tenantProfile?.membership?.linkedStaffId ?? null;
+  const createAppointmentIsStaffScoped = tenantProfile?.membership?.role?.code === 'staff' && Boolean(createAppointmentScopedStaffId);
+  const createAppointmentScopedStaff = useMemo(
+    () => (createAppointmentScopedStaffId ? staff.find((member) => member.id === createAppointmentScopedStaffId) ?? null : null),
+    [createAppointmentScopedStaffId, staff],
+  );
+  const createAppointmentAvailableServices = useMemo(
+    () => (
+      createAppointmentIsStaffScoped && createAppointmentScopedStaff
+        ? services.filter((service) => createAppointmentScopedStaff.serviceIds?.includes(service.id))
+        : services
+    ),
+    [createAppointmentIsStaffScoped, createAppointmentScopedStaff, services],
+  );
 
   const createAppointmentSelectedService = useMemo(
-    () => services.find((service) => service.id === createAppointmentServiceId) ?? null,
-    [createAppointmentServiceId, services],
+    () => createAppointmentAvailableServices.find((service) => service.id === createAppointmentServiceId) ?? null,
+    [createAppointmentAvailableServices, createAppointmentServiceId],
   );
   const createAppointmentCompatibleStaff = useMemo(
-    () => (
-      createAppointmentServiceId
+    () => {
+      if (createAppointmentIsStaffScoped && createAppointmentScopedStaff) {
+        return createAppointmentServiceId && createAppointmentScopedStaff.serviceIds?.includes(createAppointmentServiceId)
+          ? [createAppointmentScopedStaff]
+          : [];
+      }
+
+      return createAppointmentServiceId
         ? staff.filter((member) => member.serviceIds?.includes(createAppointmentServiceId))
-        : []
-    ),
-    [createAppointmentServiceId, staff],
+        : [];
+    },
+    [createAppointmentIsStaffScoped, createAppointmentScopedStaff, createAppointmentServiceId, staff],
   );
   const createAppointmentPaymentOptions = useMemo(() => {
     const settings = tenantProfile?.settings;
@@ -641,6 +823,14 @@ export function TenantDetailPage() {
       { value: 'payphone' as const, label: 'Payphone', enabled: settings?.payphonePaymentEnabled ?? false },
     ].filter((option) => option.enabled);
   }, [tenantProfile?.settings?.cashPaymentEnabled, tenantProfile?.settings?.transferPaymentEnabled, tenantProfile?.settings?.payphonePaymentEnabled]);
+  const createAppointmentCustomerOptions = useMemo(
+    () => customers.map((customer) => ({
+      value: customer.id,
+      label: customer.fullName,
+      description: [customer.phone, customer.email].filter(Boolean).join(' · '),
+    })),
+    [customers],
+  );
 
   /** Un profesional (`staff`) solo puede tener un usuario con rol Staff vinculado por empresa. */
   const staffAvailableForNewMembershipLink = useMemo(
@@ -905,9 +1095,14 @@ export function TenantDetailPage() {
 
   const filteredAppointments = useMemo(() => {
     const query = appointmentsSearch.trim().toLowerCase();
+    const staffKey = agendaUiScopedToStaff && myAgendaStaffId ? myAgendaStaffId : appointmentsStaffFilter;
+    const staffScopedAppointments = appointments.filter((appointment) =>
+      !staffKey
+      || appointment.staff?.id === staffKey,
+    );
     const matchingAppointments = !query
-      ? appointments
-      : appointments.filter((appointment) =>
+      ? staffScopedAppointments
+      : staffScopedAppointments.filter((appointment) =>
       [
         appointment.customer?.fullName ?? '',
         appointment.service?.name ?? '',
@@ -931,11 +1126,81 @@ export function TenantDetailPage() {
       const rightStart = new Date(right.startDateTime).getTime();
       return leftStart - rightStart || new Date(right.createdAt ?? 0).getTime() - new Date(left.createdAt ?? 0).getTime();
     });
-  }, [appointments, appointmentsSearch, appointmentsSort]);
+  }, [agendaUiScopedToStaff, appointments, appointmentsSearch, appointmentsSort, appointmentsStaffFilter, myAgendaStaffId]);
   const appointmentsPageCount = Math.max(1, Math.ceil(filteredAppointments.length / tablePageSize));
   const visibleAppointments = filteredAppointments.slice(
     (Math.min(appointmentsPage, appointmentsPageCount) - 1) * tablePageSize,
     Math.min(appointmentsPage, appointmentsPageCount) * tablePageSize,
+  );
+  const appointmentsCalendarVisibleDays = useMemo(() => {
+    const focusDate = new Date(appointmentsCalendarFocusDate);
+    focusDate.setHours(0, 0, 0, 0);
+
+    if (appointmentsCalendarView === 'day') {
+      return [focusDate];
+    }
+
+    if (appointmentsCalendarView === 'three_days') {
+      return [0, 1, 2].map((offset) => addDays(focusDate, offset));
+    }
+
+    const weekStart = startOfIsoWeek(focusDate);
+    return Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+  }, [appointmentsCalendarFocusDate, appointmentsCalendarView]);
+  const appointmentsCalendarRangeStart = appointmentsCalendarVisibleDays[0] ?? appointmentsCalendarFocusDate;
+  const appointmentsCalendarRangeEnd =
+    appointmentsCalendarVisibleDays[appointmentsCalendarVisibleDays.length - 1] ?? appointmentsCalendarFocusDate;
+  const appointmentsCalendarLayouts = useMemo(() => {
+    const rangeStart = new Date(appointmentsCalendarRangeStart);
+    rangeStart.setHours(0, 0, 0, 0);
+    const rangeEnd = addDays(appointmentsCalendarRangeEnd, 1);
+    rangeEnd.setHours(0, 0, 0, 0);
+    const byDay = new Map<number, Array<Omit<CalendarAppointmentLayout, 'column' | 'columns'>>>();
+
+    filteredAppointments.forEach((appointment) => {
+      const start = new Date(appointment.startDateTime);
+      if (Number.isNaN(start.getTime()) || start < rangeStart || start >= rangeEnd) {
+        return;
+      }
+
+      const fallbackDuration = appointment.service?.durationMinutes
+        ?? services.find((service) => service.id === appointment.service?.id)?.durationMinutes
+        ?? 60;
+      const end = appointment.endDateTime
+        ? new Date(appointment.endDateTime)
+        : new Date(start.getTime() + fallbackDuration * 60 * 1000);
+      const dayIndex = appointmentsCalendarVisibleDays.findIndex((day) => isSameLocalDate(day, start));
+      if (dayIndex < 0) {
+        return;
+      }
+
+      const dayStart = appointmentsCalendarVisibleDays[dayIndex];
+      const visibleStart = new Date(Math.max(start.getTime(), dayStart.getTime() + APPOINTMENTS_CALENDAR_START_HOUR * 60 * 60 * 1000));
+      const visibleEnd = new Date(Math.min(end.getTime(), dayStart.getTime() + APPOINTMENTS_CALENDAR_END_HOUR * 60 * 60 * 1000));
+      const visibleDurationMinutes = (visibleEnd.getTime() - visibleStart.getTime()) / (60 * 1000);
+
+      if (visibleDurationMinutes <= 0) {
+        return;
+      }
+
+      const dayAppointments = byDay.get(dayIndex) ?? [];
+      dayAppointments.push({
+        appointment,
+        start,
+        end,
+        dayIndex,
+        top: ((visibleStart.getHours() + (visibleStart.getMinutes() / 60)) - APPOINTMENTS_CALENDAR_START_HOUR)
+          * APPOINTMENTS_CALENDAR_HOUR_HEIGHT,
+        height: Math.max((visibleDurationMinutes / 60) * APPOINTMENTS_CALENDAR_HOUR_HEIGHT, 36),
+      });
+      byDay.set(dayIndex, dayAppointments);
+    });
+
+    return appointmentsCalendarVisibleDays.map((_, dayIndex) => layoutAppointmentsByDay(byDay.get(dayIndex) ?? []));
+  }, [appointmentsCalendarRangeEnd, appointmentsCalendarRangeStart, appointmentsCalendarVisibleDays, filteredAppointments, services]);
+  const appointmentsInSelectedWeek = useMemo(
+    () => appointmentsCalendarLayouts.reduce((count, dayAppointments) => count + dayAppointments.length, 0),
+    [appointmentsCalendarLayouts],
   );
 
   const filteredCustomers = useMemo(() => {
@@ -974,15 +1239,22 @@ export function TenantDetailPage() {
       setAgendaStaffFilter(myAgendaStaffId);
       setRulesStaffFilter(myAgendaStaffId);
       setBlocksStaffFilter(myAgendaStaffId);
+      setAppointmentsStaffFilter(myAgendaStaffId);
       return;
     }
     setRulesStaffFilter(agendaStaffFilter);
     setBlocksStaffFilter(agendaStaffFilter);
-  }, [agendaStaffFilter, agendaUiScopedToStaff, myAgendaStaffId]);
+    setAppointmentsStaffFilter((current) => {
+      if (current && staff.some((member) => member.id === current)) {
+        return current;
+      }
+      return staff[0]?.id ?? '';
+    });
+  }, [agendaStaffFilter, agendaUiScopedToStaff, myAgendaStaffId, staff]);
 
   useEffect(() => {
     setAppointmentsPage(1);
-  }, [appointmentsSearch, appointmentsSort]);
+  }, [appointmentsSearch, appointmentsSort, appointmentsStaffFilter]);
 
   useEffect(() => {
     setCustomersPage(1);
@@ -1269,6 +1541,7 @@ export function TenantDetailPage() {
       createAppointmentAvailabilityLockRef.current = false;
       setCreateAppointmentServiceId('');
       setCreateAppointmentStaffId('');
+      setCreateAppointmentCustomerId('');
       setCreateAppointmentDate('');
       setCreateAppointmentSlot('');
       setCreateAppointmentPaymentMethod('cash');
@@ -1278,10 +1551,33 @@ export function TenantDetailPage() {
       return;
     }
 
-    if (!createAppointmentServiceId && services[0]?.id) {
-      setCreateAppointmentServiceId(services[0].id);
+    if (createAppointmentIsStaffScoped && createAppointmentScopedStaffId && createAppointmentStaffId !== createAppointmentScopedStaffId) {
+      setCreateAppointmentStaffId(createAppointmentScopedStaffId);
     }
-  }, [createAppointmentOpen, createAppointmentServiceId, services]);
+
+    if (
+      createAppointmentServiceId
+      && !createAppointmentAvailableServices.some((service) => service.id === createAppointmentServiceId)
+    ) {
+      setCreateAppointmentServiceId('');
+      setCreateAppointmentDate('');
+      setCreateAppointmentSlot('');
+      setCreateAppointmentSlots([]);
+      setCreateAppointmentAvailabilityMessage(null);
+      return;
+    }
+
+    if (!createAppointmentServiceId && createAppointmentAvailableServices[0]?.id) {
+      setCreateAppointmentServiceId(createAppointmentAvailableServices[0].id);
+    }
+  }, [
+    createAppointmentAvailableServices,
+    createAppointmentIsStaffScoped,
+    createAppointmentOpen,
+    createAppointmentScopedStaffId,
+    createAppointmentServiceId,
+    createAppointmentStaffId,
+  ]);
 
   useEffect(() => {
     if (!createAppointmentOpen) {
@@ -1296,6 +1592,21 @@ export function TenantDetailPage() {
       setCreateAppointmentPaymentMethod(createAppointmentPaymentOptions[0].value);
     }
   }, [createAppointmentOpen, createAppointmentPaymentMethod, createAppointmentPaymentOptions]);
+
+  useEffect(() => {
+    if (!createAppointmentOpen || createAppointmentCustomerMode !== 'existing') {
+      return;
+    }
+
+    if (
+      createAppointmentCustomerId
+      && customers.some((customer) => customer.id === createAppointmentCustomerId)
+    ) {
+      return;
+    }
+
+    setCreateAppointmentCustomerId(customers[0]?.id ?? '');
+  }, [createAppointmentCustomerId, createAppointmentCustomerMode, createAppointmentOpen, customers]);
 
   useEffect(() => {
     if (!createAppointmentOpen) {
@@ -1330,8 +1641,8 @@ export function TenantDetailPage() {
     if (!token || !tenantId) return;
 
     const form = new FormData(event.currentTarget);
-    const customerMode = String(form.get('customerMode') ?? 'existing') as 'existing' | 'new';
-    const customerId = String(form.get('customerId') ?? '').trim();
+    const customerMode = createAppointmentCustomerMode;
+    const customerId = createAppointmentCustomerId.trim();
     const serviceId = createAppointmentServiceId.trim();
     const staffId = createAppointmentStaffId.trim();
     const status = String(form.get('status') ?? 'confirmed') as AppointmentRecord['status'];
@@ -1363,6 +1674,10 @@ export function TenantDetailPage() {
     await wrapAction('appointment-create', async () => {
       if (!serviceId || !createAppointmentDate || !startDateTimeIso) {
         throw new Error('Selecciona un servicio, una fecha y un horario disponible.');
+      }
+
+      if (customerMode === 'existing' && !customerId) {
+        throw new Error('Selecciona un cliente existente.');
       }
 
       if (!paymentMethod) {
@@ -2870,8 +3185,9 @@ export function TenantDetailPage() {
                         variant="primary"
                         onClick={() => {
                           setCreateAppointmentCustomerMode(customers.length > 0 ? 'existing' : 'new');
-                          setCreateAppointmentServiceId(services[0]?.id ?? '');
-                          setCreateAppointmentStaffId('');
+                          setCreateAppointmentCustomerId(customers[0]?.id ?? '');
+                          setCreateAppointmentServiceId(createAppointmentAvailableServices[0]?.id ?? '');
+                          setCreateAppointmentStaffId(createAppointmentIsStaffScoped ? (createAppointmentScopedStaffId ?? '') : '');
                           setCreateAppointmentDate('');
                           setCreateAppointmentSlot('');
                           setCreateAppointmentPaymentMethod(
@@ -2897,6 +3213,24 @@ export function TenantDetailPage() {
                         <option value="nearest">Ordenar por cita más cercana</option>
                         <option value="created_desc">Ordenar por creación más reciente</option>
                       </Select>
+                      {!agendaUiScopedToStaff ? (
+                        <Select
+                          value={appointmentsStaffFilter}
+                          onChange={(event) => setAppointmentsStaffFilter(event.target.value)}
+                          className="min-w-[220px]"
+                        >
+                          {staff.length === 0 ? <option value="">Sin profesionales</option> : null}
+                          {staff.map((member) => (
+                            <option key={member.id} value={member.id}>
+                              {member.name}
+                            </option>
+                          ))}
+                        </Select>
+                      ) : (
+                        <span className="min-w-[220px] text-sm text-slate-700">
+                          Profesional: <span className="font-semibold text-slate-900">{myAgendaStaffName ?? '—'}</span>
+                        </span>
+                      )}
                       <span className="text-xs text-slate-500">{formatRelativeUpdate(appointmentsLastUpdatedAt)}</span>
                       <Button
                         type="button"
@@ -2910,6 +3244,188 @@ export function TenantDetailPage() {
                     </>
                   )}
                 />
+                <div className="rounded-[20px] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,0.98))] p-2.5 shadow-[0_14px_34px_rgba(15,23,42,0.05)] sm:p-3">
+                  <div className="flex flex-col gap-2 border-b border-slate-200 pb-2.5 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Vista agenda</p>
+                      <h4 className="mt-0.5 text-sm font-semibold text-slate-950">
+                        {formatAppointmentsCalendarRangeLabel(appointmentsCalendarRangeStart, appointmentsCalendarRangeEnd)}
+                      </h4>
+                      <p className="mt-0.5 text-[11px] text-slate-500">
+                        {appointmentsInSelectedWeek} reserva{appointmentsInSelectedWeek === 1 ? '' : 's'} en la vista actual.
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
+                      <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+                        {[
+                          { value: 'day' as const, label: 'Día' },
+                          { value: 'three_days' as const, label: '3 días' },
+                          { value: 'week' as const, label: 'Semana' },
+                        ].map((view) => (
+                          <button
+                            key={view.value}
+                            type="button"
+                            className={cn(
+                              'rounded-lg px-2 py-1 text-[10px] font-semibold transition',
+                              appointmentsCalendarView === view.value
+                                ? 'bg-[var(--brand-navy)] text-white shadow-[0_10px_24px_rgba(0,1,32,0.18)]'
+                                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                            )}
+                            onClick={() => setAppointmentsCalendarView(view.value)}
+                          >
+                            {view.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-8 px-2 text-[10px] font-semibold"
+                          onClick={() => setAppointmentsCalendarFocusDate((current) => addDays(
+                            current,
+                            appointmentsCalendarView === 'day' ? -1 : appointmentsCalendarView === 'three_days' ? -3 : -7,
+                          ))}
+                        >
+                          Anterior
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-8 px-2 text-[10px] font-semibold"
+                          onClick={() => {
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            setAppointmentsCalendarFocusDate(today);
+                          }}
+                        >
+                          Hoy
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-8 px-2 text-[10px] font-semibold"
+                          onClick={() => setAppointmentsCalendarFocusDate((current) => addDays(
+                            current,
+                            appointmentsCalendarView === 'day' ? 1 : appointmentsCalendarView === 'three_days' ? 3 : 7,
+                          ))}
+                        >
+                          Siguiente
+                        </Button>
+                      </div>
+                      <Input
+                        type="date"
+                        className="h-8 min-w-[142px] text-[11px]"
+                        value={formatDateInputValue(appointmentsCalendarFocusDate)}
+                        onChange={(event) => {
+                          if (!event.target.value) {
+                            return;
+                          }
+                          setAppointmentsCalendarFocusDate(new Date(`${event.target.value}T00:00:00`));
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-2.5 overflow-x-auto">
+                    <div className="min-w-[620px]">
+                      <div
+                        className="grid"
+                        style={{ gridTemplateColumns: `58px repeat(${appointmentsCalendarVisibleDays.length}, minmax(92px, 1fr))` }}
+                      >
+                        <div className="border-b border-slate-200 bg-white/70 px-1.5 py-1.5" />
+                        {appointmentsCalendarVisibleDays.map((date) => {
+                          const label = appointmentsCalendarDayLabels[date.getDay()] ?? '';
+                          const isToday = isSameLocalDate(date, new Date());
+                          return (
+                            <div
+                              key={`${label}-${date.toISOString()}`}
+                              className={cn(
+                                'border-b border-l border-slate-200 px-1.5 py-1.5 text-center',
+                                isToday ? 'bg-sky-50/80' : 'bg-white/70',
+                              )}
+                            >
+                              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
+                              <p className={cn('mt-0.5 text-[10px] font-semibold', isToday ? 'text-sky-700' : 'text-slate-900')}>
+                                {formatAppointmentsCalendarDayLabel(date)}
+                              </p>
+                            </div>
+                          );
+                        })}
+
+                        <div className="relative">
+                          {Array.from({ length: APPOINTMENTS_CALENDAR_TOTAL_HOURS }).map((_, index) => (
+                            <div
+                              key={`hour-${index}`}
+                              className="flex items-start justify-end pr-1.5 text-[9px] font-medium text-slate-400"
+                              style={{ height: `${APPOINTMENTS_CALENDAR_HOUR_HEIGHT}px` }}
+                            >
+                              <span className="-translate-y-1 rounded-full bg-white px-1">
+                                {formatAppointmentsCalendarHourLabel(APPOINTMENTS_CALENDAR_START_HOUR + index)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        {appointmentsCalendarVisibleDays.map((date, dayIndex) => {
+                          const label = appointmentsCalendarDayLabels[date.getDay()] ?? '';
+                          return (
+                            <div
+                              key={`column-${label}-${date.toISOString()}`}
+                              className="relative border-l border-slate-200"
+                              style={{ height: `${APPOINTMENTS_CALENDAR_TOTAL_HOURS * APPOINTMENTS_CALENDAR_HOUR_HEIGHT}px` }}
+                            >
+                              {Array.from({ length: APPOINTMENTS_CALENDAR_TOTAL_HOURS }).map((_, index) => (
+                                <div
+                                  key={`grid-${label}-${index}`}
+                                  className="border-b border-dashed border-slate-200/80"
+                                  style={{ height: `${APPOINTMENTS_CALENDAR_HOUR_HEIGHT}px` }}
+                                />
+                              ))}
+                              {appointmentsCalendarLayouts[dayIndex]?.map((entry) => {
+                                const width = `calc(${100 / entry.columns}% - 8px)`;
+                                const left = `calc(${(100 / entry.columns) * entry.column}% + 4px)`;
+                                return (
+                                  <button
+                                    key={entry.appointment.id}
+                                    type="button"
+                                    onClick={() => setEditModal({ type: 'appointment', item: entry.appointment })}
+                                    className={cn(
+                                      'absolute overflow-hidden rounded-lg border px-1.5 py-1 text-left shadow-[0_8px_18px_rgba(15,23,42,0.10)] transition hover:scale-[1.01] hover:shadow-[0_10px_24px_rgba(15,23,42,0.12)]',
+                                      getAppointmentEventClasses(entry.appointment.status),
+                                    )}
+                                    style={{
+                                      top: `${entry.top}px`,
+                                      height: `${entry.height}px`,
+                                      left,
+                                      width,
+                                    }}
+                                  >
+                                    <p className="truncate text-[8px] font-semibold uppercase tracking-[0.1em] opacity-70">
+                                      {appointmentStatusLabel(entry.appointment.status)}
+                                    </p>
+                                    <p className="mt-0.5 truncate text-[11px] font-semibold leading-tight">
+                                      {entry.appointment.customer?.fullName ?? 'Reserva'}
+                                    </p>
+                                    <p className="truncate text-[10px] leading-tight opacity-80">
+                                      {formatAppointmentsCalendarEventTime(entry.start)} - {formatAppointmentsCalendarEventTime(entry.end)}
+                                    </p>
+                                    <p className="truncate text-[10px] leading-tight opacity-80">
+                                      {entry.appointment.service?.name ?? 'Servicio'} · {entry.appointment.staff?.name ?? 'Por asignar'}
+                                    </p>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {appointmentsInSelectedWeek === 0 ? (
+                        <div className="border-t border-slate-200 px-3 py-4 text-sm text-slate-500">
+                          No hay reservas en el rango seleccionado con los filtros actuales.
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
                 <DataTable>
                   <thead className="bg-slate-50 text-slate-500">
                       <tr>
@@ -3073,10 +3589,10 @@ export function TenantDetailPage() {
                 <Select
                   name="serviceId"
                   value={createAppointmentServiceId}
-                  disabled={services.length === 0}
+                  disabled={createAppointmentAvailableServices.length === 0}
                   onChange={(event) => {
                     setCreateAppointmentServiceId(event.target.value);
-                    setCreateAppointmentStaffId('');
+                    setCreateAppointmentStaffId(createAppointmentIsStaffScoped ? (createAppointmentScopedStaffId ?? '') : '');
                     setCreateAppointmentDate('');
                     setCreateAppointmentSlot('');
                     setCreateAppointmentSlots([]);
@@ -3084,18 +3600,23 @@ export function TenantDetailPage() {
                   }}
                 >
                   <option value="">Selecciona un servicio</option>
-                  {services.map((service) => (
+                  {createAppointmentAvailableServices.map((service) => (
                     <option key={service.id} value={service.id}>
                       {service.name}
                     </option>
                   ))}
                 </Select>
+                {createAppointmentIsStaffScoped && createAppointmentAvailableServices.length === 0 ? (
+                  <p className="mt-1 text-xs text-amber-700">
+                    Este usuario staff no tiene servicios asignados. Vincula servicios a su perfil para crear reservas manuales.
+                  </p>
+                ) : null}
               </FormField>
               <FormField label="Profesional" optional>
                 <Select
                   name="staffId"
                   value={createAppointmentStaffId}
-                  disabled={false}
+                  disabled={createAppointmentIsStaffScoped}
                   onChange={(event) => {
                     setCreateAppointmentStaffId(event.target.value);
                     setCreateAppointmentDate('');
@@ -3104,13 +3625,18 @@ export function TenantDetailPage() {
                     setCreateAppointmentAvailabilityMessage(null);
                   }}
                 >
-                  <option value="">Sin asignar</option>
+                  {!createAppointmentIsStaffScoped ? <option value="">Sin asignar</option> : null}
                   {createAppointmentCompatibleStaff.map((member) => (
                     <option key={member.id} value={member.id}>
                       {member.name}
                     </option>
                   ))}
                 </Select>
+                {createAppointmentIsStaffScoped ? (
+                  <p className="mt-1 text-xs text-slate-500">
+                    La reserva se asignará al profesional vinculado con esta cuenta.
+                  </p>
+                ) : null}
                 {createAppointmentServiceId && createAppointmentCompatibleStaff.length === 0 ? (
                   <p className="text-xs text-amber-700">
                     No hay profesionales asignados a este servicio. Puedes dejarlo sin asignar o revisar el equipo.
@@ -3258,17 +3784,15 @@ export function TenantDetailPage() {
             {createAppointmentCustomerMode === 'existing' ? (
               <div className="grid gap-4 lg:grid-cols-[1fr,auto] lg:items-end">
                 <FormField label="Cliente existente" required>
-                  <Select name="customerId" defaultValue={customers[0]?.id ?? ''} disabled={customers.length === 0}>
-                    {customers.length === 0 ? (
-                      <option value="">No hay clientes disponibles</option>
-                    ) : (
-                      customers.map((customer) => (
-                        <option key={customer.id} value={customer.id}>
-                          {customer.fullName} · {customer.phone}
-                        </option>
-                      ))
-                    )}
-                  </Select>
+                  <SearchableSelect
+                    value={createAppointmentCustomerId}
+                    onChange={setCreateAppointmentCustomerId}
+                    options={createAppointmentCustomerOptions}
+                    placeholder="Selecciona un cliente"
+                    searchPlaceholder="Buscar por nombre, teléfono o correo..."
+                    emptyMessage="No hay clientes que coincidan."
+                    disabled={customers.length === 0}
+                  />
                 </FormField>
                 <div className="text-xs text-slate-500">
                   {customers.length === 0 ? 'No hay clientes cargados todavía. Cambia a cliente nuevo.' : 'Puedes elegir cualquier cliente registrado.'}
