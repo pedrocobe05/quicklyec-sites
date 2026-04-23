@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { forgotPassword, login, resetPassword } from '../lib/api';
 import { BrandMark } from '../shared/components/brand/BrandMark';
@@ -24,6 +24,16 @@ export function LoginPage() {
     () => 'Ingresa una nueva contraseña segura para recuperar el acceso a tu cuenta.',
     [],
   );
+
+  useEffect(() => {
+    const notice = window.sessionStorage.getItem('qs_permission_notice');
+    if (!notice) {
+      return;
+    }
+
+    window.sessionStorage.removeItem('qs_permission_notice');
+    notify(notice, 'info');
+  }, [notify]);
 
   if (token) {
     try {

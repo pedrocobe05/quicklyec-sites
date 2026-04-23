@@ -11,6 +11,9 @@ import { SubscriptionPlanEntity, TenantEntity, TenantMembershipEntity } from 'sr
 import type { RequestWithTenantMembership } from './tenant-staff-scope.util';
 import { TENANT_MODULE_ACCESS_KEY } from './tenant-module-access.decorator';
 import { intersectTenantModules, mergeStoredPlanModulesWithCanonical, normalizePlanCode } from '../tenants/tenant-access.constants';
+import { getTenantSubscriptionState } from '../tenants/subscription.utils';
+
+const SUBSCRIPTION_GRACE_PERIOD_DAYS = 3;
 
 @Injectable()
 export class TenantMembershipGuard implements CanActivate {
@@ -71,6 +74,20 @@ export class TenantMembershipGuard implements CanActivate {
 
     if (!tenant) {
       throw new ForbiddenException('Tenant not found');
+    }
+
+    const subscription = getTenantSubscriptionState({
+      subscriptionStartsAt: tenant.subscriptionStartsAt,
+      subscriptionEndsAt: tenant.subscriptionEndsAt,
+    });
+
+    if (
+      subscription.daysUntilExpiry !== null
+      && subscription.daysUntilExpiry < -SUBSCRIPTION_GRACE_PERIOD_DAYS
+    ) {
+      throw new ForbiddenException(
+        `Acceso deshabilitado: la suscripción venció hace más de ${SUBSCRIPTION_GRACE_PERIOD_DAYS} días. Renueva para continuar.`,
+      );
     }
 
     const normalizedPlanCode = normalizePlanCode(tenant.plan);

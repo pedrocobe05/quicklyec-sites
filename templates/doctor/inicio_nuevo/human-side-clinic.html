@@ -1,0 +1,183 @@
+<section class="dc-human">
+  <article class="dc-human__copy">
+    <span class="dc-eyebrow">More than medicine</span>
+    <h2>We don't just treat — we walk alongside you.</h2>
+    <p>
+      Health is not just a moment in a consultation room. It is a journey that
+      extends into your daily life, your home, your family, and your routines.
+    </p>
+    <p>
+      That is why at Dr. Cristhian Medical Center, we care about the person as
+      much as the condition. Every visit is a conversation. Every follow-up is
+      a reminder that you are not going through this alone.
+    </p>
+    <a href="/about" class="dc-btn dc-btn--secondary">Meet our team</a>
+  </article>
+
+  <div class="dc-human__gallery">
+    <div class="dc-human__gallery-main">
+      <img src="{{asset:sharing-cristhian}}" alt="Dr. Cristhian in a warm exchange with a patient" />
+    </div>
+    <div class="dc-human__gallery-side">
+      <img src="{{asset:compartiendo}}" alt="Doctor and patient sharing a reassuring moment after a consultation" />
+      <img src="{{asset:mall}}" alt="Medical professional providing support and guidance at a patient visit" />
+    </div>
+  </div>
+
+  <div class="dc-human__quote">
+    <blockquote>
+      "The best part of this work is not the diagnosis — it is the moment a patient
+      feels understood and knows someone is genuinely there for them."
+    </blockquote>
+    <cite>Dr. Cristhian Medical Center</cite>
+  </div>
+</section>
+
+& .dc-human {
+  display: grid;
+  gap: 1.1rem;
+  border-radius: 2rem;
+  overflow: hidden;
+  border: 1px solid rgba(18,52,58,0.08);
+  padding: clamp(1.35rem, 2.6vw, 2.4rem);
+  background:
+    radial-gradient(circle at bottom right, rgba(76,166,162,0.1), transparent 50%),
+    linear-gradient(180deg, rgba(255,255,255,0.98), rgba(238,247,246,0.97));
+  box-shadow: 0 24px 80px rgba(17,53,60,0.07);
+}
+@media (min-width: 980px) {
+  & .dc-human {
+    grid-template-columns: 1fr 1.4fr;
+    grid-template-rows: auto auto;
+  }
+  & .dc-human__quote {
+    grid-column: 1 / -1;
+  }
+}
+& .dc-eyebrow {
+  display: inline-block;
+  margin-bottom: 0.95rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.34em;
+  color: #2f7c81;
+}
+& .dc-human__copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+}
+& .dc-human__copy h2 {
+  margin: 0;
+  color: #12343a;
+  font-size: clamp(1.85rem, 3vw, 3rem);
+  line-height: 1;
+  max-width: 13ch;
+}
+& .dc-human__copy p {
+  margin: 1rem 0 0;
+  color: #4f676c;
+  font-size: 0.98rem;
+  line-height: 1.82;
+  max-width: 52ch;
+}
+& .dc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 3rem;
+  padding: 0 1.35rem;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.92rem;
+  margin-top: 1.35rem;
+}
+& .dc-btn--secondary {
+  background: rgba(255,255,255,0.9);
+  border: 1px solid rgba(18,52,58,0.12);
+  color: #12343a;
+}
+& .dc-human__gallery {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1.3fr 1fr;
+}
+@media (max-width: 540px) {
+  & .dc-human__gallery {
+    grid-template-columns: 1fr;
+  }
+  & .dc-human__gallery-side {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: 1fr;
+  }
+}
+& .dc-human__gallery-main {
+  overflow: hidden;
+  border-radius: 1.5rem;
+  border: 1px solid rgba(18,52,58,0.07);
+}
+& .dc-human__gallery-main img {
+  width: 100%;
+  height: 26rem;
+  object-fit: cover;
+  display: block;
+}
+@media (max-width: 979px) {
+  & .dc-human__gallery-main img {
+    height: 20rem;
+  }
+}
+@media (max-width: 540px) {
+  & .dc-human__gallery-main img {
+    height: 16rem;
+  }
+}
+& .dc-human__gallery-side {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+& .dc-human__gallery-side img {
+  width: 100%;
+  height: 12.6rem;
+  object-fit: cover;
+  display: block;
+  border-radius: 1.2rem;
+  border: 1px solid rgba(18,52,58,0.07);
+}
+@media (max-width: 979px) {
+  & .dc-human__gallery-side img {
+    height: 9.6rem;
+  }
+}
+@media (max-width: 540px) {
+  & .dc-human__gallery-side img {
+    height: 10rem;
+  }
+}
+& .dc-human__quote {
+  border-top: 1px solid rgba(18,52,58,0.08);
+  padding-top: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+& .dc-human__quote blockquote {
+  margin: 0;
+  color: #2a5a60;
+  font-size: clamp(1rem, 1.6vw, 1.22rem);
+  line-height: 1.65;
+  font-style: italic;
+  max-width: 72ch;
+}
+& .dc-human__quote cite {
+  font-size: 0.82rem;
+  font-style: normal;
+  font-weight: 600;
+  color: #2f7c81;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}

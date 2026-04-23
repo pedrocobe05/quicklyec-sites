@@ -735,6 +735,8 @@ export function TenantDetailPage() {
   const [saving, setSaving] = useState<string | null>(null);
   const [uploadingAsset, setUploadingAsset] = useState<'logo' | 'favicon' | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [tabLoading, setTabLoading] = useState(false);
+  const [loadedTabs, setLoadedTabs] = useState<Partial<Record<TenantTab, boolean>>>({});
   const [editModal, setEditModal] = useState<EditModalState | null>(null);
   const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
   const [createUserOpen, setCreateUserOpen] = useState(false);
@@ -1267,75 +1269,156 @@ export function TenantDetailPage() {
     setSearchParams(nextParams, { replace: true });
   }
 
-  async function loadData() {
+  function canLoadModuleFromProfile(profile: TenantProfileResponse | null, module: string) {
+    if (!profile) {
+      return false;
+    }
+    if (!user?.isPlatformAdmin && ['site', 'branding', 'domains'].includes(module)) {
+      return false;
+    }
+    return Boolean(user?.isPlatformAdmin) || (profile.effectiveModules ?? []).includes(module);
+  }
+
+  function normalizeStaffRecords(
+    rawStaff: Array<StaffRecord & { staffServices?: Array<{ serviceId: string; service?: { name?: string | null } | null }> }>,
+  ) {
+    return rawStaff.map((member) => ({
+      ...member,
+      serviceIds: member.staffServices?.map((link) => link.serviceId) ?? [],
+      serviceNames: member.staffServices?.map((link) => link.service?.name ?? '').filter(Boolean) ?? [],
+    }));
+  }
+
+  async function loadTenantShell() {
     if (!token || !tenantId) return;
     const tenantData = (await getTenantProfile(token, tenantId)) as TenantProfileResponse;
-    const effectiveModules = new Set(tenantData.effectiveModules ?? []);
-    const presenceModules = new Set(['site', 'branding', 'domains']);
-    const canLoadModule = (module: string) => {
-      if (!user?.isPlatformAdmin && presenceModules.has(module)) {
-        return false;
-      }
-      return Boolean(user?.isPlatformAdmin) || effectiveModules.has(module);
-    };
-    const [
-      membershipsData,
-      rolesData,
-      pagesData,
-      globalSectionsData,
-      servicesData,
-      staffData,
-      appointmentsData,
-      customersData,
-      rulesData,
-      blocksData,
-    ] = await Promise.all([
-      canLoadModule('users') ? getTenantMemberships(token, tenantId) : Promise.resolve([]),
-      canLoadModule('roles') ? getTenantRoles(token, tenantId) : Promise.resolve([]),
-      canLoadModule('site') ? getPages(token, tenantId) : Promise.resolve([]),
-      canLoadModule('site') ? getSections(token, tenantId, undefined, 'global') : Promise.resolve([]),
-      canLoadModule('services') ? getServices(token, tenantId) : Promise.resolve([]),
-      canLoadModule('staff') ? getStaff(token, tenantId) : Promise.resolve([]),
-      canLoadModule('appointments') ? getAppointments(token, tenantId) : Promise.resolve([]),
-      canLoadModule('customers') ? getCustomers(token, tenantId) : Promise.resolve([]),
-      canLoadModule('agenda') ? getAvailabilityRules(token, tenantId) : Promise.resolve([]),
-      canLoadModule('agenda') ? getScheduleBlocks(token, tenantId) : Promise.resolve([]),
-    ]);
     const plansData = user?.isPlatformAdmin ? await getPlatformPlans(token) : [];
 
-    const typedPages = pagesData as PageRecord[];
-    const nextPageId = selectedPageId || typedPages[0]?.id;
     setTenantProfile(tenantData);
     setPlatformPlans(plansData as PlatformPlanRecord[]);
+    return tenantData;
+  }
+
+  async function loadUsersTab() {
+    if (!token || !tenantId) return;
+    const [membershipsData, rolesData, staffData] = await Promise.all([
+      getTenantMemberships(token, tenantId),
+      getTenantRoles(token, tenantId),
+      getStaff(token, tenantId),
+    ]);
     setTenantMemberships(
       sortTenantMembershipRecords((membershipsData as TenantMembershipApiRecord[]).map(mapTenantMembershipRecord)),
     );
     setTenantRoles(rolesData as TenantRoleRecord[]);
+    setStaff(normalizeStaffRecords(staffData as Array<StaffRecord & { staffServices?: Array<{ serviceId: string; service?: { name?: string | null } | null }> }>));
+  }
+
+  async function loadRolesTab() {
+    if (!token || !tenantId) return;
+    const rolesData = await getTenantRoles(token, tenantId);
+    setTenantRoles(rolesData as TenantRoleRecord[]);
+  }
+
+  async function loadServicesStaffTab() {
+    if (!token || !tenantId) return;
+    const [servicesData, staffData] = await Promise.all([
+      getServices(token, tenantId),
+      getStaff(token, tenantId),
+    ]);
+    setServices(servicesData as ServiceRecord[]);
+    setStaff(normalizeStaffRecords(staffData as Array<StaffRecord & { staffServices?: Array<{ serviceId: string; service?: { name?: string | null } | null }> }>));
+  }
+
+  async function loadSiteTab() {
+    if (!token || !tenantId) return;
+    const [pagesData, globalSectionsData] = await Promise.all([
+      getPages(token, tenantId),
+      getSections(token, tenantId, undefined, 'global'),
+    ]);
+    const typedPages = pagesData as PageRecord[];
+    const nextPageId = selectedPageId || typedPages[0]?.id;
     setPages(typedPages);
     setGlobalSections(globalSectionsData as SectionRecord[]);
-    setServices(servicesData as ServiceRecord[]);
-    setStaff(
-      (staffData as Array<StaffRecord & { staffServices?: Array<{ serviceId: string; service?: { name?: string | null } | null }> }>).map((member) => ({
-        ...member,
-        serviceIds: member.staffServices?.map((link) => link.serviceId) ?? [],
-        serviceNames: member.staffServices?.map((link) => link.service?.name ?? '').filter(Boolean) ?? [],
-      })),
-    );
-    setAppointments(appointmentsData as AppointmentRecord[]);
-    setAppointmentsLastUpdatedAt(new Date());
-    setCustomers(customersData as CustomerRecord[]);
-    setAvailabilityRules(rulesData as AvailabilityRuleRecord[]);
-    setScheduleBlocks(blocksData as ScheduleBlockRecord[]);
-
-    if (nextPageId && canLoadModule('site')) {
+    if (nextPageId) {
       setSelectedPageId(nextPageId);
-      // Avoid fetching sections here directly. The effect that watches
-      // `selectedPage?.id` will load them — fetching here + in the effect
-      // caused duplicated requests and occasional rate limits (429).
       setSections([]);
     } else {
       setSelectedPageId('');
       setSections([]);
+    }
+  }
+
+  async function loadAgendaTab() {
+    if (!token || !tenantId) return;
+    const [staffData, rulesData, blocksData] = await Promise.all([
+      getStaff(token, tenantId),
+      getAvailabilityRules(token, tenantId),
+      getScheduleBlocks(token, tenantId),
+    ]);
+    setStaff(normalizeStaffRecords(staffData as Array<StaffRecord & { staffServices?: Array<{ serviceId: string; service?: { name?: string | null } | null }> }>));
+    setAvailabilityRules(rulesData as AvailabilityRuleRecord[]);
+    setScheduleBlocks(blocksData as ScheduleBlockRecord[]);
+  }
+
+  async function loadAppointmentsTab() {
+    if (!token || !tenantId) return;
+    const [servicesData, staffData, appointmentsData, customersData] = await Promise.all([
+      getServices(token, tenantId),
+      getStaff(token, tenantId),
+      getAppointments(token, tenantId),
+      getCustomers(token, tenantId),
+    ]);
+    setServices(servicesData as ServiceRecord[]);
+    setStaff(normalizeStaffRecords(staffData as Array<StaffRecord & { staffServices?: Array<{ serviceId: string; service?: { name?: string | null } | null }> }>));
+    setAppointments(appointmentsData as AppointmentRecord[]);
+    setAppointmentsLastUpdatedAt(new Date());
+    setCustomers(customersData as CustomerRecord[]);
+  }
+
+  async function loadCustomersTab() {
+    if (!token || !tenantId) return;
+    const customersData = await getCustomers(token, tenantId);
+    setCustomers(customersData as CustomerRecord[]);
+  }
+
+  async function loadTabData(tab: TenantTab, profile = tenantProfile, options?: { force?: boolean }) {
+    if (!token || !tenantId || !profile) return;
+    if (!options?.force && loadedTabs[tab]) return;
+
+    switch (tab) {
+      case 'users':
+        if (canLoadModuleFromProfile(profile, 'users')) await loadUsersTab();
+        break;
+      case 'roles':
+        if (canLoadModuleFromProfile(profile, 'roles')) await loadRolesTab();
+        break;
+      case 'services':
+      case 'staff':
+        if (canLoadModuleFromProfile(profile, 'services') || canLoadModuleFromProfile(profile, 'staff')) await loadServicesStaffTab();
+        break;
+      case 'site':
+        if (canLoadModuleFromProfile(profile, 'site')) await loadSiteTab();
+        break;
+      case 'agenda':
+        if (canLoadModuleFromProfile(profile, 'agenda')) await loadAgendaTab();
+        break;
+      case 'appointments':
+        if (canLoadModuleFromProfile(profile, 'appointments')) await loadAppointmentsTab();
+        break;
+      case 'customers':
+        if (canLoadModuleFromProfile(profile, 'customers')) await loadCustomersTab();
+        break;
+      default:
+        break;
+    }
+
+    setLoadedTabs((current) => ({ ...current, [tab]: true }));
+  }
+
+  async function loadData(options?: { forceTab?: boolean }) {
+    const profile = await loadTenantShell();
+    if (profile) {
+      await loadTabData(activeTab, profile, { force: options?.forceTab ?? true });
     }
   }
 
@@ -1716,12 +1799,26 @@ export function TenantDetailPage() {
 
   useEffect(() => {
     if (!token || !tenantId) return;
-    loadData()
+    loadTenantShell()
       .catch((err: Error) => {
         notify(err.message, 'error');
       })
       .finally(() => setIsLoading(false));
   }, [token, tenantId]);
+
+  useEffect(() => {
+    if (isLoading || !tenantProfile || !token || !tenantId) {
+      return;
+    }
+    if (loadedTabs[activeTab]) {
+      return;
+    }
+
+    setTabLoading(true);
+    loadTabData(activeTab, tenantProfile)
+      .catch((err: Error) => notify(err.message, 'error'))
+      .finally(() => setTabLoading(false));
+  }, [activeTab, isLoading, tenantId, tenantProfile?.tenant.id, token, loadedTabs[activeTab]]);
 
   useEffect(() => {
     if (visibleTabs.length === 0) {
@@ -2214,6 +2311,13 @@ export function TenantDetailPage() {
       isPlatformAdmin={Boolean(user?.isPlatformAdmin)}
       availableModules={layoutAvailableModules}
       activeTenant={tenantProfile?.tenant ?? null}
+      activeSubscription={tenantProfile
+        ? {
+            daysUntilExpiry: tenantProfile.subscription?.daysUntilExpiry ?? null,
+            isExpired: tenantProfile.subscription?.isExpired,
+            endsAt: tenantProfile.tenant.subscriptionEndsAt,
+          }
+        : null}
       tenantRoutePrefix={tenantRoutePrefix}
       currentPath={currentLayoutPath}
     >
@@ -2250,6 +2354,12 @@ export function TenantDetailPage() {
                 ))}
               </div>
             </Card>
+          ) : null}
+
+          {tabLoading ? (
+            <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-500 shadow-sm">
+              Cargando datos de la pestaña...
+            </div>
           ) : null}
 
           {activeTab === 'general' && user?.isPlatformAdmin ? (

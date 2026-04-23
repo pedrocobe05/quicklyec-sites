@@ -745,6 +745,23 @@ export class AppointmentsService {
     return eligibleStaffIds.includes(requestedStaffId) ? [requestedStaffId] : [];
   }
 
+  private async getEligibleStaffNames(serviceId: string, eligibleStaffIds: string[]) {
+    if (eligibleStaffIds.length === 0) {
+      return new Map<string, string>();
+    }
+
+    const links = await this.staffServicesRepository.find({
+      where: { serviceId, staffId: In(eligibleStaffIds) },
+      relations: { staff: true },
+    });
+
+    return new Map(
+      links
+        .filter((link) => link.staff)
+        .map((link) => [link.staffId, link.staff.name]),
+    );
+  }
+
   private async ensureAppointmentSlotAvailable(input: {
     tenantId: string;
     serviceId: string;
@@ -803,10 +820,13 @@ export class AppointmentsService {
 
     const dayOfWeek = this.getLocalDayOfWeek(input.startDateTime, timeZone);
     const rules = await this.availabilityRepository.find({
-      where: { tenantId: input.tenantId, dayOfWeek, isActive: true, staffId: In(eligibleStaffIds) },
+      where: [
+        { tenantId: input.tenantId, dayOfWeek, isActive: true, staffId: In(eligibleStaffIds) },
+        { tenantId: input.tenantId, dayOfWeek, isActive: true, staffId: IsNull() },
+      ],
     });
     const matchingRules = input.staffId
-      ? rules.filter((rule) => rule.staffId === input.staffId)
+      ? rules.filter((rule) => rule.staffId === input.staffId || rule.staffId == null)
       : rules;
 
     const coveredByRule = matchingRules.some((rule) =>
@@ -834,10 +854,16 @@ export class AppointmentsService {
     const dayOfWeek = this.getLocalDayOfWeek(dayStart, timeZone);
 
     const rules = await this.availabilityRepository.find({
-      where: { tenantId: query.tenantId, dayOfWeek, isActive: true, staffId: In(eligibleStaffIds) },
+      where: [
+        { tenantId: query.tenantId, dayOfWeek, isActive: true, staffId: In(eligibleStaffIds) },
+        { tenantId: query.tenantId, dayOfWeek, isActive: true, staffId: IsNull() },
+      ],
       relations: { staff: true },
     });
-    const filteredRules = query.staffId ? rules.filter((rule) => rule.staffId === query.staffId) : rules;
+    const filteredRules = query.staffId
+      ? rules.filter((rule) => rule.staffId === query.staffId || rule.staffId == null)
+      : rules;
+    const eligibleStaffNames = await this.getEligibleStaffNames(query.serviceId, eligibleStaffIds);
 
     const [appointments, blocks] = await Promise.all([
       this.appointmentsRepository.find({
@@ -871,6 +897,11 @@ export class AppointmentsService {
       const interval = rule.slotIntervalMinutes;
       let current = this.toDateWithTime(query.date, rule.startTime, timeZone);
       const end = this.toDateWithTime(query.date, rule.endTime, timeZone);
+      const ruleStaffIds = rule.staffId
+        ? [rule.staffId]
+        : query.staffId
+          ? [query.staffId]
+          : eligibleStaffIds;
 
       while (current < end) {
         const slotEnd = new Date(current.getTime() + service.durationMinutes * 60 * 1000);
@@ -883,36 +914,42 @@ export class AppointmentsService {
           continue;
         }
 
-        const hasAppointment = sameDayAppointments.some((appointment) =>
-          (appointment.staffId === rule.staffId || appointment.staffId == null)
-          && this.overlaps(current, slotEnd, appointment.startDateTime, appointment.endDateTime),
-        );
-        const hasBlock = sameDayBlocks.some((block) =>
-          (block.staffId === rule.staffId || block.staffId == null)
-          && this.overlaps(current, slotEnd, block.startDateTime, block.endDateTime),
-        );
+        for (const staffId of ruleStaffIds) {
+          const hasAppointment = sameDayAppointments.some((appointment) =>
+            (appointment.staffId === staffId || appointment.staffId == null)
+            && this.overlaps(current, slotEnd, appointment.startDateTime, appointment.endDateTime),
+          );
+          const hasBlock = sameDayBlocks.some((block) =>
+            (block.staffId === staffId || block.staffId == null)
+            && this.overlaps(current, slotEnd, block.startDateTime, block.endDateTime),
+          );
 
-        let unavailableReason: string | null = null;
-        if (hasAppointment) {
-          unavailableReason = 'Horario reservado';
-        } else if (hasBlock) {
-          unavailableReason = 'Horario bloqueado';
+          let unavailableReason: string | null = null;
+          if (hasAppointment) {
+            unavailableReason = 'Horario reservado';
+          } else if (hasBlock) {
+            unavailableReason = 'Horario bloqueado';
+          }
+
+          slots.push({
+            start: current.toISOString(),
+            end: slotEnd.toISOString(),
+            staffId,
+            staffName: rule.staffId ? (rule.staff?.name ?? null) : (eligibleStaffNames.get(staffId) ?? null),
+            available: unavailableReason == null,
+            unavailableReason,
+          });
         }
-
-        slots.push({
-          start: current.toISOString(),
-          end: slotEnd.toISOString(),
-          staffId: rule.staffId,
-          staffName: rule.staff?.name ?? null,
-          available: unavailableReason == null,
-          unavailableReason,
-        });
 
         current = new Date(current.getTime() + interval * 60 * 1000);
       }
     }
 
-    return slots.sort(
+    const uniqueSlots = Array.from(
+      new Map(slots.map((slot) => [`${slot.start}::${slot.staffId ?? 'unassigned'}`, slot])).values(),
+    );
+
+    return uniqueSlots.sort(
       (left, right) =>
         left.start.localeCompare(right.start)
         || Number(right.available) - Number(left.available)

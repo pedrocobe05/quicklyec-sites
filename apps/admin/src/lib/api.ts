@@ -75,6 +75,15 @@ function clearSessionAndRedirect() {
   }
 }
 
+function redirectToLoginWithNotice(message: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.sessionStorage.setItem('qs_permission_notice', message);
+  clearSessionAndRedirect();
+}
+
 function redirectToHomeWithPermissionNotice(message: string) {
   if (typeof window === 'undefined') {
     return;
@@ -158,6 +167,14 @@ async function request<T>(path: string, options?: RequestInit, hasRetried = fals
       ) {
         redirectToHomeWithPermissionNotice('No tienes permisos para acceder a esa sección.');
         throw new Error('No tienes permisos para acceder a esa sección.');
+      }
+
+      if (
+        response.status === 403
+        && errorMessage.toLowerCase().includes('acceso deshabilitado')
+      ) {
+        redirectToLoginWithNotice(errorMessage);
+        throw new Error(errorMessage);
       }
 
       throw new Error(errorMessage);

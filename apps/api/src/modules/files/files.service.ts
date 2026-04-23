@@ -48,7 +48,8 @@ export class FilesService {
     const config = this.getStorageConfig();
     const sanitizedFilename = this.sanitizeFilename(input.filename);
     const folder = RESOURCE_FOLDER_MAP[input.resourceType] ?? 'site';
-    const storageKey = `tenants/${tenantId}/${folder}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}-${sanitizedFilename}`;
+    const tenantSlug = tenant.slug?.trim() || tenantId;
+    const storageKey = `tenants/${tenantSlug}/${folder}/${randomUUID()}-${sanitizedFilename}`;
 
     const file = await this.filesRepository.save({
       tenantId,

@@ -1,0 +1,232 @@
+<section class="dc-reviews">
+  <div class="dc-reviews__header">
+    <span class="dc-eyebrow">Patient reviews</span>
+    <h2>What our patients say about us.</h2>
+    <div class="dc-reviews__summary">
+      <div class="dc-reviews__score">
+        <strong>4.9</strong>
+        <div class="dc-stars" aria-label="4.9 out of 5 stars">
+          <span class="dc-star dc-star--full"></span>
+          <span class="dc-star dc-star--full"></span>
+          <span class="dc-star dc-star--full"></span>
+          <span class="dc-star dc-star--full"></span>
+          <span class="dc-star dc-star--full"></span>
+        </div>
+        <span>Based on {{reviews_count}} reviews</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="dc-reviews__grid">
+
+    <article class="dc-reviews__card">
+      <div class="dc-stars" aria-label="5 out of 5 stars">
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+      </div>
+      <blockquote>{{review_1_text}}</blockquote>
+      <cite>
+        <span class="dc-reviews__name">{{review_1_name}}</span>
+        <span class="dc-reviews__date">{{review_1_date}}</span>
+      </cite>
+    </article>
+
+    <article class="dc-reviews__card">
+      <div class="dc-stars" aria-label="5 out of 5 stars">
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+      </div>
+      <blockquote>{{review_2_text}}</blockquote>
+      <cite>
+        <span class="dc-reviews__name">{{review_2_name}}</span>
+        <span class="dc-reviews__date">{{review_2_date}}</span>
+      </cite>
+    </article>
+
+    <article class="dc-reviews__card">
+      <div class="dc-stars" aria-label="4 out of 5 stars">
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--empty"></span>
+      </div>
+      <blockquote>{{review_3_text}}</blockquote>
+      <cite>
+        <span class="dc-reviews__name">{{review_3_name}}</span>
+        <span class="dc-reviews__date">{{review_3_date}}</span>
+      </cite>
+    </article>
+
+    <article class="dc-reviews__card">
+      <div class="dc-stars" aria-label="5 out of 5 stars">
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+      </div>
+      <blockquote>{{review_4_text}}</blockquote>
+      <cite>
+        <span class="dc-reviews__name">{{review_4_name}}</span>
+        <span class="dc-reviews__date">{{review_4_date}}</span>
+      </cite>
+    </article>
+
+    <article class="dc-reviews__card">
+      <div class="dc-stars" aria-label="5 out of 5 stars">
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+      </div>
+      <blockquote>{{review_5_text}}</blockquote>
+      <cite>
+        <span class="dc-reviews__name">{{review_5_name}}</span>
+        <span class="dc-reviews__date">{{review_5_date}}</span>
+      </cite>
+    </article>
+
+    <article class="dc-reviews__card">
+      <div class="dc-stars" aria-label="4 out of 5 stars">
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--full"></span>
+        <span class="dc-star dc-star--empty"></span>
+      </div>
+      <blockquote>{{review_6_text}}</blockquote>
+      <cite>
+        <span class="dc-reviews__name">{{review_6_name}}</span>
+        <span class="dc-reviews__date">{{review_6_date}}</span>
+      </cite>
+    </article>
+
+  </div>
+</section>
+
+& .dc-reviews {
+  border: 1px solid rgba(18,52,58,0.08);
+  border-radius: 2rem;
+  padding: clamp(1.35rem, 2.6vw, 2.4rem);
+  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(238,247,246,0.96));
+  box-shadow: 0 24px 80px rgba(17,53,60,0.07);
+}
+& .dc-eyebrow {
+  display: inline-block;
+  margin-bottom: 0.95rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.34em;
+  color: #2f7c81;
+}
+& .dc-reviews__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+& .dc-reviews__header h2 {
+  margin: 0;
+  color: #12343a;
+  font-size: clamp(1.8rem, 3vw, 2.9rem);
+  line-height: 1;
+  max-width: 18ch;
+}
+& .dc-reviews__summary {
+  flex-shrink: 0;
+}
+& .dc-reviews__score {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
+}
+& .dc-reviews__score strong {
+  color: #12343a;
+  font-size: 2.4rem;
+  line-height: 1;
+}
+& .dc-reviews__score span {
+  color: #7a9499;
+  font-size: 0.8rem;
+}
+& .dc-stars {
+  display: flex;
+  gap: 0.2rem;
+}
+& .dc-star {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  background-color: currentColor;
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+}
+& .dc-star--full {
+  color: #e8a920;
+}
+& .dc-star--half {
+  color: #e8a920;
+  opacity: 0.5;
+}
+& .dc-star--empty {
+  color: #d0dfe0;
+}
+& .dc-reviews__grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 860px) {
+  & .dc-reviews__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 540px) {
+  & .dc-reviews__grid {
+    grid-template-columns: 1fr;
+  }
+}
+& .dc-reviews__card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  border-radius: 1.5rem;
+  border: 1px solid rgba(18,52,58,0.07);
+  background: rgba(245,250,249,0.95);
+  padding: 1.2rem 1.35rem 1.3rem;
+}
+& .dc-reviews__card blockquote {
+  margin: 0;
+  flex: 1;
+  color: #3d5f64;
+  font-size: 0.95rem;
+  line-height: 1.75;
+  font-style: italic;
+}
+& .dc-reviews__card cite {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-style: normal;
+  border-top: 1px solid rgba(18,52,58,0.07);
+  padding-top: 0.75rem;
+}
+& .dc-reviews__name {
+  color: #12343a;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+& .dc-reviews__date {
+  color: #8aa4a8;
+  font-size: 0.78rem;
+}

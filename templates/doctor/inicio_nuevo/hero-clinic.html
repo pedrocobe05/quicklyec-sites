@@ -1,0 +1,126 @@
+<section class="dc-hero">
+  <div class="dc-hero__left">
+    <div class="dc-hero__copy">
+      <span class="dc-eyebrow">Medical center</span>
+      <h1>A place where good medicine meets real care.</h1>
+      <p>
+        <em>Dr. Cristhian Medical Center</em> is a private practice built around
+        patients who deserve clear answers, attentive professionals, and a medical
+        experience that actually feels human.
+      </p>
+      <div class="dc-hero__actions">
+        <a href="/book" class="dc-btn dc-btn--primary">Book an appointment</a>
+        <a href="/services" class="dc-btn dc-btn--secondary">Our services</a>
+      </div>
+    </div>
+    <article class="dc-hero__note">
+      <span class="dc-eyebrow">What our patients say</span>
+      <strong>Attentive care from the very first visit.</strong>
+      <p>Every appointment is unhurried, every question welcomed, and every plan explained in plain language.</p>
+    </article>
+  </div>
+  <div class="dc-hero__portrait">
+    <img src="{{asset:hero-cristhian-portrait}}" alt="Dr. Cristhian — professional profile" />
+  </div>
+</section>
+
+& .dc-hero {
+  display: grid;
+  gap: 1.1rem;
+  align-items: stretch;
+}
+@media (min-width: 980px) {
+  & .dc-hero {
+    grid-template-columns: 1fr 0.85fr;
+  }
+}
+& .dc-hero__left {
+  display: grid;
+  gap: 1.1rem;
+  align-content: start;
+}
+& .dc-hero__copy {
+  border-radius: 2rem;
+  border: 1px solid rgba(16, 65, 74, 0.1);
+  box-shadow: 0 28px 80px rgba(17, 53, 60, 0.1);
+  padding: clamp(1.35rem, 2.8vw, 2.5rem);
+  background:
+    radial-gradient(circle at top left, rgba(76, 166, 162, 0.16), transparent 36%),
+    linear-gradient(180deg, rgba(255,255,255,0.98), rgba(240,248,247,0.98));
+}
+& .dc-eyebrow {
+  display: inline-block;
+  margin-bottom: 1rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.34em;
+  color: #2f7c81;
+}
+& h1 {
+  margin: 0;
+  color: #12343a;
+  font-size: clamp(1.9rem, 3.2vw, 3.7rem);
+  line-height: 0.96;
+  max-width: 12ch;
+}
+& p {
+  margin: 1rem 0 0;
+  color: #4f676c;
+  font-size: 0.98rem;
+  line-height: 1.82;
+  max-width: 54ch;
+}
+& .dc-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin-top: 1.35rem;
+}
+& .dc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3rem;
+  padding: 0 1.35rem;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+& .dc-btn--primary {
+  background: #12343a;
+  color: #ffffff;
+}
+& .dc-btn--secondary {
+  background: rgba(255,255,255,0.9);
+  border: 1px solid rgba(18,52,58,0.12);
+  color: #12343a;
+}
+& .dc-hero__note {
+  border-radius: 2rem;
+  border: 1px solid rgba(16, 65, 74, 0.1);
+  box-shadow: 0 28px 80px rgba(17, 53, 60, 0.1);
+  padding: 1.3rem clamp(1.35rem, 2.8vw, 2.5rem);
+  background: linear-gradient(180deg, rgba(243,250,249,0.98), rgba(223,239,237,0.95));
+}
+& .dc-hero__note strong {
+  display: block;
+  color: #12343a;
+  font-size: 1.62rem;
+  line-height: 1.04;
+}
+& .dc-hero__portrait {
+  overflow: hidden;
+  border-radius: 2rem;
+  border: 1px solid rgba(16, 65, 74, 0.1);
+  box-shadow: 0 28px 80px rgba(17, 53, 60, 0.1);
+  background: #dbeceb;
+  min-height: 24rem;
+}
+& .dc-hero__portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+}

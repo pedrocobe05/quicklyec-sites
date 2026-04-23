@@ -141,6 +141,11 @@ interface AdminLayoutProps extends PropsWithChildren {
   availableModules?: string[];
   isPlatformAdmin?: boolean;
   activeTenant?: { id: string; name: string; slug: string } | null;
+  activeSubscription?: {
+    daysUntilExpiry: number | null;
+    isExpired?: boolean;
+    endsAt?: string | null;
+  } | null;
   tenantRoutePrefix?: string;
   currentPath?: string;
 }
@@ -193,6 +198,7 @@ export function AdminLayout({
   availableModules = EMPTY_MODULES,
   isPlatformAdmin = false,
   activeTenant = null,
+  activeSubscription = null,
   tenantRoutePrefix = '',
   currentPath,
 }: AdminLayoutProps) {
@@ -309,6 +315,46 @@ export function AdminLayout({
     : resolvedPath;
   const currentPage = sectionMeta[normalizedResolvedPath] ?? sectionMeta['/'];
   const tenantLabel = activeTenant?.name ?? (canSeePlatform ? 'Plataforma global' : 'Sin empresa activa');
+  const shouldShowSubscriptionBanner =
+    !canSeePlatform
+    && Boolean(activeTenant?.id)
+    && activeSubscription?.daysUntilExpiry !== null
+    && activeSubscription?.daysUntilExpiry !== undefined
+    && activeSubscription.daysUntilExpiry <= 7;
+
+  const subscriptionEndDateLabel = useMemo(() => {
+    if (!activeSubscription?.endsAt) {
+      return null;
+    }
+
+    const parsed = new Date(activeSubscription.endsAt);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+
+    return new Intl.DateTimeFormat('es-EC', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }).format(parsed);
+  }, [activeSubscription?.endsAt]);
+
+  const subscriptionBannerMessage = useMemo(() => {
+    if (!shouldShowSubscriptionBanner || activeSubscription?.daysUntilExpiry === null) {
+      return null;
+    }
+
+    if (activeSubscription.daysUntilExpiry < 0 || activeSubscription.isExpired) {
+      const overdueDays = Math.abs(activeSubscription.daysUntilExpiry);
+      return `Tu suscripción está vencida${overdueDays > 0 ? ` desde hace ${overdueDays} día${overdueDays === 1 ? '' : 's'}` : ''}.`;
+    }
+
+    if (activeSubscription.daysUntilExpiry === 0) {
+      return 'Tu suscripción vence hoy.';
+    }
+
+    return `Tu suscripción vence en ${activeSubscription.daysUntilExpiry} día${activeSubscription.daysUntilExpiry === 1 ? '' : 's'}.`;
+  }, [activeSubscription?.daysUntilExpiry, activeSubscription?.isExpired, shouldShowSubscriptionBanner]);
 
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams('');
   const currentTab = tenantRoutePrefix ? (searchParams.get('tab') ?? 'general') : searchParams.get('tab');
@@ -521,6 +567,15 @@ export function AdminLayout({
       </aside>
 
       <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 sm:px-4 sm:py-5 lg:ml-72 lg:px-6 lg:py-6">
+        {shouldShowSubscriptionBanner && subscriptionBannerMessage ? (
+          <div className="sticky top-0 z-10 mb-4 rounded-2xl border border-[rgba(255,203,48,0.34)] bg-[rgba(255,203,48,0.18)] px-4 py-3 text-sm text-[var(--brand-gold-deep)] shadow-panel backdrop-blur">
+            <p className="font-medium">{subscriptionBannerMessage}</p>
+            {subscriptionEndDateLabel ? (
+              <p className="mt-0.5 text-xs text-[rgba(113,89,0,0.88)]">Fecha de corte: {subscriptionEndDateLabel}</p>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="mb-4 lg:hidden">
           <button
             type="button"

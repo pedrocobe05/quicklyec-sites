@@ -1,0 +1,138 @@
+<section class="dc-services">
+  <div class="dc-services__header">
+    <span class="dc-eyebrow">What we offer</span>
+    <h2>Medical care designed around your needs.</h2>
+    <p>
+      Our center brings together a range of professional healthcare services
+      so patients can find the right support at every stage of their health journey.
+    </p>
+  </div>
+
+  <div class="dc-services__grid">
+    <article>
+      <div class="dc-services__img-wrap">
+        <img src="{{asset:service-consultation}}" alt="Doctor in a one-on-one consultation with a patient" />
+      </div>
+      <div class="dc-services__card-body">
+        <strong>Medical Consultation</strong>
+        <p>A focused professional interaction to evaluate symptoms, discuss concerns, and receive a clear diagnosis or treatment recommendation.</p>
+      </div>
+    </article>
+    <article>
+      <div class="dc-services__img-wrap">
+        <img src="{{asset:service-home-care}}" alt="Healthcare professional providing care at a patient's home" />
+      </div>
+      <div class="dc-services__card-body">
+        <strong>Medical Home Care</strong>
+        <p>Professional healthcare services delivered directly at the patient's home for those who need comfort and convenience without compromising quality.</p>
+      </div>
+    </article>
+    <article>
+      <div class="dc-services__img-wrap">
+        <img src="{{asset:service-translation}}" alt="Medical professional assisting with language interpretation during a consultation" />
+      </div>
+      <div class="dc-services__card-body">
+        <strong>Medical Translation</strong>
+        <p>Real-time verbal translation of medical information between patients and healthcare providers — ensuring nothing gets lost in the conversation.</p>
+      </div>
+    </article>
+    <article>
+      <div class="dc-services__img-wrap">
+        <img src="{{asset:service-supervision}}" alt="Doctor monitoring a patient's treatment and recovery progress" />
+      </div>
+      <div class="dc-services__card-body">
+        <strong>Supervision &amp; Treatment</strong>
+        <p>Continuous monitoring and management of a patient's health condition by qualified professionals, adapted as the situation evolves.</p>
+      </div>
+    </article>
+  </div>
+
+  <div class="dc-services__footer">
+    <p>Looking for a service not listed here? <a href="/contact">Get in touch</a> and we'll find the right approach together.</p>
+  </div>
+</section>
+
+& .dc-services {
+  border: 1px solid rgba(18,52,58,0.08);
+  border-radius: 2rem;
+  padding: clamp(1.35rem, 2.6vw, 2.4rem);
+  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(238,247,246,0.96));
+  box-shadow: 0 24px 80px rgba(17,53,60,0.07);
+}
+& .dc-eyebrow {
+  display: inline-block;
+  margin-bottom: 0.95rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.34em;
+  color: #2f7c81;
+}
+& .dc-services__header {
+  max-width: 58ch;
+  margin-bottom: 1.6rem;
+}
+& .dc-services__header h2 {
+  margin: 0;
+  color: #12343a;
+  font-size: clamp(1.8rem, 3.1vw, 3rem);
+  line-height: 1;
+}
+& .dc-services__header p {
+  margin: 0.9rem 0 0;
+  color: #4f676c;
+  font-size: 0.98rem;
+  line-height: 1.8;
+}
+& .dc-services__grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 680px) {
+  & .dc-services__grid {
+    grid-template-columns: 1fr;
+  }
+}
+& .dc-services article {
+  overflow: hidden;
+  border-radius: 1.5rem;
+  background: #f5faf9;
+  border: 1px solid rgba(18,52,58,0.06);
+}
+& .dc-services__img-wrap img {
+  width: 100%;
+  height: 13rem;
+  object-fit: cover;
+  display: block;
+}
+& .dc-services__card-body {
+  padding: 1.1rem 1.35rem 1.25rem;
+}
+& .dc-services__card-body strong {
+  display: block;
+  color: #12343a;
+  font-size: 1.05rem;
+  margin-bottom: 0.45rem;
+}
+& .dc-services__card-body p {
+  margin: 0;
+  color: #4f676c;
+  font-size: 0.94rem;
+  line-height: 1.75;
+}
+& .dc-services__footer {
+  margin-top: 1.25rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid rgba(18,52,58,0.07);
+  text-align: center;
+}
+& .dc-services__footer p {
+  margin: 0;
+  color: #587176;
+  font-size: 0.94rem;
+}
+& .dc-services__footer a {
+  color: #2f7c81;
+  font-weight: 600;
+  text-decoration: none;
+}
