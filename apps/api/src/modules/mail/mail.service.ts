@@ -57,8 +57,13 @@ export class MailService {
 
   private formatDateTime(value: Date | string, locale: MailLocale) {
     return new Date(value).toLocaleString(locale === 'en' ? 'en-US' : 'es-EC', {
-      dateStyle: 'full',
-      timeStyle: 'short',
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
     });
   }
 

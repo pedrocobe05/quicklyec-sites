@@ -241,6 +241,7 @@ interface ServiceRecord {
   price?: number | null;
   category?: string | null;
   isActive: boolean;
+  imageUrl?: string | null;
 }
 
 interface StaffRecord {
@@ -440,6 +441,7 @@ function formatAvailabilityDateTime(value: string) {
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    hour12: false,
   });
 }
 
@@ -1083,8 +1085,8 @@ export function TenantDetailPage() {
           block.staff?.name ?? '',
           block.reason,
           block.blockType,
-          new Date(block.startDateTime).toLocaleString(),
-          new Date(block.endDateTime).toLocaleString(),
+          new Date(block.startDateTime).toLocaleString('es-EC', { hour12: false }),
+          new Date(block.endDateTime).toLocaleString('es-EC', { hour12: false }),
         ].some((value) => String(value).toLowerCase().includes(query))
       )
     );
@@ -1387,26 +1389,33 @@ export function TenantDetailPage() {
 
     switch (tab) {
       case 'users':
-        if (canLoadModuleFromProfile(profile, 'users')) await loadUsersTab();
+        if (!canLoadModuleFromProfile(profile, 'users')) return;
+        await loadUsersTab();
         break;
       case 'roles':
-        if (canLoadModuleFromProfile(profile, 'roles')) await loadRolesTab();
+        if (!canLoadModuleFromProfile(profile, 'roles')) return;
+        await loadRolesTab();
         break;
       case 'services':
       case 'staff':
-        if (canLoadModuleFromProfile(profile, 'services') || canLoadModuleFromProfile(profile, 'staff')) await loadServicesStaffTab();
+        if (!canLoadModuleFromProfile(profile, 'services') && !canLoadModuleFromProfile(profile, 'staff')) return;
+        await loadServicesStaffTab();
         break;
       case 'site':
-        if (canLoadModuleFromProfile(profile, 'site')) await loadSiteTab();
+        if (!canLoadModuleFromProfile(profile, 'site')) return;
+        await loadSiteTab();
         break;
       case 'agenda':
-        if (canLoadModuleFromProfile(profile, 'agenda')) await loadAgendaTab();
+        if (!canLoadModuleFromProfile(profile, 'agenda')) return;
+        await loadAgendaTab();
         break;
       case 'appointments':
-        if (canLoadModuleFromProfile(profile, 'appointments')) await loadAppointmentsTab();
+        if (!canLoadModuleFromProfile(profile, 'appointments')) return;
+        await loadAppointmentsTab();
         break;
       case 'customers':
-        if (canLoadModuleFromProfile(profile, 'customers')) await loadCustomersTab();
+        if (!canLoadModuleFromProfile(profile, 'customers')) return;
+        await loadCustomersTab();
         break;
       default:
         break;
@@ -1818,7 +1827,7 @@ export function TenantDetailPage() {
     loadTabData(activeTab, tenantProfile)
       .catch((err: Error) => notify(err.message, 'error'))
       .finally(() => setTabLoading(false));
-  }, [activeTab, isLoading, tenantId, tenantProfile?.tenant.id, token, loadedTabs[activeTab]]);
+  }, [activeTab, isLoading, tenantId, tenantProfile?.tenant.id, token, loadedTabs[activeTab], user?.isPlatformAdmin]);
 
   useEffect(() => {
     if (visibleTabs.length === 0) {
@@ -2287,6 +2296,22 @@ export function TenantDetailPage() {
       } else {
         await refreshPageSectionsList(section.pageId ?? selectedPage?.id ?? selectedPageId);
       }
+    });
+  }
+
+  async function handleUploadServiceImage(service: ServiceRecord, file: File) {
+    if (!token || !tenantId) return;
+    await wrapAction(`upload-service-image-${service.id}`, async () => {
+      const uploaded = await uploadTenantFile(token, tenantId, file, 'site', 'public');
+      await updateService(token, tenantId, service.id, { imageUrl: uploaded.reference });
+      setEditModal((prev) =>
+        prev?.type === 'service' && prev.item.id === service.id
+          ? { ...prev, item: { ...prev.item, imageUrl: uploaded.reference } }
+          : prev,
+      );
+      setServices((prev) =>
+        prev.map((s) => (s.id === service.id ? { ...s, imageUrl: uploaded.reference } : s)),
+      );
     });
   }
 
@@ -3246,7 +3271,7 @@ export function TenantDetailPage() {
                   <ItemRow
                     key={block.id}
                     title={block.reason}
-                    subtitle={`${new Date(block.startDateTime).toLocaleString()} → ${new Date(block.endDateTime).toLocaleString()}`}
+                    subtitle={`${new Date(block.startDateTime).toLocaleString('es-EC', { hour12: false })} → ${new Date(block.endDateTime).toLocaleString('es-EC', { hour12: false })}`}
                     meta={block.staff?.name ? `${block.blockType} · ${block.staff.name}` : `${block.blockType} · General`}
                     actionLabel="Editar"
                     onAction={() => setEditModal({ type: 'block', item: block })}
@@ -3569,9 +3594,9 @@ export function TenantDetailPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap text-slate-700">
-                            {appointment.createdAt ? new Date(appointment.createdAt).toLocaleString() : '—'}
+                            {appointment.createdAt ? new Date(appointment.createdAt).toLocaleString('es-EC', { hour12: false }) : '—'}
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap">{new Date(appointment.startDateTime).toLocaleString()}</td>
+                          <td className="px-4 py-3 whitespace-nowrap">{new Date(appointment.startDateTime).toLocaleString('es-EC', { hour12: false })}</td>
                           <td className="w-px whitespace-nowrap px-4 py-3">
                             <div className="flex justify-end gap-2">
                               {appointment.paymentMethod === 'payphone' && appointment.status === 'cancelled' ? (
@@ -3989,6 +4014,7 @@ export function TenantDetailPage() {
         onAppointmentSlotChange={setEditAppointmentSlot}
         appointmentAvailabilityLoading={editAppointmentAvailabilityLoading}
         appointmentAvailabilityMessage={editAppointmentAvailabilityMessage}
+        onUploadServiceImage={handleUploadServiceImage}
       />
 
       <Modal

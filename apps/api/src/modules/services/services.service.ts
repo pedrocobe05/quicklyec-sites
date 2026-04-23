@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AppointmentEntity, ServiceEntity, StaffServiceEntity } from 'src/common/entities';
+import { FilesService } from 'src/modules/files/files.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 
@@ -14,20 +15,30 @@ export class ServicesService {
     private readonly staffServicesRepository: Repository<StaffServiceEntity>,
     @InjectRepository(AppointmentEntity)
     private readonly appointmentsRepository: Repository<AppointmentEntity>,
+    private readonly filesService: FilesService,
   ) {}
 
-  findPublicByTenant(tenantId: string) {
-    return this.servicesRepository.find({
+  private async resolveImage<T extends { tenantId: string; imageUrl?: string | null }>(service: T) {
+    return {
+      ...service,
+      imageUrl: await this.filesService.resolveStoredReference(service.imageUrl, service.tenantId),
+    };
+  }
+
+  async findPublicByTenant(tenantId: string) {
+    const services = await this.servicesRepository.find({
       where: { tenantId, isActive: true },
       order: { name: 'ASC' },
     });
+    return Promise.all(services.map((s) => this.resolveImage(s)));
   }
 
-  findAdminByTenant(tenantId: string) {
-    return this.servicesRepository.find({
+  async findAdminByTenant(tenantId: string) {
+    const services = await this.servicesRepository.find({
       where: { tenantId },
       order: { name: 'ASC' },
     });
+    return Promise.all(services.map((s) => this.resolveImage(s)));
   }
 
   async findOne(serviceId: string) {
@@ -48,6 +59,7 @@ export class ServicesService {
       isActive: input.isActive ?? true,
       category: input.category ?? null,
       color: input.color ?? null,
+      imageUrl: input.imageUrl ?? null,
     });
   }
 
@@ -67,6 +79,7 @@ export class ServicesService {
       isActive: input.isActive ?? service.isActive,
       category: input.category ?? service.category,
       color: input.color ?? service.color,
+      imageUrl: input.imageUrl !== undefined ? input.imageUrl : service.imageUrl,
     });
 
     return this.servicesRepository.save(service);

@@ -45,4 +45,10 @@ export class CreateServiceDto {
   @IsString()
   @MaxLength(20)
   color?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  imageUrl?: string | null;
 }

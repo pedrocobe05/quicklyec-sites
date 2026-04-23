@@ -34,7 +34,7 @@ type TenantMembershipRecord = {
   user?: { fullName?: string; email?: string };
 };
 type DomainRecord = { id: string; domain: string; type: string; verificationStatus: string; isPrimary: boolean };
-type ServiceRecord = { id: string; name: string; description: string; durationMinutes: number; price?: number | null; category?: string | null; isActive: boolean };
+type ServiceRecord = { id: string; name: string; description: string; durationMinutes: number; price?: number | null; category?: string | null; isActive: boolean; imageUrl?: string | null };
 type StaffRecord = {
   id: string;
   name: string;
@@ -154,6 +154,7 @@ interface EditEntityModalProps {
   appointmentAvailabilityMessage?: string | null;
   /** Si se define, edición de reglas/bloqueos de agenda queda fijada a ese profesional (rol staff en consola). */
   lockAgendaStaffId?: string | null;
+  onUploadServiceImage?: (service: ServiceRecord, file: File) => Promise<void>;
 }
 
 export function EditEntityModal({
@@ -182,7 +183,9 @@ export function EditEntityModal({
   appointmentAvailabilityLoading = false,
   appointmentAvailabilityMessage = null,
   lockAgendaStaffId = null,
+  onUploadServiceImage,
 }: EditEntityModalProps) {
+  const [uploadingServiceImage, setUploadingServiceImage] = useState(false);
   const [sectionAssets, setSectionAssets] = useState<SectionAssetRecord[]>([]);
   const [customHtmlSource, setCustomHtmlSource] = useState('');
   const [customCssSource, setCustomCssSource] = useState('');
@@ -413,6 +416,39 @@ export function EditEntityModal({
 
             {editModal.type === 'service' ? (
               <>
+                <div className="flex items-start gap-4">
+                  <ImagePreview
+                    src={editModal.item.imageUrl ?? undefined}
+                    alt={editModal.item.name}
+                    label="Imagen del servicio"
+                    className="h-28 w-28 shrink-0"
+                    imgClassName="h-full w-full object-cover"
+                  />
+                  <div className="flex flex-col gap-1.5 pt-1">
+                    <span className="text-sm font-medium text-slate-700">Imagen del servicio</span>
+                    <label className="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={uploadingServiceImage}
+                        onChange={async (e) => {
+                          const file = e.currentTarget.files?.[0];
+                          if (!file || !onUploadServiceImage) return;
+                          e.currentTarget.value = '';
+                          setUploadingServiceImage(true);
+                          try {
+                            await onUploadServiceImage(editModal.item, file);
+                          } finally {
+                            setUploadingServiceImage(false);
+                          }
+                        }}
+                      />
+                      {uploadingServiceImage ? 'Subiendo...' : 'Subir imagen'}
+                    </label>
+                    <span className="text-xs text-slate-400">JPG, PNG o WebP recomendado</span>
+                  </div>
+                </div>
                 <FormField label="Nombre" required>
                   <Input name="name" defaultValue={editModal.item.name} />
                 </FormField>
@@ -577,6 +613,7 @@ export function EditEntityModal({
                     <Input
                       name="startDateTime"
                       type="datetime-local"
+                      lang="en-GB"
                       defaultValue={editModal.item.startDateTime.slice(0, 16)}
                     />
                   </FormField>
@@ -584,6 +621,7 @@ export function EditEntityModal({
                     <Input
                       name="endDateTime"
                       type="datetime-local"
+                      lang="en-GB"
                       defaultValue={editModal.item.endDateTime.slice(0, 16)}
                     />
                   </FormField>
@@ -1286,6 +1324,7 @@ function formatAvailabilityDateTime(value: string) {
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    hour12: false,
   });
 }
 

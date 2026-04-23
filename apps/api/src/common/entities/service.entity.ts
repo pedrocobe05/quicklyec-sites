@@ -32,6 +32,9 @@ export class ServiceEntity {
   @Column({ type: 'varchar', nullable: true, length: 20 })
   color!: string | null;
 
+  @Column({ type: 'varchar', nullable: true, length: 255 })
+  imageUrl!: string | null;
+
   @ManyToOne(() => TenantEntity, (tenant) => tenant.services, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'tenantId' })
   tenant!: TenantEntity;
