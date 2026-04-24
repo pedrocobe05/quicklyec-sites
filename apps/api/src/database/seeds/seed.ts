@@ -110,13 +110,13 @@ async function main() {
   await plansRepository.upsert(
     [
       {
-        code: 'basic',
-        name: 'Básico',
-        description: PLAN_ACCESS_DEFINITIONS.basic.description,
+        code: 'starter',
+        name: 'Starter',
+        description: PLAN_ACCESS_DEFINITIONS.starter.description,
         isActive: true,
-        tenantModules: PLAN_ACCESS_DEFINITIONS.basic.modules,
+        tenantModules: PLAN_ACCESS_DEFINITIONS.starter.modules,
         platformModules: ['platform.tenants', 'platform.plans', 'platform.users'],
-        metadata: getPlanMetadata('basic'),
+        metadata: getPlanMetadata('starter'),
       },
       {
         code: 'pro',
@@ -126,15 +126,6 @@ async function main() {
         tenantModules: PLAN_ACCESS_DEFINITIONS.pro.modules,
         platformModules: ['platform.tenants', 'platform.plans', 'platform.users'],
         metadata: getPlanMetadata('pro'),
-      },
-      {
-        code: 'premium',
-        name: 'Premium',
-        description: PLAN_ACCESS_DEFINITIONS.premium.description,
-        isActive: true,
-        tenantModules: PLAN_ACCESS_DEFINITIONS.premium.modules,
-        platformModules: ['platform.tenants', 'platform.plans', 'platform.users'],
-        metadata: getPlanMetadata('premium'),
       },
     ],
     ['code'],
@@ -155,7 +146,7 @@ async function main() {
     name: 'Paola Mendoza Nails',
     slug: 'paolamendozanails',
     status: 'active',
-    plan: 'basic',
+    plan: 'starter',
     subscriptionStartsAt: '2026-01-01',
     subscriptionEndsAt: '2026-12-31',
     subscriptionAlertState: null,

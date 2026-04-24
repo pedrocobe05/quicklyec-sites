@@ -13,7 +13,7 @@ Eso significa:
 - si el plan no incluye una capacidad, no debe mostrarse ni operar aunque exista configuración interna
 - si el plan sí incluye una capacidad, todavía puede deshabilitarse desde configuración del tenant cuando aplique
 
-## Plan Básico
+## Plan Starter
 
 Precio: `$9.99/mes`
 
@@ -41,7 +41,7 @@ No incluye:
 
 - reservas online
 - agenda digital
-- panel administrativo operativo para citas
+- panel administrativo operativo
 - gestión de clientes
 - recordatorios automáticos
 - estadísticas
@@ -56,51 +56,21 @@ Capacidades esperadas:
 - sin ruta pública de reservas operativa
 - sin CTA de reservas
 
-Sugerencias futuras opcionales:
-
-- galería
-- testimonios
-- preguntas frecuentes
-- promociones
-- mapa/ubicación avanzada
-
 ## Plan Pro
-
-Precio: `$14.99/mes`
-
-Enfoque:
-
-- operación interna del negocio
-
-Incluye todo lo del plan básico, más:
-
-- sistema de reservas online
-- agenda digital
-- panel administrativo
-- gestión de clientes
-
-Capacidades esperadas:
-
-- sitio público activo
-- las mismas `3` páginas base: `Inicio`, `Servicios` y `Contacto`
-- hasta `6` páginas en total
-- reservas online activables
-- agenda y bloqueos
-- clientes
-- usuarios del tenant
-- roles del tenant
-- la diferencia principal frente a `basic` está en el backoffice, no en más páginas públicas
-
-## Plan Premium
 
 Precio: `$19.99/mes`
 
 Enfoque:
 
-- operación optimizada y crecimiento
+- operación completa del negocio
 
-Incluye todo lo del plan Pro, más:
+Incluye todo lo del plan Starter, más:
 
+- sistema de reservas online
+- agenda digital y bloqueos
+- panel administrativo completo
+- gestión de clientes
+- usuarios y roles del tenant
 - notificaciones automáticas por correo
 - recordatorios de citas
 - estadísticas del negocio
@@ -108,42 +78,31 @@ Incluye todo lo del plan Pro, más:
 
 Capacidades esperadas:
 
-- todo lo del plan Pro
-- las mismas `3` páginas base públicas
-- hasta `10` páginas en total
+- sitio público activo
+- las mismas `3` páginas base: `Inicio`, `Servicios` y `Contacto`
+- reservas online activables
+- agenda y bloqueos
+- clientes, usuarios y roles
 - recordatorios de cita
 - plantillas de correo operativas
+- reportes y estadísticas
 - capacidades extra de SEO
-- reportes/estadísticas
 
 ## Reglas funcionales obligatorias
 
 ### Sitio público
 
 - todos los planes comparten `Inicio`, `Servicios` y `Contacto` como base mínima
-- `basic`: no permite crear páginas adicionales
-- `pro`: permite páginas adicionales hasta llegar a `6`
-- `premium`: permite páginas adicionales hasta llegar a `10`
-- `basic`: no debe mostrar ni permitir reservas online
-- `pro` y `premium`: sí pueden mostrar y permitir reservas online
+- ambos planes tienen las mismas capacidades de páginas públicas
+- `starter`: no debe mostrar ni permitir reservas online
+- `pro`: sí puede mostrar y permitir reservas online
 
 ### Panel del tenant
 
-- `basic`: no debe exponer módulos operativos de agenda, reservas, clientes, usuarios o roles
-- `pro`: sí debe exponer operación completa base
-- `premium`: sí debe exponer operación completa más automatizaciones y extras
+- `starter`: no debe exponer módulos operativos de agenda, reservas, clientes, usuarios o roles
+- `pro`: sí debe exponer operación completa, automatizaciones y extras
 
 ### Automatizaciones
 
-- recordatorios automáticos: solo `premium`
-- correo de bienvenida y restablecimiento: disponible para tenants con panel operativo
-
-## Implementación recomendada
-
-Al aplicar reglas de producto:
-
-1. validar siempre el plan en backend
-2. ocultar también en frontend
-3. no confiar solo en flags manuales del tenant
-
-La fuente de verdad principal debe ser el plan.
+- recordatorios automáticos: solo `pro`
+- correo de bienvenida y restablecimiento: disponible solo para tenants con panel operativo (`pro`)

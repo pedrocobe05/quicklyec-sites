@@ -2,7 +2,7 @@ export type TenantDomainType = 'subdomain' | 'custom';
 export type VerificationStatus = 'pending' | 'verified' | 'failed';
 export type SslStatus = 'pending' | 'active' | 'failed';
 export type TenantStatus = 'active' | 'inactive' | 'suspended';
-export type TenantPlan = 'basic' | 'pro' | 'premium';
+export type TenantPlan = 'starter' | 'pro';
 export type SiteSectionType =
   | 'header'
   | 'hero'

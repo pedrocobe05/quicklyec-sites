@@ -110,14 +110,11 @@ export type PlanAccessDefinition = {
 };
 
 export const PLAN_ACCESS_DEFINITIONS: Record<string, PlanAccessDefinition> = {
-  basic: {
-    code: 'basic',
-    name: 'Básico',
+  starter: {
+    code: 'starter',
+    name: 'Starter',
     description: 'Presencia digital inicial con landing profesional y contacto directo.',
-    // Misma cobertura de módulos que Pro: el administrador del tenant ya tiene todos los permisos
-    // del catálogo; effectiveModules = intersección(plan, rol). Sin staff/agenda/etc. aquí el menú
-    // operativo quedaba solo en «Servicios» aunque el rol fuera «Administrador».
-    modules: ['site', 'branding', 'domains', 'settings', 'services', 'staff', 'agenda', 'appointments', 'customers', 'users', 'roles'],
+    modules: ['site', 'branding', 'domains', 'settings', 'services'],
     features: ['whatsapp_cta', 'hosting_included', 'quickly_subdomain'],
     limits: {
       max_pages: 3,
@@ -132,27 +129,11 @@ export const PLAN_ACCESS_DEFINITIONS: Record<string, PlanAccessDefinition> = {
   pro: {
     code: 'pro',
     name: 'Pro',
-    description: 'Gestión operativa con reservas online, agenda y panel administrativo.',
-    modules: ['site', 'branding', 'domains', 'settings', 'services', 'staff', 'agenda', 'appointments', 'customers', 'users', 'roles'],
-    features: ['whatsapp_cta', 'hosting_included', 'quickly_subdomain', 'online_booking', 'custom_domain', 'admin_panel'],
-    limits: {
-      max_pages: 6,
-      max_sections: 12,
-      custom_domain: true,
-      online_booking: true,
-      agenda: true,
-      customers: true,
-      admin_users: null,
-    },
-  },
-  premium: {
-    code: 'premium',
-    name: 'Premium',
-    description: 'Operación avanzada con notificaciones, recordatorios, estadísticas y SEO.',
+    description: 'Operación completa: reservas, agenda, panel administrativo, notificaciones y estadísticas.',
     modules: ['site', 'branding', 'domains', 'settings', 'services', 'staff', 'agenda', 'appointments', 'customers', 'users', 'roles', 'seo', 'notifications', 'reports'],
     features: ['whatsapp_cta', 'hosting_included', 'quickly_subdomain', 'online_booking', 'custom_domain', 'admin_panel', 'email_notifications', 'appointment_reminders', 'business_stats', 'seo_initial_optimization'],
     limits: {
-      max_pages: 10,
+      max_pages: 3,
       max_sections: null,
       custom_domain: true,
       online_booking: true,
@@ -163,21 +144,23 @@ export const PLAN_ACCESS_DEFINITIONS: Record<string, PlanAccessDefinition> = {
   },
 };
 
+// Aliases para compatibilidad con registros anteriores en DB
 const PLAN_ALIASES: Record<string, string> = {
-  starter: 'basic',
-  enterprise: 'premium',
+  basic: 'starter',
+  enterprise: 'starter',
+  premium: 'pro',
 };
 
 export function normalizePlanCode(planCode?: string | null) {
   if (!planCode) {
-    return 'basic';
+    return 'starter';
   }
 
   return PLAN_ALIASES[planCode] ?? planCode;
 }
 
 export function getPlanAccessDefinition(planCode?: string | null) {
-  return PLAN_ACCESS_DEFINITIONS[normalizePlanCode(planCode)] ?? PLAN_ACCESS_DEFINITIONS.basic;
+  return PLAN_ACCESS_DEFINITIONS[normalizePlanCode(planCode)] ?? PLAN_ACCESS_DEFINITIONS.starter;
 }
 
 /**
