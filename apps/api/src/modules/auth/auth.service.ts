@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { AdminUserEntity, RefreshTokenEntity, TenantMembershipEntity } from 'src/common/entities';
 import { MailService } from 'src/modules/mail/mail.service';
 import { LoginDto } from './dto/login.dto';
+import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 
 @Injectable()
 export class AuthService {
@@ -226,6 +227,84 @@ export class AuthService {
     return {
       success: true,
       message: 'Tu contraseña fue actualizada correctamente. Ya puedes iniciar sesión.',
+    };
+  }
+
+  async getMyProfile(userId: string) {
+    const user = await this.usersRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    return {
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      isPlatformAdmin: user.isPlatformAdmin,
+      platformRole: user.platformRole,
+      tenantId: user.tenantId,
+    };
+  }
+
+  async updateMyProfile(userId: string, input: UpdateMyProfileDto) {
+    const user = await this.usersRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    user.fullName = input.fullName.trim();
+    await this.usersRepository.save(user);
+
+    return {
+      success: true,
+      message: 'Tu perfil fue actualizado correctamente.',
+      user: {
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        isPlatformAdmin: user.isPlatformAdmin,
+        platformRole: user.platformRole,
+        tenantId: user.tenantId,
+      },
+    };
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await this.usersRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const isCurrentValid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isCurrentValid) {
+      throw new BadRequestException('La contraseña actual no es correcta.');
+    }
+
+    const isSamePassword = await bcrypt.compare(newPassword, user.passwordHash);
+    if (isSamePassword) {
+      throw new BadRequestException('La nueva contraseña debe ser diferente a la actual.');
+    }
+
+    user.passwordHash = await bcrypt.hash(newPassword, 10);
+    user.passwordResetTokenHash = null;
+    user.passwordResetRequestedAt = null;
+    user.passwordResetExpiresAt = null;
+    await this.usersRepository.save(user);
+
+    await this.refreshTokensRepository.delete({ userId: user.id });
+
+    return {
+      success: true,
+      message: 'Tu contraseña fue actualizada correctamente.',
     };
   }
 }

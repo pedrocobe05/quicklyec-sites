@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { AdminLayout } from '../components/AdminLayout';
 import { Card } from '../shared/components/ui/Card';
 import { useNotification } from '../shared/notifications/use-notification';
@@ -95,6 +95,14 @@ export function WelcomePage() {
               Este es tu punto de entrada al panel. Desde aquí puedes ir a la empresa que administras o, si tienes acceso global,
               entrar a la operación de plataforma.
             </p>
+            <div className="mt-5">
+              <Link
+                to="/profile"
+                className="inline-flex items-center rounded-xl border border-[rgba(0,64,145,0.2)] bg-white px-4 py-2 text-sm font-medium text-[var(--brand-navy)] hover:bg-[rgba(0,64,145,0.06)]"
+              >
+                Ir a mi perfil y seguridad
+              </Link>
+            </div>
           </div>
         </Card>
 
@@ -127,28 +135,6 @@ export function WelcomePage() {
           </div>
         ) : null}
 
-        {memberships.length > 0 ? (
-          <div className="grid gap-4 lg:grid-cols-2">
-            {memberships.map((membership, index) => {
-              const tenant = membership.tenant;
-              if (!tenant?.id) {
-                return null;
-              }
-
-              return (
-                <Card key={tenant.id ?? index} className="flex h-full flex-col justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Empresa</p>
-                    <h3 className="mt-3 text-xl font-semibold text-slate-900">{tenant.name ?? 'Empresa'}</h3>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Usa el menú lateral para entrar a servicios, staff, agenda, reservas y clientes.
-                    </p>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        ) : null}
       </section>
     </AdminLayout>
   );

@@ -225,6 +225,37 @@ export async function resetPassword(token: string, password: string) {
   });
 }
 
+export interface MyProfileResponse {
+  id: string;
+  fullName: string;
+  email: string;
+  isPlatformAdmin: boolean;
+  platformRole: string;
+  tenantId: string | null;
+}
+
+export async function getMyProfile(accessToken: string) {
+  return request<MyProfileResponse>('/auth/me', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+export async function updateMyProfile(accessToken: string, payload: { fullName: string }) {
+  return request<{ message?: string; user?: Partial<MyProfileResponse> }>('/auth/me', {
+    method: 'PATCH',
+    headers: authHeaders(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function changeMyPassword(accessToken: string, payload: { currentPassword: string; newPassword: string }) {
+  return request<{ message?: string }>('/auth/change-password', {
+    method: 'POST',
+    headers: authHeaders(accessToken),
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function getTenantProfile(accessToken: string, tenantId: string) {
   return request(`/tenants/me?tenantId=${tenantId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },

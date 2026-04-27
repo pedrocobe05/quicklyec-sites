@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { LoginPage } from './pages/LoginPage';
+import { MyProfilePage } from './pages/MyProfilePage';
 import { PlatformRolesPage } from './pages/PlatformRolesPage';
 import { PlatformSettingsPage } from './pages/PlatformSettingsPage';
 import { PlatformTenantsPage } from './pages/PlatformTenantsPage';
@@ -47,6 +48,7 @@ export default function App() {
       <Route path="/platform/tenants/:tenantId" element={<TenantDetailPage />} />
       <Route path="/app" element={<TenantDetailPage />} />
       <Route path="/platform/settings" element={<PlatformSettingsPage />} />
+      <Route path="/profile" element={<MyProfilePage />} />
       <Route path="/users" element={<TenantTabRedirect tab="users" />} />
       <Route path="/roles" element={<TenantTabRedirect tab="roles" />} />
       <Route path="/email" element={<TenantTabRedirect tab="email" />} />

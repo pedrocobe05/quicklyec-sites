@@ -16,6 +16,8 @@ import { Button } from '../shared/components/ui/Button';
 import { cn } from '../shared/utils/cn';
 import HttpActivityOverlay from './HttpActivityOverlay';
 
+const SIDEBAR_STATE_STORAGE_KEY = 'qs_admin_sidebar_open_groups';
+
 type NavItem = {
   to: string;
   label: string;
@@ -118,6 +120,10 @@ const sectionMeta: Record<string, { title: string; description: string }> = {
   '/settings': {
     title: 'Configuración',
     description: 'SEO, contacto y ajustes generales del sitio.',
+  },
+  '/profile': {
+    title: 'Mi perfil',
+    description: 'Actualiza tus datos personales y la seguridad de tu cuenta.',
   },
   '/users': {
     title: 'Usuarios',
@@ -373,11 +379,33 @@ export function AdminLayout({
     return matchPath.slice(1) === currentTab;
   };
 
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    if (typeof window === 'undefined') {
+      return {};
+    }
+
+    try {
+      const stored = window.sessionStorage.getItem(SIDEBAR_STATE_STORAGE_KEY);
+      if (!stored) {
+        return {};
+      }
+      const parsed = JSON.parse(stored) as Record<string, boolean>;
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  });
 
   useEffect(() => {
     setMobileSidebarOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.sessionStorage.setItem(SIDEBAR_STATE_STORAGE_KEY, JSON.stringify(openGroups));
+  }, [openGroups]);
 
   useEffect(() => {
     setOpenGroups((current) => {
@@ -546,12 +574,20 @@ export function AdminLayout({
               <dd className="mt-1 text-sm text-slate-600">{tenantLabel}</dd>
             </div>
           </dl>
-          <Button
-            className="mt-4 h-9 w-full border border-[rgba(0,64,145,0.18)] bg-[var(--brand-navy)] px-3 text-white hover:bg-[#07113f]"
-            onClick={() => setLogoutOpen(true)}
-          >
-            Cerrar sesión
-          </Button>
+          <div className="mt-4 grid gap-2">
+            <Button
+              className="h-9 w-full border border-[rgba(0,64,145,0.18)] bg-[var(--brand-navy)] px-3 text-white hover:bg-[#07113f]"
+              onClick={() => navigate('/profile')}
+            >
+              Mi perfil
+            </Button>
+            <Button
+              className="h-9 w-full border border-[rgba(0,64,145,0.18)] bg-[var(--brand-navy)] px-3 text-white hover:bg-[#07113f]"
+              onClick={() => setLogoutOpen(true)}
+            >
+              Cerrar sesión
+            </Button>
+          </div>
         </div>
       </>
     ),
