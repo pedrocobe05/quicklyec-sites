@@ -67,6 +67,19 @@ export class MailService {
     });
   }
 
+  /** Misma lógica de fecha/estado que el recordatorio por correo, para alinear plantilla de WhatsApp. */
+  async resolveAppointmentReminderFormatting(input: {
+    tenantId: string;
+    startDateTime: Date | string;
+    statusLabel?: string | null;
+  }): Promise<{ locale: MailLocale; dateTime: string; statusLabel: string }> {
+    const locale = await this.resolveTenantLocale(input.tenantId);
+    const dateTime = this.formatDateTime(input.startDateTime, locale);
+    const statusLabel =
+      input.statusLabel ?? (locale === 'en' ? 'Pending management' : 'Pendiente de gestión');
+    return { locale, dateTime, statusLabel };
+  }
+
   private formatDate(value: string, locale: MailLocale) {
     return new Date(`${value}T00:00:00Z`).toLocaleDateString(locale === 'en' ? 'en-US' : 'es-EC', {
       year: 'numeric',

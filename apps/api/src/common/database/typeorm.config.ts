@@ -26,6 +26,7 @@ import {
   TenantRoleEntity,
   TenantSettingEntity,
   SubscriptionPlanEntity,
+  WhatsappOutboundLogEntity,
 } from '../entities';
 import { IdempotencyKeyEntity } from '../../core/idempotency/entities/idempotency-key.entity';
 
@@ -60,6 +61,7 @@ export function buildTypeOrmOptions(
       TenantEntity,
       TenantDomainEntity,
       TenantSettingEntity,
+      WhatsappOutboundLogEntity,
       TenantBrandingEntity,
       SiteTemplateEntity,
       SitePageEntity,
@@ -80,6 +82,7 @@ export function buildTypeOrmOptions(
       TenantRoleEntity,
       RefreshTokenEntity,
       SubscriptionPlanEntity,
+      WhatsappOutboundLogEntity,
       IdempotencyKeyEntity,
     ],
     migrations: includeMigrations ? ['src/database/migrations/*.ts'] : [],

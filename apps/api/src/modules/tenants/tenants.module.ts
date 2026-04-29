@@ -11,6 +11,7 @@ import {
   TenantRoleEntity,
   TenantSettingEntity,
   SubscriptionPlanEntity,
+  WhatsappOutboundLogEntity,
 } from 'src/common/entities';
 import { TenantsController } from './tenants.controller';
 import { TenantsService } from './tenants.service';
@@ -32,6 +33,7 @@ import { FilesModule } from '../files/files.module';
       AdminUserEntity,
       SubscriptionPlanEntity,
       StaffEntity,
+      WhatsappOutboundLogEntity,
     ]),
   ],
   controllers: [TenantsController],

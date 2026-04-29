@@ -9,6 +9,7 @@ import { appConfig, databaseConfig } from './common/config';
 import { typeOrmOptions } from './common/database/typeorm.config';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
+import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { PublicModule } from './modules/public/public.module';
 import { ServicesModule } from './modules/services/services.module';
 import { SiteModule } from './modules/site/site.module';
@@ -46,6 +47,7 @@ import { HttpExceptionFilter } from './core/filters/http-exception.filter';
     ]),
     TypeOrmModule.forRootAsync(typeOrmOptions),
     HealthModule,
+    WhatsappModule,
     AuthModule,
     TenantsModule,
     SiteModule,

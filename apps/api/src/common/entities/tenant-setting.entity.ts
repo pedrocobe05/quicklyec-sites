@@ -72,6 +72,12 @@ export class TenantSettingEntity {
   @Column({ type: 'jsonb', nullable: true })
   mailConfig!: Record<string, unknown> | null;
 
+  @Column({ default: false })
+  whatsappReminderEnabled!: boolean;
+
+  @Column({ type: 'int', default: 100 })
+  whatsappReminderMonthlyQuota!: number;
+
   @ManyToOne(() => TenantEntity, (tenant) => tenant.settings, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'tenantId' })
   tenant!: TenantEntity;

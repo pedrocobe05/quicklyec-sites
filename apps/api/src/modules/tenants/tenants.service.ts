@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { MoreThanOrEqual, QueryFailedError, Repository } from 'typeorm';
 import {
   AdminUserEntity,
   SitePageEntity,
@@ -12,6 +12,7 @@ import {
   TenantMembershipEntity,
   TenantRoleEntity,
   SubscriptionPlanEntity,
+  WhatsappOutboundLogEntity,
 } from 'src/common/entities';
 import * as bcrypt from 'bcrypt';
 import { CreateTenantMembershipDto } from './dto/create-tenant-membership.dto';
@@ -37,6 +38,7 @@ import {
   resolveTenantMembershipAccess,
 } from './tenant-access.constants';
 import { getTenantSubscriptionState } from './subscription.utils';
+import { APPOINTMENT_REMINDER_CHANNEL } from 'src/modules/whatsapp/whatsapp-appointment-reminder.service';
 
 @Injectable()
 export class TenantsService {
@@ -62,9 +64,16 @@ export class TenantsService {
     private readonly plansRepository: Repository<SubscriptionPlanEntity>,
     @InjectRepository(StaffEntity)
     private readonly staffRepository: Repository<StaffEntity>,
+    @InjectRepository(WhatsappOutboundLogEntity)
+    private readonly whatsappOutboundLogsRepository: Repository<WhatsappOutboundLogEntity>,
     private readonly mailService: MailService,
     private readonly filesService: FilesService,
   ) {}
+
+  private startOfMonthUtc(): Date {
+    const now = new Date();
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+  }
 
   private async assertLinkedStaffIdForTenant(
     tenantId: string,
@@ -217,6 +226,22 @@ export class TenantsService {
     const settingsPayload =
       settings && !viewerIsPlatformAdmin ? { ...settings, mailConfig: null } : settings;
 
+    const sentWhatsappRemindersThisMonth = settings
+      ? await this.whatsappOutboundLogsRepository.count({
+          where: {
+            tenantId,
+            channel: APPOINTMENT_REMINDER_CHANNEL,
+            status: 'sent',
+            createdAt: MoreThanOrEqual(this.startOfMonthUtc()),
+          },
+        })
+      : 0;
+
+    const whatsappReminderUsage = {
+      sentThisMonth: sentWhatsappRemindersThisMonth,
+      monthlyQuota: settings?.whatsappReminderMonthlyQuota ?? 100,
+    };
+
     return {
       tenant: {
         ...tenant,
@@ -274,6 +299,7 @@ export class TenantsService {
         subscriptionEndsAt: tenant.subscriptionEndsAt,
         timeZone: settings?.timezone,
       }),
+      whatsappReminderUsage,
     };
   }
 
@@ -338,6 +364,12 @@ export class TenantsService {
       const normalized = nextInput.payphoneToken.trim();
       nextInput.payphoneToken = normalized || null;
     }
+    if (typeof nextInput.whatsappReminderMonthlyQuota === 'number') {
+      nextInput.whatsappReminderMonthlyQuota = Math.min(
+        1_000_000,
+        Math.max(0, Math.floor(nextInput.whatsappReminderMonthlyQuota)),
+      );
+    }
 
     Object.assign(settings, nextInput);
     const savedSettings = await this.settingsRepository.save(settings);
@@ -369,6 +401,29 @@ export class TenantsService {
     }
 
     return savedSettings;
+  }
+
+  async listWhatsappOutboundLogs(tenantId: string, limit: number) {
+    const take = Math.min(Math.max(limit, 1), 200);
+    return this.whatsappOutboundLogsRepository.find({
+      where: { tenantId },
+      order: { createdAt: 'DESC' },
+      take,
+      select: [
+        'id',
+        'appointmentId',
+        'channel',
+        'toPhone',
+        'templateName',
+        'languageCode',
+        'bodyParams',
+        'renderedPreview',
+        'graphMessageId',
+        'status',
+        'errorMessage',
+        'createdAt',
+      ],
+    });
   }
 
   async sendTestEmail(tenantId: string, to: string) {

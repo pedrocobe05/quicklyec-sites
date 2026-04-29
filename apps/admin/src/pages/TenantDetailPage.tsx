@@ -129,6 +129,8 @@ interface TenantProfileResponse {
       fromEmail?: string;
       fromName?: string;
     } | null;
+    whatsappReminderEnabled?: boolean;
+    whatsappReminderMonthlyQuota?: number;
   } | null;
   branding?: {
     primaryColor?: string | null;
@@ -162,6 +164,10 @@ interface TenantProfileResponse {
     isActive: boolean;
     daysUntilExpiry: number | null;
   } | null;
+  whatsappReminderUsage?: {
+    sentThisMonth: number;
+    monthlyQuota: number;
+  };
 }
 
 interface TenantMembershipRecord {
@@ -739,6 +745,7 @@ export function TenantDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [tabLoading, setTabLoading] = useState(false);
   const [loadedTabs, setLoadedTabs] = useState<Partial<Record<TenantTab, boolean>>>({});
+  const [whatsappLogsNonce, setWhatsappLogsNonce] = useState(0);
   const [editModal, setEditModal] = useState<EditModalState | null>(null);
   const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
   const [createUserOpen, setCreateUserOpen] = useState(false);
@@ -2668,6 +2675,8 @@ export function TenantDetailPage() {
               uploadingAsset={uploadingAsset}
               branding={tenantProfile?.branding}
               settings={tenantProfile?.settings}
+              whatsappReminderUsage={tenantProfile?.whatsappReminderUsage}
+              whatsappLogsNonce={whatsappLogsNonce}
               tenantId={tenantId}
               accessToken={token}
               notify={notify}
@@ -2710,8 +2719,14 @@ export function TenantDetailPage() {
                     payphoneStoreId: String(form.get('payphoneStoreId') ?? ''),
                     payphoneToken: String(form.get('payphoneToken') ?? ''),
                     siteIndexingEnabled: form.get('siteIndexingEnabled') === 'on',
+                    whatsappReminderEnabled: form.get('whatsappReminderEnabled') === 'on',
+                    whatsappReminderMonthlyQuota: (() => {
+                      const raw = Number(form.get('whatsappReminderMonthlyQuota'));
+                      return Number.isFinite(raw) ? raw : 100;
+                    })(),
                   });
                   await loadData();
+                  setWhatsappLogsNonce((n) => n + 1);
                 });
               }}
             />

@@ -328,6 +328,12 @@ export async function updateTenantSettings(accessToken: string, tenantId: string
   });
 }
 
+export async function fetchWhatsappOutboundLogs(accessToken: string, tenantId: string, limit = 40) {
+  return request(`/tenants/whatsapp-outbound-logs?tenantId=${tenantId}&limit=${limit}`, {
+    headers: authHeaders(accessToken),
+  });
+}
+
 export async function sendTenantTestEmail(accessToken: string, tenantId: string, to: string) {
   return request(`/tenants/test-email?tenantId=${tenantId}`, {
     method: 'POST',

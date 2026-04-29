@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEmail, IsIn, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsBoolean, IsEmail, IsIn, IsInt, IsObject, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class UpdateTenantSettingsDto {
   @ApiPropertyOptional()
@@ -117,4 +118,20 @@ export class UpdateTenantSettingsDto {
   @IsOptional()
   @IsObject()
   mailConfig?: Record<string, unknown>;
+
+  @ApiPropertyOptional({ description: 'Activar envío de recordatorio de cita por WhatsApp Cloud API' })
+  @IsOptional()
+  @IsBoolean()
+  whatsappReminderEnabled?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Máximo de mensajes de recordatorio WhatsApp por mes civil (UTC). Ampliable por negocio si tienen paquete extra.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(1_000_000)
+  whatsappReminderMonthlyQuota?: number;
 }

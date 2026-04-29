@@ -28,6 +28,18 @@ export class TenantsController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, TenantMembershipGuard)
+  @TenantModuleAccess('settings')
+  @Get('whatsapp-outbound-logs')
+  listWhatsappOutboundLogs(@Query('tenantId') tenantId: string, @Query('limit') limit?: string) {
+    const parsed = Number(limit);
+    return this.tenantsService.listWhatsappOutboundLogs(
+      tenantId,
+      Number.isFinite(parsed) ? parsed : 50,
+    );
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, TenantMembershipGuard)
   @Get('me')
   getCurrentTenant(@Req() req: { user: { sub: string }; query: { tenantId?: string } }) {
     const tenantId = req.query.tenantId;

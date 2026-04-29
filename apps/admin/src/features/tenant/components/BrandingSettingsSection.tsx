@@ -1,6 +1,6 @@
 import { SITE_FONT_OPTIONS } from '@quickly-sites/shared';
 import { CSSProperties, FormEvent, useEffect, useMemo, useState } from 'react';
-import { preparePayphoneTestPayment } from '../../../lib/api';
+import { fetchWhatsappOutboundLogs, preparePayphoneTestPayment } from '../../../lib/api';
 import { mountPayphonePaymentBox } from '../../../lib/payphone-box-sdk';
 import { Button } from '../../../shared/components/ui/Button';
 import { Input } from '../../../shared/components/ui/Input';
@@ -40,7 +40,12 @@ interface BrandingSettingsSectionProps {
     payphoneMode?: string | null;
     payphoneStoreId?: string | null;
     payphoneToken?: string | null;
+    whatsappReminderEnabled?: boolean;
+    whatsappReminderMonthlyQuota?: number;
   } | null;
+  whatsappReminderUsage?: { sentThisMonth: number; monthlyQuota: number } | null;
+  /** Incrementa tras guardar ajustes para recargar el historial de envíos. */
+  whatsappLogsNonce?: number;
   onUploadBrandingAsset?: (field: 'logo' | 'favicon', file: File) => void;
   onSubmitBranding: (event: FormEvent<HTMLFormElement>) => void;
   onSubmitSettings: (event: FormEvent<HTMLFormElement>) => void;
@@ -48,6 +53,18 @@ interface BrandingSettingsSectionProps {
   accessToken?: string;
   notify?: (message: string, variant: 'success' | 'error' | 'info') => void;
 }
+
+type WhatsappOutboundLogRow = {
+  id: string;
+  toPhone: string;
+  templateName: string;
+  languageCode: string;
+  renderedPreview: string | null;
+  graphMessageId: string | null;
+  status: string;
+  errorMessage: string | null;
+  createdAt: string;
+};
 
 const BUTTON_STYLE_OPTIONS = [
   {
@@ -118,6 +135,8 @@ export function BrandingSettingsSection({
   onSubmitSettings,
   tenantId,
   accessToken,
+  whatsappReminderUsage,
+  whatsappLogsNonce,
   notify,
 }: BrandingSettingsSectionProps) {
   const [preview, setPreview] = useState({
@@ -163,6 +182,23 @@ export function BrandingSettingsSection({
     '--preview-font-family': previewFontFamily,
     '--preview-button-radius': previewButtonRadius,
   } as CSSProperties;
+
+  const [waLogs, setWaLogs] = useState<WhatsappOutboundLogRow[]>([]);
+  const [waLogsLoading, setWaLogsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!tenantId || !accessToken) {
+      setWaLogs([]);
+      return;
+    }
+    setWaLogsLoading(true);
+    void fetchWhatsappOutboundLogs(accessToken, tenantId, 40)
+      .then((rows) => {
+        setWaLogs(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => setWaLogs([]))
+      .finally(() => setWaLogsLoading(false));
+  }, [tenantId, accessToken, whatsappLogsNonce]);
 
   const [payphoneTestBusy, setPayphoneTestBusy] = useState(false);
   const [payphoneBoxModal, setPayphoneBoxModal] = useState<null | {
@@ -482,6 +518,93 @@ export function BrandingSettingsSection({
           <FormField label="Dirección">
             <Input name="contactAddress" defaultValue={settings?.contactAddress ?? ''} placeholder="Dirección del negocio" />
           </FormField>
+
+          <div className="grid gap-4 rounded-3xl border border-emerald-100 bg-emerald-50/40 p-4">
+            <div>
+              <h4 className="text-base font-semibold text-slate-900">Recordatorios por WhatsApp</h4>
+              <p className="mt-1 text-sm text-slate-500">
+                Usa la API de WhatsApp Cloud (número empresarial). El texto sigue la misma plantilla aprobada en Meta que el correo de recordatorio.
+                Los envíos se contabilizan por mes civil (UTC). Usa el teléfono del cliente en la ficha del cliente.
+              </p>
+            </div>
+            <label className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-sm text-slate-700">
+              <Checkbox type="checkbox" name="whatsappReminderEnabled" defaultChecked={settings?.whatsappReminderEnabled ?? false} />
+              Enviar recordatorio de cita por WhatsApp
+            </label>
+            <FormField label="Cuota mensual de mensajes (UTC)">
+              <Input
+                name="whatsappReminderMonthlyQuota"
+                type="number"
+                min={0}
+                max={1000000}
+                defaultValue={String(settings?.whatsappReminderMonthlyQuota ?? 100)}
+                placeholder="100"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Por defecto 100; puedes subir el límite si el negocio contrata un paquete extra.
+              </p>
+            </FormField>
+            {whatsappReminderUsage ? (
+              <p className="text-sm text-slate-700">
+                <span className="font-semibold text-slate-900">Consumo este mes:</span>{' '}
+                {whatsappReminderUsage.sentThisMonth} / {whatsappReminderUsage.monthlyQuota} mensajes enviados correctamente.
+              </p>
+            ) : null}
+            <div className="rounded-2xl border border-slate-200 bg-white">
+              <div className="border-b border-slate-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Últimos envíos (registro)
+              </div>
+              {waLogsLoading ? (
+                <p className="px-4 py-3 text-sm text-slate-500">Cargando…</p>
+              ) : waLogs.length === 0 ? (
+                <p className="px-4 py-3 text-sm text-slate-500">Aún no hay envíos registrados.</p>
+              ) : (
+                <div className="max-h-64 overflow-auto text-sm">
+                  <table className="w-full border-collapse text-left">
+                    <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">Fecha</th>
+                        <th className="px-3 py-2 font-medium">Destino</th>
+                        <th className="px-3 py-2 font-medium">Estado</th>
+                        <th className="px-3 py-2 font-medium">Plantilla</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {waLogs.map((row) => (
+                        <tr key={row.id} className="border-t border-slate-100">
+                          <td className="px-3 py-2 align-top text-xs text-slate-600">
+                            {new Date(row.createdAt).toLocaleString('es-EC')}
+                          </td>
+                          <td className="px-3 py-2 align-top font-mono text-xs">{row.toPhone}</td>
+                          <td className="px-3 py-2 align-top">
+                            <span
+                              className={
+                                row.status === 'sent'
+                                  ? 'rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800'
+                                  : 'rounded-full bg-rose-100 px-2 py-0.5 text-xs text-rose-800'
+                              }
+                            >
+                              {row.status}
+                            </span>
+                            {row.errorMessage ? (
+                              <span className="mt-1 block text-xs text-rose-600" title={row.errorMessage}>
+                                {row.errorMessage.slice(0, 80)}
+                                {row.errorMessage.length > 80 ? '…' : ''}
+                              </span>
+                            ) : null}
+                          </td>
+                          <td className="px-3 py-2 align-top text-xs text-slate-600">
+                            {row.templateName} ({row.languageCode})
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="grid gap-4 rounded-3xl border border-slate-200 bg-slate-50/80 p-4">
             <div>
               <h4 className="text-base font-semibold text-slate-900">Métodos de pago</h4>

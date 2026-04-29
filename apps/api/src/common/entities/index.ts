@@ -1,6 +1,7 @@
 export * from './tenant.entity';
 export * from './tenant-domain.entity';
 export * from './tenant-setting.entity';
+export * from './whatsapp-outbound-log.entity';
 export * from './tenant-branding.entity';
 export * from './site-template.entity';
 export * from './site-page.entity';
