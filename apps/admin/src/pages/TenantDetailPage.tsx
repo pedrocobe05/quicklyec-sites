@@ -698,6 +698,7 @@ export function TenantDetailPage() {
   const token = localStorage.getItem('qs_access_token');
   const user = JSON.parse(localStorage.getItem('qs_user') ?? 'null') as {
     isPlatformAdmin?: boolean;
+    platformRole?: string;
     memberships?: Array<{
       tenant?: { id?: string; name?: string; slug?: string };
       role?: { code?: string; name?: string; permissions?: string[] } | null;
@@ -2679,7 +2680,9 @@ export function TenantDetailPage() {
               whatsappLogsNonce={whatsappLogsNonce}
               tenantId={tenantId}
               accessToken={token}
+              isSuperAdmin={Boolean(user?.isPlatformAdmin && user?.platformRole === 'super_admin')}
               notify={notify}
+              onWhatsappTestSent={loadData}
               onUploadBrandingAsset={handleUploadBrandingAsset}
               onSubmitBranding={(event) => {
                 event.preventDefault();

@@ -38,7 +38,6 @@ import {
   resolveTenantMembershipAccess,
 } from './tenant-access.constants';
 import { getTenantSubscriptionState } from './subscription.utils';
-import { APPOINTMENT_REMINDER_CHANNEL } from 'src/modules/whatsapp/whatsapp-appointment-reminder.service';
 
 @Injectable()
 export class TenantsService {
@@ -230,7 +229,6 @@ export class TenantsService {
       ? await this.whatsappOutboundLogsRepository.count({
           where: {
             tenantId,
-            channel: APPOINTMENT_REMINDER_CHANNEL,
             status: 'sent',
             createdAt: MoreThanOrEqual(this.startOfMonthUtc()),
           },

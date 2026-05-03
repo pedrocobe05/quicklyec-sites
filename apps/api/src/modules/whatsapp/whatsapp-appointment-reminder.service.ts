@@ -1,13 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { AppointmentEntity, TenantSettingEntity, WhatsappOutboundLogEntity } from 'src/common/entities';
+import { AppointmentEntity, TenantEntity, TenantSettingEntity, WhatsappOutboundLogEntity } from 'src/common/entities';
 import { MailService } from 'src/modules/mail/mail.service';
 import { getPlanMetadata, normalizePlanCode } from 'src/modules/tenants/tenant-access.constants';
 import { MoreThanOrEqual, Repository } from 'typeorm';
 import { WhatsappCloudService } from './whatsapp-cloud.service';
 
 export const APPOINTMENT_REMINDER_CHANNEL = 'appointment_reminder';
+export const APPOINTMENT_REMINDER_TEST_CHANNEL = 'appointment_reminder_test';
 
 function startOfMonthUtc(): Date {
   const now = new Date();
@@ -69,6 +70,10 @@ export class WhatsappAppointmentReminderService {
     private readonly whatsappCloud: WhatsappCloudService,
     @InjectRepository(WhatsappOutboundLogEntity)
     private readonly logsRepository: Repository<WhatsappOutboundLogEntity>,
+    @InjectRepository(TenantEntity)
+    private readonly tenantsRepository: Repository<TenantEntity>,
+    @InjectRepository(TenantSettingEntity)
+    private readonly settingsRepository: Repository<TenantSettingEntity>,
   ) {}
 
   async trySendAppointmentReminder(params: {
@@ -87,14 +92,7 @@ export class WhatsappAppointmentReminderService {
     }
 
     const quota = settings.whatsappReminderMonthlyQuota ?? 100;
-    const sentThisMonth = await this.logsRepository.count({
-      where: {
-        tenantId: appointment.tenantId,
-        channel: APPOINTMENT_REMINDER_CHANNEL,
-        status: 'sent',
-        createdAt: MoreThanOrEqual(startOfMonthUtc()),
-      },
-    });
+    const sentThisMonth = await this.countSentMessagesThisMonth(appointment.tenantId);
 
     if (sentThisMonth >= quota) {
       return { outcome: 'skipped', detail: 'cuota_whatsapp_agotada' };
@@ -183,5 +181,115 @@ export class WhatsappAppointmentReminderService {
       this.logger.warn(`WhatsApp recordatorio falló para cita ${appointment.id}: ${message}`);
       return { outcome: 'failed', detail: message };
     }
+  }
+
+  async sendTestReminderTemplate(tenantId: string, to: string): Promise<{ messageId: string; channel: string }> {
+    const [tenant, settings] = await Promise.all([
+      this.tenantsRepository.findOne({ where: { id: tenantId } }),
+      this.settingsRepository.findOne({ where: { tenantId } }),
+    ]);
+
+    if (!tenant) {
+      throw new Error('Tenant no encontrado');
+    }
+
+    const planMetadata = getPlanMetadata(normalizePlanCode(tenant.plan));
+    if (!planMetadata.features.includes('appointment_reminders')) {
+      throw new Error('El plan del tenant no incluye recordatorios por WhatsApp.');
+    }
+
+    const quota = settings?.whatsappReminderMonthlyQuota ?? 100;
+    const sentThisMonth = await this.countSentMessagesThisMonth(tenantId);
+    if (sentThisMonth >= quota) {
+      throw new Error('La cuota mensual de WhatsApp de este tenant ya fue agotada.');
+    }
+
+    const normalizedTo = this.whatsappCloud.normalizeToDigits(to);
+    const now = new Date();
+    const locale = String(settings?.locale ?? 'es-EC').toLowerCase().startsWith('en') ? 'en' : 'es';
+    const dateTime = new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : 'es-EC', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: settings?.timezone ?? 'America/Guayaquil',
+    }).format(now);
+    const dash = '—';
+    const bodyParams = [
+      locale === 'en' ? 'Test customer' : 'Cliente de prueba',
+      locale === 'en' ? 'Demo service' : 'Servicio demo',
+      locale === 'en' ? 'Demo professional' : 'Profesional demo',
+      dateTime,
+      locale === 'en' ? 'Confirmed' : 'Confirmada',
+      settings?.contactPhone?.trim() ? settings.contactPhone.trim() : dash,
+      settings?.contactAddress?.trim() ? settings.contactAddress.trim() : dash,
+    ];
+
+    const templateName =
+      locale === 'en'
+        ? this.configService.get<string>('app.whatsappReminderTemplateNameEn', 'recordatorio_cita_en')
+        : this.configService.get<string>('app.whatsappReminderTemplateNameEs', 'recordatorio_cita');
+
+    const languageCode =
+      locale === 'en'
+        ? this.configService.get<string>('app.whatsappReminderLanguageCodeEn', 'en_US')
+        : this.configService.get<string>('app.whatsappReminderLanguageCodeEs', 'es_EC');
+
+    const renderedPreview = buildRenderedPreview(locale, bodyParams);
+
+    try {
+      const result = await this.whatsappCloud.sendTemplateMessage({
+        to: normalizedTo,
+        templateName,
+        languageCode,
+        bodyParams,
+      });
+
+      await this.logsRepository.save(
+        this.logsRepository.create({
+          tenantId,
+          appointmentId: null,
+          channel: APPOINTMENT_REMINDER_TEST_CHANNEL,
+          toPhone: normalizedTo,
+          templateName,
+          languageCode,
+          bodyParams,
+          renderedPreview,
+          graphMessageId: result.messageId,
+          status: 'sent',
+          errorMessage: null,
+        }),
+      );
+
+      return { messageId: result.messageId, channel: APPOINTMENT_REMINDER_TEST_CHANNEL };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+
+      await this.logsRepository.save(
+        this.logsRepository.create({
+          tenantId,
+          appointmentId: null,
+          channel: APPOINTMENT_REMINDER_TEST_CHANNEL,
+          toPhone: normalizedTo,
+          templateName,
+          languageCode,
+          bodyParams,
+          renderedPreview,
+          graphMessageId: null,
+          status: 'failed',
+          errorMessage: message,
+        }),
+      );
+
+      throw error;
+    }
+  }
+
+  async countSentMessagesThisMonth(tenantId: string): Promise<number> {
+    return this.logsRepository.count({
+      where: {
+        tenantId,
+        status: 'sent',
+        createdAt: MoreThanOrEqual(startOfMonthUtc()),
+      },
+    });
   }
 }

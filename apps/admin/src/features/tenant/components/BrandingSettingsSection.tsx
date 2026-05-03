@@ -1,7 +1,8 @@
 import { SITE_FONT_OPTIONS } from '@quickly-sites/shared';
 import { CSSProperties, FormEvent, useEffect, useMemo, useState } from 'react';
-import { fetchWhatsappOutboundLogs, preparePayphoneTestPayment } from '../../../lib/api';
+import { fetchWhatsappOutboundLogs, preparePayphoneTestPayment, sendWhatsappTestReminder } from '../../../lib/api';
 import { mountPayphonePaymentBox } from '../../../lib/payphone-box-sdk';
+import { Modal } from '../../../shared/components/modal/Modal';
 import { Button } from '../../../shared/components/ui/Button';
 import { Input } from '../../../shared/components/ui/Input';
 import { Select } from '../../../shared/components/ui/Select';
@@ -51,7 +52,9 @@ interface BrandingSettingsSectionProps {
   onSubmitSettings: (event: FormEvent<HTMLFormElement>) => void;
   tenantId?: string;
   accessToken?: string;
+  isSuperAdmin?: boolean;
   notify?: (message: string, variant: 'success' | 'error' | 'info') => void;
+  onWhatsappTestSent?: () => void | Promise<void>;
 }
 
 type WhatsappOutboundLogRow = {
@@ -135,9 +138,11 @@ export function BrandingSettingsSection({
   onSubmitSettings,
   tenantId,
   accessToken,
+  isSuperAdmin,
   whatsappReminderUsage,
   whatsappLogsNonce,
   notify,
+  onWhatsappTestSent,
 }: BrandingSettingsSectionProps) {
   const [preview, setPreview] = useState({
     primaryColor: normalizeHexColor(branding?.primaryColor, '#C16A7B'),
@@ -201,6 +206,9 @@ export function BrandingSettingsSection({
   }, [tenantId, accessToken, whatsappLogsNonce]);
 
   const [payphoneTestBusy, setPayphoneTestBusy] = useState(false);
+  const [whatsappTestModalOpen, setWhatsappTestModalOpen] = useState(false);
+  const [whatsappTestPhone, setWhatsappTestPhone] = useState('');
+  const [whatsappTestBusy, setWhatsappTestBusy] = useState(false);
   const [payphoneBoxModal, setPayphoneBoxModal] = useState<null | {
     clientTransactionId: string;
     token: string;
@@ -281,6 +289,30 @@ export function BrandingSettingsSection({
       notify?.(error instanceof Error ? error.message : 'No se pudo iniciar la prueba de Payphone', 'error');
     } finally {
       setPayphoneTestBusy(false);
+    }
+  }
+
+  async function handleWhatsappTemplateTest() {
+    if (!tenantId || !accessToken) {
+      notify?.('No hay sesión o tenant para enviar la prueba.', 'error');
+      return;
+    }
+    if (!whatsappTestPhone.trim()) {
+      notify?.('Ingresa un número de teléfono para la prueba.', 'error');
+      return;
+    }
+
+    setWhatsappTestBusy(true);
+    try {
+      await sendWhatsappTestReminder(accessToken, tenantId, whatsappTestPhone.trim());
+      notify?.('Prueba de WhatsApp enviada correctamente.', 'success');
+      setWhatsappTestModalOpen(false);
+      setWhatsappTestPhone('');
+      await onWhatsappTestSent?.();
+    } catch (error) {
+      notify?.(error instanceof Error ? error.message : 'No se pudo enviar la prueba de WhatsApp', 'error');
+    } finally {
+      setWhatsappTestBusy(false);
     }
   }
 
@@ -549,6 +581,22 @@ export function BrandingSettingsSection({
                 <span className="font-semibold text-slate-900">Consumo este mes:</span>{' '}
                 {whatsappReminderUsage.sentThisMonth} / {whatsappReminderUsage.monthlyQuota} mensajes enviados correctamente.
               </p>
+            ) : null}
+            {isSuperAdmin ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <p className="text-sm text-slate-600">
+                  Envía una prueba del template <span className="font-semibold text-slate-900">recordatorio_cita</span> con datos mock. Este envío consume cuota del tenant.
+                </p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold"
+                  disabled={!tenantId || !accessToken}
+                  onClick={() => setWhatsappTestModalOpen(true)}
+                >
+                  Probar mensaje WhatsApp
+                </Button>
+              </div>
             ) : null}
             <div className="rounded-2xl border border-slate-200 bg-white">
               <div className="border-b border-slate-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -829,6 +877,55 @@ export function BrandingSettingsSection({
         </div>
       </div>
     ) : null}
+    <Modal
+      title="Prueba de recordatorio WhatsApp"
+      open={whatsappTestModalOpen}
+      onClose={() => {
+        if (whatsappTestBusy) {
+          return;
+        }
+        setWhatsappTestModalOpen(false);
+      }}
+      description="Envía la plantilla aprobada de recordatorio con datos mock al número indicado. El envío se registra y consume cuota del tenant."
+      maxWidthClassName="max-w-lg"
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="ghost"
+            className="rounded-full px-4 py-2 text-sm"
+            onClick={() => setWhatsappTestModalOpen(false)}
+            disabled={whatsappTestBusy}
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            className="rounded-full px-4 py-2 text-sm font-semibold"
+            onClick={() => {
+              void handleWhatsappTemplateTest();
+            }}
+            disabled={whatsappTestBusy || !tenantId || !accessToken}
+          >
+            {whatsappTestBusy ? 'Enviando...' : 'Enviar prueba'}
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-4">
+        <FormField label="Número de teléfono">
+          <Input
+            value={whatsappTestPhone}
+            onChange={(event) => setWhatsappTestPhone(event.target.value)}
+            placeholder="593991234567"
+            autoFocus
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Usa formato internacional. Puede ser con o sin <code>+</code>; el backend lo normaliza.
+          </p>
+        </FormField>
+      </div>
+    </Modal>
     </>
   );
 }

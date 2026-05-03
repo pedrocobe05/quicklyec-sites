@@ -159,7 +159,7 @@ export class WhatsappInboundService {
       to,
       replyToMessageId,
       bodyText:
-        'Hola. Este es un numero que envia mensajes automaticos.\n\nSi deseas ayuda, elige una de estas opciones:',
+        'Hola!, soy QuicklyEC Assists!, tu asistente virtual, este es un numero que envia mensajes automaticos.\n\nSi deseas ayuda, elige una de estas opciones:',
       footerText: 'QuicklyEC',
       buttonText: 'Ver opciones',
       sectionTitle: 'Opciones disponibles',

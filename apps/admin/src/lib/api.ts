@@ -334,6 +334,14 @@ export async function fetchWhatsappOutboundLogs(accessToken: string, tenantId: s
   });
 }
 
+export async function sendWhatsappTestReminder(accessToken: string, tenantId: string, to: string) {
+  return request(`/admin/whatsapp/test-reminder?tenantId=${tenantId}`, {
+    method: 'POST',
+    headers: authHeaders(accessToken),
+    body: JSON.stringify({ to }),
+  });
+}
+
 export async function sendTenantTestEmail(accessToken: string, tenantId: string, to: string) {
   return request(`/tenants/test-email?tenantId=${tenantId}`, {
     method: 'POST',
