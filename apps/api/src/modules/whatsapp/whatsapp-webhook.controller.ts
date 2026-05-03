@@ -25,6 +25,16 @@ export class WhatsappWebhookController {
     @Query('hub.challenge') challenge: string | undefined,
     @Res() res: Response,
   ): void {
+    if (this.configService.get<string>('app.env') === 'development') {
+      this.logger.debug(
+        `Webhook GET verify: ${JSON.stringify({
+          mode: mode ?? null,
+          verifyToken: verifyToken ? '[present]' : null,
+          challenge: challenge ? '[present]' : null,
+        })}`,
+      );
+    }
+
     const expected = this.configService.get<string>('app.whatsappWebhookVerifyToken', '');
     if (!expected) {
       this.logger.warn('WHATSAPP_WEBHOOK_VERIFY_TOKEN no está configurado; rechazando verificación');

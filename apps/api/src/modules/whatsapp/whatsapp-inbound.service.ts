@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { WhatsappCloudService } from './whatsapp-cloud.service';
 
@@ -50,6 +50,8 @@ const MENU_OPTIONS: Array<{
 
 @Injectable()
 export class WhatsappInboundService {
+  private readonly logger = new Logger(WhatsappInboundService.name);
+
   constructor(
     private readonly configService: ConfigService,
     private readonly whatsappCloud: WhatsappCloudService,
@@ -75,6 +77,8 @@ export class WhatsappInboundService {
       return;
     }
 
+    this.logIncomingMessage(message);
+
     if (message.type === 'interactive') {
       const selectedId = this.extractInteractiveSelection(message);
       if (!selectedId) {
@@ -93,6 +97,28 @@ export class WhatsappInboundService {
 
       await this.sendGreetingMenu(message.from, message.id);
     }
+  }
+
+  private logIncomingMessage(message: IncomingMessage): void {
+    if (this.configService.get<string>('app.env') !== 'development') {
+      return;
+    }
+
+    const summary = {
+      from: message.from,
+      id: message.id,
+      type: message.type,
+      text: message.text?.body ?? null,
+      interactive: message.interactive
+        ? {
+            type: message.interactive.type ?? null,
+            button_reply: message.interactive.button_reply ?? null,
+            list_reply: message.interactive.list_reply ?? null,
+          }
+        : null,
+    };
+
+    this.logger.debug(`Incoming WhatsApp message: ${JSON.stringify(summary)}`);
   }
 
   private extractInteractiveSelection(message: IncomingMessage): MenuOptionId | null {
