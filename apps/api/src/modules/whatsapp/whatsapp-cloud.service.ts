@@ -8,6 +8,36 @@ type GraphSendResponse = {
   error?: { message: string; type?: string; code?: number; error_subcode?: number };
 };
 
+type GraphMessagePayload = {
+  messaging_product: 'whatsapp';
+  to: string;
+  type: 'template' | 'text' | 'interactive';
+  context?: {
+    message_id: string;
+  };
+  template?: Record<string, unknown>;
+  text?: {
+    body: string;
+    preview_url?: boolean;
+  };
+  interactive?: {
+    type: 'list';
+    body: { text: string };
+    footer?: { text: string };
+    action: {
+      button: string;
+      sections: Array<{
+        title: string;
+        rows: Array<{
+          id: string;
+          title: string;
+          description?: string;
+        }>;
+      }>;
+    };
+  };
+};
+
 @Injectable()
 export class WhatsappCloudService {
   private readonly logger = new Logger(WhatsappCloudService.name);
@@ -31,19 +61,6 @@ export class WhatsappCloudService {
     languageCode: string;
     bodyParams?: string[];
   }): Promise<{ messageId: string; waId?: string }> {
-    const token = this.configService.get<string>('app.whatsappAccessToken', '')?.trim();
-    const phoneNumberId = this.configService.get<string>('app.whatsappPhoneNumberId', '')?.trim();
-    const version = this.configService.get<string>('app.whatsappGraphApiVersion', 'v22.0')?.trim() || 'v22.0';
-
-    if (!token || !phoneNumberId) {
-      throw new ServiceUnavailableException(
-        'WhatsApp Cloud API no configurada: define WHATSAPP_ACCESS_TOKEN y WHATSAPP_PHONE_NUMBER_ID.',
-      );
-    }
-
-    const to = this.normalizeToDigits(input.to);
-    const url = `https://graph.facebook.com/${version}/${phoneNumberId}/messages`;
-
     const template: Record<string, unknown> = {
       name: input.templateName,
       language: { code: input.languageCode },
@@ -58,12 +75,87 @@ export class WhatsappCloudService {
       ];
     }
 
-    const body = {
-      messaging_product: 'whatsapp',
-      to,
-      type: 'template',
-      template,
-    };
+    return this.sendMessage({
+      to: input.to,
+      payload: {
+        messaging_product: 'whatsapp',
+        to: this.normalizeToDigits(input.to),
+        type: 'template',
+        template,
+      },
+    });
+  }
+
+  async sendTextMessage(input: {
+    to: string;
+    bodyText: string;
+    replyToMessageId?: string;
+  }): Promise<{ messageId: string; waId?: string }> {
+    return this.sendMessage({
+      to: input.to,
+      payload: {
+        messaging_product: 'whatsapp',
+        to: this.normalizeToDigits(input.to),
+        type: 'text',
+        context: input.replyToMessageId ? { message_id: input.replyToMessageId } : undefined,
+        text: {
+          body: input.bodyText,
+          preview_url: true,
+        },
+      },
+    });
+  }
+
+  async sendListMessage(input: {
+    to: string;
+    bodyText: string;
+    buttonText: string;
+    sectionTitle: string;
+    rows: Array<{ id: string; title: string; description?: string }>;
+    footerText?: string;
+    replyToMessageId?: string;
+  }): Promise<{ messageId: string; waId?: string }> {
+    return this.sendMessage({
+      to: input.to,
+      payload: {
+        messaging_product: 'whatsapp',
+        to: this.normalizeToDigits(input.to),
+        type: 'interactive',
+        context: input.replyToMessageId ? { message_id: input.replyToMessageId } : undefined,
+        interactive: {
+          type: 'list',
+          body: { text: input.bodyText },
+          footer: input.footerText ? { text: input.footerText } : undefined,
+          action: {
+            button: input.buttonText,
+            sections: [
+              {
+                title: input.sectionTitle,
+                rows: input.rows,
+              },
+            ],
+          },
+        },
+      },
+    });
+  }
+
+  private async sendMessage(input: {
+    to: string;
+    payload: GraphMessagePayload;
+  }): Promise<{ messageId: string; waId?: string }> {
+    const token = this.configService.get<string>('app.whatsappAccessToken', '')?.trim();
+    const phoneNumberId = this.configService.get<string>('app.whatsappPhoneNumberId', '')?.trim();
+    const version = this.configService.get<string>('app.whatsappGraphApiVersion', 'v22.0')?.trim() || 'v22.0';
+
+    if (!token || !phoneNumberId) {
+      throw new ServiceUnavailableException(
+        'WhatsApp Cloud API no configurada: define WHATSAPP_ACCESS_TOKEN y WHATSAPP_PHONE_NUMBER_ID.',
+      );
+    }
+
+    const url = `https://graph.facebook.com/${version}/${phoneNumberId}/messages`;
+    const body = input.payload;
 
     const res = await fetch(url, {
       method: 'POST',

@@ -14,6 +14,7 @@ export const appConfig = registerAs('app', () => ({
   whatsappAccessToken: process.env.WHATSAPP_ACCESS_TOKEN ?? '',
   whatsappPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID ?? '',
   whatsappGraphApiVersion: process.env.WHATSAPP_GRAPH_API_VERSION ?? 'v22.0',
+  whatsappSupportTargetNumber: process.env.WHATSAPP_SUPPORT_TARGET_NUMBER ?? '593962857535',
   whatsappReminderTemplateNameEs: process.env.WHATSAPP_REMINDER_TEMPLATE_NAME_ES ?? 'recordatorio_cita',
   whatsappReminderTemplateNameEn: process.env.WHATSAPP_REMINDER_TEMPLATE_NAME_EN ?? 'recordatorio_cita_en',
   whatsappReminderLanguageCodeEs: process.env.WHATSAPP_REMINDER_LANGUAGE_CODE_ES ?? 'es_EC',

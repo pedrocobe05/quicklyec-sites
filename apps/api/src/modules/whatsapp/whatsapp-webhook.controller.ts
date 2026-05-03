@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Logger, Post, Query, Res }
 import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
 import { SkipThrottle } from '@nestjs/throttler';
+import { WhatsappInboundService } from './whatsapp-inbound.service';
 
 /**
  * Meta WhatsApp Cloud API webhook (subscription verification + event delivery).
@@ -12,7 +13,10 @@ import { SkipThrottle } from '@nestjs/throttler';
 export class WhatsappWebhookController {
   private readonly logger = new Logger(WhatsappWebhookController.name);
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly whatsappInboundService: WhatsappInboundService,
+  ) {}
 
   @Get()
   verifySubscription(
@@ -38,10 +42,11 @@ export class WhatsappWebhookController {
 
   @Post()
   @HttpCode(HttpStatus.OK)
-  receiveEvent(@Body() body: unknown): { ok: true } {
+  async receiveEvent(@Body() body: unknown): Promise<{ ok: true }> {
     if (this.configService.get<string>('app.env') === 'development') {
       this.logger.debug(`Webhook POST: ${JSON.stringify(body)}`);
     }
+    await this.whatsappInboundService.handleWebhook(body);
     return { ok: true };
   }
 }
