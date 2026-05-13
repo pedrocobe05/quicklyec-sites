@@ -1,4 +1,4 @@
-import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { AppointmentEntity } from './appointment.entity';
 import { TenantEntity } from './tenant.entity';
 
@@ -27,6 +27,9 @@ export class CustomerEntity {
 
   @Column({ type: 'jsonb', nullable: true })
   tags!: Record<string, unknown> | null;
+
+  @CreateDateColumn()
+  createdAt!: Date;
 
   @ManyToOne(() => TenantEntity, (tenant) => tenant.customers, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'tenantId' })

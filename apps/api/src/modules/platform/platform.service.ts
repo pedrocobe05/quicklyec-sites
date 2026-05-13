@@ -1,14 +1,18 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
-import { Repository } from 'typeorm';
+import { And, Between, IsNull, LessThan, Not, Repository } from 'typeorm';
 import {
   AdminUserEntity,
+  AppointmentEntity,
+  CustomerEntity,
   PlatformRoleEntity,
   PlatformSettingEntity,
+  ServiceEntity,
   SitePageEntity,
   SiteTemplateEntity,
   SiteSectionEntity,
+  StaffEntity,
   SubscriptionPlanEntity,
   TenantBrandingEntity,
   TenantDomainEntity,
@@ -67,6 +71,14 @@ export class PlatformService {
     private readonly rolesRepository: Repository<TenantRoleEntity>,
     @InjectRepository(AdminUserEntity)
     private readonly usersRepository: Repository<AdminUserEntity>,
+    @InjectRepository(AppointmentEntity)
+    private readonly appointmentsRepository: Repository<AppointmentEntity>,
+    @InjectRepository(CustomerEntity)
+    private readonly customersRepository: Repository<CustomerEntity>,
+    @InjectRepository(ServiceEntity)
+    private readonly servicesRepository: Repository<ServiceEntity>,
+    @InjectRepository(StaffEntity)
+    private readonly staffRepository: Repository<StaffEntity>,
     private readonly mailService: MailService,
     private readonly tenantsService: TenantsService,
   ) {}
@@ -489,6 +501,169 @@ export class PlatformService {
     });
 
     return this.plansRepository.save(plan);
+  }
+
+  async getStats(tenantId?: string) {
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const startOfNextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    const thisMonthRange = Between(startOfMonth, startOfNextMonth);
+
+    if (tenantId) {
+      const tenant = await this.tenantsRepository.findOne({ where: { id: tenantId } });
+      if (!tenant) {
+        throw new NotFoundException('Tenant not found');
+      }
+
+      const [
+        totalAppointments,
+        appointmentsByStatus,
+        appointmentsThisMonth,
+        totalCustomers,
+        newCustomersThisMonth,
+        totalServices,
+        activeServices,
+        totalStaff,
+      ] = await Promise.all([
+        this.appointmentsRepository.count({ where: { tenantId } }),
+        this.appointmentsRepository
+          .createQueryBuilder('a')
+          .select('a.status', 'status')
+          .addSelect('COUNT(*)', 'count')
+          .where({ tenantId })
+          .groupBy('a.status')
+          .getRawMany<{ status: string; count: string }>(),
+        this.appointmentsRepository.count({
+          where: { tenantId, createdAt: thisMonthRange },
+        }),
+        this.customersRepository.count({ where: { tenantId } }),
+        this.customersRepository.count({
+          where: { tenantId, createdAt: thisMonthRange },
+        }),
+        this.servicesRepository.count({ where: { tenantId } }),
+        this.servicesRepository.count({ where: { tenantId, isActive: true } }),
+        this.staffRepository.count({ where: { tenantId } }),
+      ]);
+
+      const statusMap = Object.fromEntries(
+        appointmentsByStatus.map(({ status, count }) => [status, Number(count)]),
+      );
+
+      return {
+        tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug, plan: tenant.plan, status: tenant.status },
+        appointments: {
+          total: totalAppointments,
+          thisMonth: appointmentsThisMonth,
+          byStatus: {
+            pending: statusMap['pending'] ?? 0,
+            confirmed: statusMap['confirmed'] ?? 0,
+            completed: statusMap['completed'] ?? 0,
+            cancelled: statusMap['cancelled'] ?? 0,
+            no_show: statusMap['no_show'] ?? 0,
+          },
+        },
+        customers: {
+          total: totalCustomers,
+          newThisMonth: newCustomersThisMonth,
+        },
+        services: {
+          total: totalServices,
+          active: activeServices,
+        },
+        staff: {
+          total: totalStaff,
+        },
+      };
+    }
+
+    const [
+      totalTenants,
+      activeTenants,
+      inactiveTenants,
+      tenantsByPlan,
+      expiredSubscriptions,
+      tenantsCreatedThisMonth,
+      totalAppointments,
+      appointmentsThisMonth,
+      appointmentsByStatus,
+      totalCustomers,
+      newCustomersThisMonth,
+      totalServices,
+      activeServices,
+      totalStaff,
+    ] = await Promise.all([
+      this.tenantsRepository.count(),
+      this.tenantsRepository.count({ where: { status: 'active' } }),
+      this.tenantsRepository.count({ where: { status: 'inactive' } }),
+      this.tenantsRepository
+        .createQueryBuilder('t')
+        .select('t.plan', 'plan')
+        .addSelect('COUNT(*)', 'count')
+        .groupBy('t.plan')
+        .getRawMany<{ plan: string; count: string }>(),
+      this.tenantsRepository.count({
+        where: {
+          status: 'active',
+          subscriptionEndsAt: And(Not(IsNull()), LessThan(today.toISOString().slice(0, 10))),
+        },
+      }),
+      this.tenantsRepository.count({ where: { createdAt: thisMonthRange } }),
+      this.appointmentsRepository.count(),
+      this.appointmentsRepository.count({ where: { createdAt: thisMonthRange } }),
+      this.appointmentsRepository
+        .createQueryBuilder('a')
+        .select('a.status', 'status')
+        .addSelect('COUNT(*)', 'count')
+        .groupBy('a.status')
+        .getRawMany<{ status: string; count: string }>(),
+      this.customersRepository.count(),
+      this.customersRepository.count({ where: { createdAt: thisMonthRange } }),
+      this.servicesRepository.count(),
+      this.servicesRepository.count({ where: { isActive: true } }),
+      this.staffRepository.count(),
+    ]);
+
+    const planMap = Object.fromEntries(
+      tenantsByPlan.map(({ plan, count }) => [plan, Number(count)]),
+    );
+
+    const statusMap = Object.fromEntries(
+      appointmentsByStatus.map(({ status, count }) => [status, Number(count)]),
+    );
+
+    return {
+      tenants: {
+        total: totalTenants,
+        active: activeTenants,
+        inactive: inactiveTenants,
+        archived: totalTenants - activeTenants - inactiveTenants,
+        newThisMonth: tenantsCreatedThisMonth,
+        withExpiredSubscription: expiredSubscriptions,
+        byPlan: planMap,
+      },
+      appointments: {
+        total: totalAppointments,
+        thisMonth: appointmentsThisMonth,
+        byStatus: {
+          pending: statusMap['pending'] ?? 0,
+          confirmed: statusMap['confirmed'] ?? 0,
+          completed: statusMap['completed'] ?? 0,
+          cancelled: statusMap['cancelled'] ?? 0,
+          no_show: statusMap['no_show'] ?? 0,
+        },
+      },
+      customers: {
+        total: totalCustomers,
+        newThisMonth: newCustomersThisMonth,
+      },
+      services: {
+        total: totalServices,
+        active: activeServices,
+      },
+      staff: {
+        total: totalStaff,
+      },
+    };
   }
 
   listTenants() {

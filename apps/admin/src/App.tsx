@@ -3,6 +3,7 @@ import { LoginPage } from './pages/LoginPage';
 import { MyProfilePage } from './pages/MyProfilePage';
 import { PlatformRolesPage } from './pages/PlatformRolesPage';
 import { PlatformSettingsPage } from './pages/PlatformSettingsPage';
+import { PlatformDashboardPage } from './pages/PlatformDashboardPage';
 import { PlatformTenantsPage } from './pages/PlatformTenantsPage';
 import { PlatformUsersPage } from './pages/PlatformUsersPage';
 import { TenantDetailPage } from './pages/TenantDetailPage';
@@ -41,7 +42,8 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<WelcomePage />} />
-      <Route path="/platform" element={<Navigate to="/platform/tenants" replace />} />
+      <Route path="/platform" element={<Navigate to="/platform/dashboard" replace />} />
+      <Route path="/platform/dashboard" element={<PlatformDashboardPage />} />
       <Route path="/platform/users" element={<PlatformUsersPage />} />
       <Route path="/platform/roles" element={<PlatformRolesPage />} />
       <Route path="/platform/tenants" element={<PlatformTenantsPage />} />

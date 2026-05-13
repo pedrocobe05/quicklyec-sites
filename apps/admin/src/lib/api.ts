@@ -901,3 +901,15 @@ export async function createPlatformMembership(accessToken: string, payload: Rec
     body: JSON.stringify(payload),
   });
 }
+
+export async function getPlatformStats(accessToken: string) {
+  return request('/platform/stats', {
+    headers: authHeaders(accessToken),
+  });
+}
+
+export async function getPlatformStatsByTenant(accessToken: string, tenantId: string) {
+  return request(`/platform/stats/${tenantId}`, {
+    headers: authHeaders(accessToken),
+  });
+}

@@ -54,9 +54,10 @@ const baseNavItems: NavItem[] = [
 ];
 
 const platformNavItems: NavItem[] = [
+  { to: '/platform/dashboard', label: 'Dashboard' },
+  { to: '/platform/tenants', label: 'Empresas' },
   { to: '/platform/users', label: 'Usuarios de plataforma' },
   { to: '/platform/roles', label: 'Roles de plataforma' },
-  { to: '/platform/tenants', label: 'Empresas' },
   { to: '/platform/settings', label: 'Configuración plataforma' },
 ];
 
@@ -80,6 +81,10 @@ const sectionMeta: Record<string, { title: string; description: string }> = {
   '/platform/tenants': {
     title: 'Empresas',
     description: 'Administración de empresas y acceso a su configuración detallada.',
+  },
+  '/platform/dashboard': {
+    title: 'Dashboard',
+    description: 'Estadísticas globales y por empresa de toda la plataforma.',
   },
   '/platform/settings': {
     title: 'Configuración plataforma',

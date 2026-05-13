@@ -97,6 +97,16 @@ export class PlatformController {
     return this.platformService.updatePlan(planId, input);
   }
 
+  @Get('stats')
+  getStats() {
+    return this.platformService.getStats();
+  }
+
+  @Get('stats/:tenantId')
+  getStatsByTenant(@Param('tenantId') tenantId: string) {
+    return this.platformService.getStats(tenantId);
+  }
+
   @Get('tenants')
   listTenants() {
     return this.platformService.listTenants();
